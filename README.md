@@ -3,7 +3,7 @@
      Then delete this comment. -->
 <h1 align="center">Lares</h1>
 
-https://github.com/user-attachments/assets/c2955673-0f40-43ab-8e89-5ed91cef8006
+https://github.com/user-attachments/assets/e80d4fca-eaee-45a2-a11e-5bfaed0f3014
 
 <p align="center">
   A complete desktop shell for <a href="https://hypr.land">Hyprland</a> on Arch Linux, written in QML on
