@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# The ONE way a real Lares lock is started: the reel's Lock, hypridle's lock_cmd and before_sleep_cmd (the
+# user's hypridle.conf; `lares setup` checks them), and at boot SDDM's `--locked-cmd` (hence no argument but
+# --boot, and no space in its path: SDDM's wayland-session ends in an unquoted `exec $@`).
+#
+#   <snapshot>/tools/lockscreen/lares-lock-session [--boot]
+#
+# Run from lares's SNAPSHOT of a commit (${XDG_STATE_HOME:-~/.local/state}/lares/lock/current), never from a
+# working tree: `readlink -f` resolves `current`, so the supervisor and the lock beside this file are that commit's.
+#
+# WHAT IT DOES. Takes the supervisor's lock file FIRST: when a lock is up already (hypridle asks again before sleep,
+# the reel is pressed twice) it exits 0 and nothing else happens -- in particular screentime is not told of a
+# "locker" that would exit at once and read as an unlock. Then sets LARES_LOCK_REAL=1 (the supervisor refuses without
+# it) and becomes `screentimed lock-run <supervisor>` when screentimed is installed (the daemon counts the time
+# locked until that pid exits), the supervisor itself otherwise. The open lock file goes along on fd 9
+# (LARES_LOCK_HELD_FD=9), so there is no instant in which it is free. A snapshot without its supervisor falls back to
+# hyprlock: a lock request never ends in no lock.
+#
+# --boot LOCKS A SESSION NOBODY TYPED A PASSWORD FOR. The autostart line is the same on every machine: with SDDM's autologin it
+# is the boot's lock; behind a greeter that has just asked for the password it would ask a second time, so there it does
+# nothing (`login_asked`: logind names the PAM service that opened the session, sddm-autologin against sddm). Whatever is not
+# known for certain locks, and so does a compositor started with --locked-cmd (root step R1): it holds the session locked until
+# a locker lands, whoever logged in.
+{
+set -u
+HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+RT=${XDG_RUNTIME_DIR:?lares-lock-session: XDG_RUNTIME_DIR is not set}
+login_asked() {   # 0: a greeter known to ask for the password opened this session, and the compositor does not hold it locked
+    local dir=/run/systemd/sessions id=${XDG_SESSION_ID:-} svc="" line pid p hl n
+    [ -n "${LOCK_ENV_DIR:-}" ] && dir=${LARES_SESSIONS_DIR:-$dir}   # a test's own records; a real session never has that variable
+    [[ $id =~ ^[A-Za-z0-9]+$ ]] && [ -r "$dir/$id" ] || return 1
+    while IFS= read -r line; do case $line in SERVICE=*) svc=${line#SERVICE=} ;; esac; done < "$dir/$id"
+    case $svc in sddm|gdm-password|lightdm) ;; *) return 1 ;; esac
+    [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || return 1
+    hl="$RT/hypr/$HYPRLAND_INSTANCE_SIGNATURE/hyprland.lock"
+    # Hyprland writes it AFTER it has started the autostart (130 ms, the desktop, 2026-11-22): read at once it was never there
+    for (( n = 0; n < 60; n++ )); do [ -s "$hl" ] && break; sleep 0.05; done
+    read -r pid 2> /dev/null < "$hl" || return 1
+    [[ $pid =~ ^[0-9]+$ ]] || return 1
+    for p in "$pid" "$(sed -n 's/^PPid:[[:space:]]*//p' "/proc/$pid/status" 2> /dev/null)"; do   # Hyprland, and the start-hyprland that started it
+        [ -r "/proc/$p/cmdline" ] || return 1
+        tr '\0' '\n' < "/proc/$p/cmdline" | grep -qx -- '--locked-cmd' && return 1
+    done
+    return 0
+}
+if [ "${1:-}" = --boot ] && login_asked; then exit 0; fi
+# until `lares cleanup-old-name`: a lock of the OLD name that is up (an old snapshot's lock outlives a deploy) is a lock up
+"$HERE/lares-lock-held" --old && exit 0
+exec 9> "$RT/lares-lock.lock"
+flock -n 9 || exit 0
+args=()
+[ "${1:-}" = --boot ] && args=(--boot)
+if [ ! -x "$HERE/lares-lock" ]; then
+    echo "lares-lock-session: no supervisor at $HERE/lares-lock: locking with hyprlock" >&2
+    exec 9>&-
+    exec hyprlock
+fi
+export LARES_LOCK_REAL=1 LARES_LOCK_HELD_FD=9
+command -v screentimed > /dev/null 2>&1 && exec screentimed lock-run "$HERE/lares-lock" "${args[@]}"
+exec "$HERE/lares-lock" "${args[@]}"
+}

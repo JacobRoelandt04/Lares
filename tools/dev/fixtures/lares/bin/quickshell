@@ -1,0 +1,198 @@
+#!/usr/bin/python3
+"""A stand-in for quickshell, for the lares probes -- NEVER a shell on the desktop.
+
+As the shell (`quickshell -n -p <path>`): registers itself in $LARES_FAKE/qs/<pid>.json, owns
+org.freedesktop.Notifications on the session bus (the probe's PRIVATE one), prints the ready line the
+real shell prints, then waits for TERM. As `quickshell list --path P [--json]` and `quickshell ipc -p P
+call shell ping` it answers like the real CLI (shapes measured on Quickshell 0.3.1: the JSON array
+{config_path, id, launch_time, pid, shell_id}; "No running instances for ..." as plain text with exit 0
+for list and 255 for ipc; `ok` for the ping). `quickshell kill --pid N` asks the instance to quit (the shell
+exits 0, as measured by stage 0a) and a plain SIGTERM ends it with status 143. Every start and stop is
+recorded in stub.log, with how it was asked.
+
+Fault injection, by files in $LARES_FAKE/ctl/ (read at start):
+    lares_noready        never print the ready line
+    lares_noname         never take the notification name (a shell that came up without its server)
+    lares_ready_delay    seconds between start and the ready line (default 0.3)
+    lares_screens        the n in "screens=n" (default 1)
+    lares_ready_word     the word before "ready" (default LARES; QSSHELL is what a shell of the OLD name printed)
+    lares_kill_fails     `quickshell kill --pid` fails (the caller falls back to SIGTERM)
+    lares_crash          exit at once with status 255, before the ready line (a shell that does not load: a crash loop)
+"""
+import atexit
+import json
+import os
+import signal
+import sys
+import time
+import warnings
+
+warnings.simplefilter("ignore")   # PyGObject's deprecation notes would fill the log the tool's checks read
+
+W = os.environ.get("LARES_FAKE", "")
+if not W or not os.path.isdir(W):
+    sys.exit("fake quickshell: refusing to run outside the lares probes (LARES_FAKE is not a directory)")
+INST = os.path.join(W, "qs")
+CTL = os.path.join(W, "ctl")
+LOG = os.path.join(W, "stub.log")
+os.makedirs(INST, exist_ok=True)
+
+
+def log(msg):
+    with open(LOG, "a") as f:
+        f.write(msg + "\n")
+
+
+def ctl(name, default=None):
+    p = os.path.join(CTL, name)
+    if not os.path.exists(p):
+        return default
+    return open(p).read().strip() or True
+
+
+def alive(pid):
+    try:
+        with open("/proc/%d/status" % pid) as f:
+            for line in f:
+                if line.startswith("State:"):
+                    return line.split()[1] not in ("Z", "X")
+    except OSError:
+        pass
+    return False
+
+
+def instances(path=None):
+    out = []
+    for name in sorted(os.listdir(INST)):
+        try:
+            d = json.load(open(os.path.join(INST, name)))
+        except (OSError, ValueError):
+            continue
+        if alive(d["pid"]) and (path is None or d["config_path"] == path):
+            out.append(d)
+    return out
+
+
+def opt(args, *names):
+    for i, a in enumerate(args):
+        if a in names and i + 1 < len(args):
+            return args[i + 1]
+    return None
+
+
+def cmd_list(args):
+    path = opt(args, "--path", "-p")
+    found = instances(path)
+    if not found:
+        print('No running instances for "%s"' % path)
+        print("Use --all to list all instances.")
+        return 0
+    if "--json" in args or "-j" in args:
+        print(json.dumps(found, indent=4))
+    else:
+        for d in found:
+            print("Instance %s: pid %d, config %s" % (d["id"], d["pid"], d["config_path"]))
+    return 0
+
+
+def cmd_ipc(args):
+    path = opt(args, "--path", "-p")
+    if not instances(path):
+        print('No running instances for "%s"' % path)
+        return 255
+    if args[-3:] == ["call", "shell", "ping"]:
+        print("ok")
+        return 0
+    print("Target or function not found")
+    return 1
+
+
+def cmd_kill(args):
+    pid = opt(args, "--pid")
+    found = [d for d in instances() if str(d["pid"]) == str(pid)]
+    if ctl("lares_kill_fails") or not found:
+        print("Failed to kill instance %s" % pid)
+        return 1
+    open(os.path.join(INST, "%s.killed" % pid), "w").close()   # how this one was asked: politely
+    log("QUICKSHELL kill --pid %s" % pid)
+    os.kill(int(pid), signal.SIGTERM)
+    print("Killed %s" % found[0]["id"])
+    return 0
+
+
+def run_shell(args):
+    path = opt(args, "--path", "-p") or ""
+    if ctl("lares_crash"):
+        log("QUICKSHELL crash pid=%d" % os.getpid())
+        return 255
+    if ("-n" in args or "--no-duplicate" in args) and instances(path):
+        print("Exiting: another instance of this config is running")
+        return 0
+    pid = os.getpid()
+    me = os.path.join(INST, "%d.json" % pid)
+    with open(me, "w") as f:
+        json.dump({"config_path": path, "id": "fake%d" % pid, "launch_time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                   "pid": pid, "shell_id": "fakeshell"}, f)
+    root = os.path.dirname(path)
+    qmlls = "present" if os.path.lexists(os.path.join(root, ".qmlls.ini")) else "absent"   # what the real one would fight over
+    log("QUICKSHELL start pid=%d argv=%s lares_env=%s,%s qmlls=%s xdg=%s" % (pid, " ".join(args),
+        os.environ.get("QS_DISABLE_FILE_WATCHER", "-"), os.environ.get("QS_DISABLE_CRASH_HANDLER", "-"),
+        qmlls, os.environ.get("XDG_RUNTIME_DIR", "-")))
+
+    def gone():
+        try:
+            os.unlink(me)
+        except OSError:
+            pass
+    atexit.register(gone)
+    sys.stdout.reconfigure(line_buffering=True)
+    print('\x1b[32m  INFO\x1b[0m: Launching config: "%s"' % path)
+
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+    loop = GLib.MainLoop()
+
+    asked = os.path.join(INST, "%d.killed" % pid)
+
+    def stop(*_):
+        polite = os.path.exists(asked)
+        log("QUICKSHELL stop pid=%d %s" % (pid, "KILL-CLI" if polite else "TERM"))
+        gone()
+        if polite:
+            os.unlink(asked)
+            loop.quit()   # `quickshell kill`: a clean exit, status 0
+        else:
+            sys.stdout.flush()
+            os._exit(143)   # a SIGTERM ends the real one at once: status 143
+        return False
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    if not ctl("lares_noname"):
+        def lost(conn, name):
+            log("QUICKSHELL pid=%d did not get %s" % (pid, name))
+        Gio.bus_own_name(Gio.BusType.SESSION, "org.freedesktop.Notifications", Gio.BusNameOwnerFlags.DO_NOT_QUEUE,
+                         None, None, lost)
+
+    def ready():
+        if not ctl("lares_noready"):
+            print("\x1b[34m DEBUG\x1b[97m qml\x1b[0m: %s ready screens=%s" % (ctl("lares_ready_word", "LARES"), ctl("lares_screens", "1")))
+            log("QUICKSHELL ready pid=%d" % pid)
+        return False
+    GLib.timeout_add(int(float(ctl("lares_ready_delay", "0.3")) * 1000), ready)
+    loop.run()
+    return 0
+
+
+def main(args):
+    if args[:1] == ["list"]:
+        return cmd_list(args[1:])
+    if args[:1] == ["ipc"]:
+        return cmd_ipc(args[1:])
+    if args[:1] == ["kill"]:
+        return cmd_kill(args[1:])
+    return run_shell(args)
+
+
+sys.exit(main(sys.argv[1:]))

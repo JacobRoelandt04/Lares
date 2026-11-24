@@ -1,0 +1,8 @@
+#!/bin/sh
+# Logs its argv and execs what follows `--` (no scope is made; the probe's wrapper runs as this process's replacement).
+echo "systemd-run $*" >> "${BRIDGE_STUB_LOG:-/dev/null}"
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; exec "$@"; fi
+  shift
+done
+exit 1

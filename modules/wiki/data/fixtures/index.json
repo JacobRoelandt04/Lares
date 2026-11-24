@@ -1,0 +1,89 @@
+{
+ "v": 1,
+ "tabs": {
+  "discover": [
+   {
+    "id": "en.wikipedia.org/Messier_87",
+    "slug": "en.wikipedia.org__Messier_87",
+    "family": "physical-sciences",
+    "topic": "space",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.78,
+    "jevScore": 0.7
+   },
+   {
+    "id": "en.wikipedia.org/Marie_Curie",
+    "slug": "en.wikipedia.org__Marie_Curie",
+    "family": "people",
+    "topic": "women",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.96,
+    "jevScore": 0.7
+   },
+   {
+    "id": "en.wikipedia.org/Battle_of_Hastings",
+    "slug": "en.wikipedia.org__Battle_of_Hastings",
+    "family": "history",
+    "topic": "military-and-warfare",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.7,
+    "jevScore": 0.7
+   },
+   {
+    "id": "en.wikipedia.org/Anekantavada",
+    "slug": "en.wikipedia.org__Anekantavada",
+    "family": "philosophy",
+    "topic": "philosophy-and-religion",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.31,
+    "jevScore": 0.7
+   },
+   {
+    "id": "en.wikipedia.org/Formation_and_evolution_of_the_Solar_System",
+    "slug": "en.wikipedia.org__Formation_and_evolution_of_the_Solar_System",
+    "family": "physical-sciences",
+    "topic": "space",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.66,
+    "jevScore": 0.7
+   }
+  ],
+  "deepen": [
+   {
+    "id": "wiki.archlinux.org/Systemd",
+    "slug": "wiki.archlinux.org__Systemd",
+    "family": "arch-installed",
+    "topic": "system",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.9,
+    "jevScore": 0.7
+   },
+   {
+    "id": "wiki.archlinux.org/Zsh#Tips_and_tricks",
+    "slug": "wiki.archlinux.org__Zsh--Tips_and_tricks",
+    "family": "arch-tips",
+    "topic": "shell",
+    "kind": "tips",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.5,
+    "jevScore": 0.7
+   },
+   {
+    "id": "en.wikipedia.org/Debian",
+    "slug": "en.wikipedia.org__Debian",
+    "family": "wikipedia-cs",
+    "topic": "computing",
+    "kind": "article",
+    "fetchedAt": 1790765861235,
+    "popularityBand": 0.9,
+    "jevScore": 0.7
+   }
+  ]
+ }
+}

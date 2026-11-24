@@ -1,0 +1,18 @@
+# The aerial test bed (tools/aerial/rig/README.md). Never enabled: started on demand, stopped after a run.
+# `systemctl start` returns when the rig is READY (Type=notify: `rig inner` says so once the access points, the private bus,
+# NetworkManager and the portal all answer). Stopping kills the whole cgroup (every rig process); ExecStopPost takes the netns, the
+# radios and the run dir away -- it also runs after a FAILED start, so nothing half-made stays.
+[Unit]
+Description=Lares aerial test bed (virtual Wi-Fi radios and a private NetworkManager)
+ConditionPathExists=/usr/local/lib/lares/aerial-rig/rig
+
+[Service]
+Type=notify
+NotifyAccess=all
+ExecStartPre=/usr/local/lib/lares/aerial-rig/rig prepare
+ExecStart=/usr/local/lib/lares/aerial-rig/rig run
+ExecStopPost=/usr/local/lib/lares/aerial-rig/rig cleanup
+KillMode=control-group
+Restart=no
+TimeoutStartSec=90
+TimeoutStopSec=30

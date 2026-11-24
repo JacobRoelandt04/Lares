@@ -1,0 +1,3 @@
+singleton BarHues 1.0 BarHues.qml
+GlyphHoverEase 1.0 GlyphHoverEase.qml
+singleton WeatherGlyphSet 1.0 WeatherGlyphSet.qml

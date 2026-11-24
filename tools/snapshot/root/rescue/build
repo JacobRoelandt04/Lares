@@ -1,0 +1,77 @@
+#!/bin/bash
+# Builds the Lares rescue: a copy of the installed linux-lts kernel plus an initramfs that carries restic and the menu.
+#   build [--out DIR] [--kernel VERSION] [--no-grub]
+# Run by `lares-snapshot-root rescue-build` as root (out = /boot/lares, grub.cfg regenerated), and by the dev probe as a plain user with
+# --out into a work dir. The image is NOT rebuilt by kernel updates (it has its own mkinitcpio config and no pacman hook): it carries
+# the kernel it was built with, and `rescue-build` is run again when a restic or kernel update should reach it.
+# Files are written beside the old ones and renamed, so a failed build leaves the working rescue in place.
+set -euo pipefail
+
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+out=/boot/lares
+kver=
+grub=1
+while [ $# -gt 0 ]; do
+    case $1 in
+        --out) out=$2; shift 2 ;;
+        --kernel) kver=$2; shift 2 ;;
+        --no-grub) grub=0; shift ;;
+        *) echo "usage: build [--out DIR] [--kernel VERSION] [--no-grub]" >&2; exit 2 ;;
+    esac
+done
+
+# The kernel: linux-lts when it is installed (the rescue must not depend on the newest, possibly broken, mainline kernel), else linux.
+pick_kernel() {
+    local d v
+    for d in /usr/lib/modules/*/; do
+        v=$(basename "$d")
+        [ -f "$d/vmlinuz" ] && [ -f "$d/pkgbase" ] && grep -qx linux-lts "$d/pkgbase" && { echo "$v"; return; }
+    done
+    for d in /usr/lib/modules/*/; do
+        v=$(basename "$d")
+        [ -f "$d/vmlinuz" ] && { echo "$v"; return; }
+    done
+}
+[ -n "$kver" ] || kver=$(pick_kernel)
+[ -n "$kver" ] && [ -f "/usr/lib/modules/$kver/vmlinuz" ] || { echo "No installed kernel found under /usr/lib/modules." >&2; exit 1; }
+command -v restic >/dev/null || { echo "restic is not installed." >&2; exit 1; }
+command -v mkinitcpio >/dev/null || { echo "mkinitcpio is not installed." >&2; exit 1; }
+
+mkdir -p "$out"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+echo "Building the rescue image for kernel $kver ..."
+# our install hook is found first; the system's own hooks (base, udev, keyboard, block) after it
+MKINITCPIO_INSTALL="$here/install:/etc/initcpio/install:/usr/lib/initcpio/install" \
+MKINITCPIO_HOOKS="$here/hooks:/etc/initcpio/hooks:/usr/lib/initcpio/hooks" \
+LARES_RESCUE_DIR="$here" \
+    mkinitcpio -c "$here/mkinitcpio.conf" -k "$kver" -g "$work/rescue.img" -t "$work" -n >"$work/mkinitcpio.log" 2>&1 \
+    || { cat "$work/mkinitcpio.log" >&2; echo "mkinitcpio failed." >&2; exit 1; }
+grep -E "^(==> WARNING|==> ERROR)" "$work/mkinitcpio.log" | grep -v "Possibly missing firmware" || true
+cp "/usr/lib/modules/$kver/vmlinuz" "$work/rescue-vmlinuz"
+
+# beside the old file, flushed, then renamed
+chmod 644 "$work/rescue.img"
+cp "$work/rescue.img" "$out/.rescue.img.new"
+cp "$work/rescue-vmlinuz" "$out/.rescue-vmlinuz.new"
+sync
+mv -f "$out/.rescue.img.new" "$out/rescue.img"
+mv -f "$out/.rescue-vmlinuz.new" "$out/rescue-vmlinuz"
+printf 'built=%s\nkernel=%s\nrestic=%s\n' "$(date +%s)" "$kver" "$(restic version | awk '{print $2}')" > "$out/rescue.info"
+# `status.rescue` of the root tool reads this (contract section 6); only the real build writes it, not a probe's build into a work dir
+if [ "$out" = /boot/lares ]; then
+    printf '{"kernel":"%s","restic":"%s"}\n' "$kver" "$(restic version | awk '{print $2}')" > "$here/built.json.new" && mv -f "$here/built.json.new" "$here/built.json"
+fi
+sync
+
+img=$(stat -c %s "$out/rescue.img"); krn=$(stat -c %s "$out/rescue-vmlinuz")
+printf 'Rescue image: %d MB, kernel %d MB, together %d MB.\n' $((img / 1048576)) $((krn / 1048576)) $(((img + krn) / 1048576))
+[ $(((img + krn) / 1048576)) -le 150 ] || echo "Warning: the rescue is larger than the 150 MB it should stay under." >&2
+
+if [ "$grub" = 1 ]; then
+    if command -v grub-mkconfig >/dev/null && [ -f /etc/grub.d/45_lares_rescue ] && [ -d /boot/grub ]; then
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 && echo "GRUB menu updated: \"Lares rescue\"." \
+            || echo "grub-mkconfig failed: the entry is not in the menu yet." >&2
+    fi
+fi

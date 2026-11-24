@@ -1,0 +1,1013 @@
+#!/usr/bin/env python3
+"""lares-cast -- the cast tool of the Panorama module: a Miracast (Wi-Fi Display) stream of one output to a TV, through fluxcast.
+
+  lares-cast scan [--seconds N] --json
+  lares-cast start --device wfd:<mac> --monitor <output> [--res WxH] [--fps N] [--bitrate 8M] [--no-audio] [--audio-device X]
+  lares-cast doctor --json
+  lares-cast restore [--now]  give back a held Wi-Fi profile whose cast is gone (the shell's start; `scan` does it too). A hold a restart
+                              handed over is left for 30 s unless --now (the shell, when a cast has ended for good)
+  SIGUSR1 to a running `start`: stop like SIGTERM, but KEEP the hold for the start that follows (a restart)
+
+JSON on stdout, one object per line for `start`. Errors: {"event":"error","reason":...,"detail":...} and a non-zero exit.
+The tool does NOT create or remove the Hyprland output (the Panorama engine owns it); `start` only refuses a monitor xrandr
+does not list as connected. Contract: docs/contracts/panorama.md "Cast"; facts: docs/agent_added_files_and_folders/panorama/CAST.md.
+
+THE HOLD. Every Wi-Fi authentication while the TV's direct link is up crashes this card's firmware (iwlwifi ADVANCED_SYSASSERT 0x2000341B,
+CAST.md "Why it broke"), and a laptop between two access points of one network roams by itself. For the life of a cast the Wi-Fi profile in
+force is locked to the access point it is on -- in NetworkManager's memory only, never on disk -- which also stops the background scans.
+THE LINK WATCH. fluxcast never ends when the link dies (it sleeps for ever): the tool ends it when the group interface goes, or when nothing
+was sent for LARES_CAST_STALL s, and reconnects once. Each run's whole transcript: ~/.local/state/lares/cast/cast.log (cast-prev.log).
+THE FIGURES. While it streams, one `stats` event a second says what the stream does (class Figures: where each figure comes from).
+
+Overrides (tests): LARES_CAST_BEAT (s between two `stats`, 1), LARES_CAST_SYSNET (/sys/class/net), LARES_CAST_STALL (s, 20), LARES_CAST_LINK_GRACE (s, 1), LARES_CAST_GROUP_WAIT (s, 3), LARES_CAST_FLUXCAST (the program, default `fluxcast` in PATH), LARES_CAST_SHIM=0|1, LARES_CAST_PY (the python that
+looks for upnpclient), LARES_CAST_WIFI_WAIT (s, 20), LARES_CAST_POLL (s, 1), LARES_CAST_STOP_WAIT (s, 5).
+"""
+import json
+import os
+import re
+import select
+import shutil
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+SHIM = os.path.join(HERE, "cast_ffmpeg_shim")
+FLUX = os.environ.get("LARES_CAST_FLUXCAST", "fluxcast")
+
+
+def fenv(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except ValueError:
+        return float(default)
+
+
+class Stop(Exception):
+    """Raised from the signal handler (PEP 475: a flag alone is read only at the next event)."""
+
+
+def _stop_handler(signum, frame):
+    raise Stop()
+
+
+# A RESTART KEEPS THE HOLD (SIGUSR1: stop, and leave the Wi-Fi profile locked for the cast that follows). Giving it back reconnects the
+# station, and the next pairing then ran seconds after that authentication: the card's firmware asserted in both recasts of 2026-11-23
+# ("hold given back" 13:44:22, assert 13:44:33). The record is marked handed over; the next start takes it as its own, and a start
+# that never comes leaves a record `restore --now` (the shell, at the cast's end) or any sweep after HANDOVER_S gives back.
+KEEP_HOLD = [False]
+HANDOVER_S = 30.0
+
+
+def _keep_handler(signum, frame):
+    KEEP_HOLD[0] = True
+    raise Stop()
+
+
+LOG = [None]
+
+
+def log(text):
+    f = LOG[0]
+    if f is not None:
+        try:
+            f.write("%s %s\n" % (time.strftime("%H:%M:%S"), text))
+        except (OSError, ValueError):
+            LOG[0] = None
+
+
+def open_log():
+    d = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "lares", "cast")
+    try:
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "cast.log")
+        if os.path.exists(p):
+            os.replace(p, os.path.join(d, "cast-prev.log"))
+        LOG[0] = open(p, "w", buffering=1, encoding="utf-8", errors="replace")
+    except OSError:
+        LOG[0] = None
+
+
+def emit(obj, keep=True):
+    """One event line; `keep` False: not into the transcript (a line a second would drown it)."""
+    if keep:
+        log("event " + json.dumps(obj, separators=(",", ":")))
+    try:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        raise Stop()
+
+
+def emit_quiet(obj):
+    try:
+        emit(obj)
+    except Stop:
+        pass
+
+
+def fail(reason, detail="", code=2):
+    emit_quiet({"event": "error", "reason": reason, "detail": detail})
+    sys.exit(code)
+
+
+def run(argv, timeout=10.0, env=None):
+    """(rc, text) of a short program; (None, reason) when it is missing or times out."""
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout, env=env)
+        return p.returncode, p.stdout.decode("utf-8", "replace")
+    except FileNotFoundError:
+        return None, "not found: " + argv[0]
+    except subprocess.TimeoutExpired:
+        return None, "timed out: " + argv[0]
+
+
+def fluxcast_version():
+    rc, text = run([FLUX, "--version"], 15)
+    if rc is None:
+        return None
+    m = re.search(r"(\d+(?:\.\d+)*)", text)
+    return m.group(1) if m else ""
+
+
+def shim_needed(version):
+    """fluxcast <= 0.3.0 passes -thread_queue_size where ffmpeg 9 refuses it. An unreadable version gets the (harmless) shim."""
+    o = os.environ.get("LARES_CAST_SHIM")
+    if o in ("0", "1"):
+        return o == "1"
+    try:
+        return tuple(int(x) for x in version.split(".")) <= (0, 3, 0)
+    except ValueError:
+        return True
+
+
+# ---------------------------------------------------------------------------------------------------------------- the hold
+SYSNET = os.environ.get("LARES_CAST_SYSNET", "/sys/class/net")
+
+
+def groups():
+    """The Wi-Fi Direct group interfaces there are (p2p-wlan0-0; the p2p-dev-* device is no netdev)."""
+    try:
+        return sorted(n for n in os.listdir(SYSNET) if n.startswith("p2p-") and not n.startswith("p2p-dev"))
+    except OSError:
+        return []
+
+
+def wait_no_group():
+    end = time.monotonic() + fenv("LARES_CAST_GROUP_WAIT", 3)
+    while groups() and time.monotonic() < end:
+        time.sleep(0.1)
+    return not groups()
+
+
+def nmcli(*args, timeout=10):
+    rc, text = run(["nmcli"] + list(args), timeout)
+    return rc == 0, (text or "").strip()
+
+
+def wifi_now():
+    """(device, uuid) of the Wi-Fi connection in force, or None."""
+    ok, text = nmcli("-t", "-f", "DEVICE,TYPE,STATE,CON-UUID", "device")
+    for l in text.splitlines() if ok else []:
+        f = l.split(":")
+        if len(f) >= 4 and f[1] == "wifi" and f[2].startswith("connected") and f[3]:
+            return f[0], f[3]
+    return None
+
+
+def bssid_now(dev):
+    ok, text = nmcli("-t", "-f", "ACTIVE,BSSID", "device", "wifi", "list", "ifname", dev, "--rescan", "no")
+    for l in text.splitlines() if ok else []:
+        if l.startswith("yes:"):
+            return l[4:].replace("\\", "").strip()
+    return ""
+
+
+def record_path():
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "lares", "cast-wifi.json")
+
+
+def record_read():
+    try:
+        with open(record_path()) as f:
+            r = json.load(f)
+        return r if isinstance(r, dict) and r.get("uuid") else None
+    except (OSError, ValueError):
+        return None
+
+
+def record_write(rec):
+    try:
+        os.makedirs(os.path.dirname(record_path()), exist_ok=True)
+        tmp = record_path() + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(rec, f)
+        os.replace(tmp, record_path())
+        return True
+    except OSError as e:
+        log("no record: %s" % e)
+        return False
+
+
+def record_drop():
+    try:
+        os.unlink(record_path())
+    except OSError:
+        pass
+
+
+def cast_alive(pid):
+    try:
+        with open("/proc/%d/cmdline" % int(pid), "rb") as f:
+            return b"lares-cast" in f.read()
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def set_bssid(uuid, bssid):
+    """In memory only: the profile's file is never written."""
+    return nmcli("connection", "modify", "--temporary", "uuid", uuid, "802-11-wireless.bssid", bssid)
+
+
+def hold_take():
+    """Lock the Wi-Fi profile in force to the access point it is on, and reconnect to it once (a change takes effect at an activation).
+    Never with a group up: that reconnect is the very authentication that crashes the card. Why it could not be held, or ""."""
+    now = wifi_now()
+    if now is None:
+        return "no Wi-Fi connection"
+    dev, uuid = now
+    r = record_read()
+    if r and r.get("uuid") == uuid:
+        if r.get("pid") != os.getpid():              # handed over by the run before (a restart): the record is this run's now
+            if not record_write(dict(r, pid=os.getpid(), handover=0)):
+                return "no record"
+            log("hold taken over (%s)" % uuid)
+        return ""                                    # held already (a retry): the lock outlives the card's restart
+    if r:
+        hold_give()                                  # the network changed under a held cast
+    ok, own = nmcli("-g", "802-11-wireless.bssid", "connection", "show", "uuid", uuid)
+    if not ok:
+        return "cannot read the profile: " + own[:80]
+    if own:
+        return ""                                    # the user's own lock: nothing to hold, nothing to give back
+    bssid = bssid_now(dev)
+    if not re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", bssid):
+        return "the access point is not known"
+    if not wait_no_group():
+        return "a Wi-Fi Direct group is still up"
+    if not record_write({"pid": os.getpid(), "uuid": uuid, "device": dev, "bssid": bssid}):
+        return "no record"                           # (written before the change: a crash in between is given back all the same)
+    ok, text = set_bssid(uuid, bssid)
+    if not ok:
+        record_drop()
+        return "the profile cannot be changed: " + text[:80]
+    ok, text = nmcli("-w", "15", "connection", "up", "uuid", uuid, "ifname", dev, timeout=20)
+    if not ok:
+        hold_give()
+        return "the reconnect failed: " + text[-80:]
+    log("hold %s on %s (%s)" % (uuid, bssid, dev))
+    return ""
+
+
+def hold_give():
+    """Give the profile back: free first (no reconnect, so nothing can interrupt it), then one reconnect once no group is up."""
+    r = record_read()
+    if not r:
+        return
+    ok, text = set_bssid(r["uuid"], "")
+    log("hold given back: %s %s" % ("ok" if ok else "FAIL", text[:120]))
+    if ok:
+        record_drop()
+    if wait_no_group():
+        now = wifi_now()
+        if now and now[1] == r["uuid"]:
+            nmcli("-w", "0", "connection", "up", "uuid", r["uuid"], "ifname", now[0])
+
+
+def hold_pass():
+    """The stop of a restart: the lock stays, marked for the start that follows."""
+    r = record_read()
+    if r and record_write(dict(r, handover=time.time())):
+        log("hold kept for the restart")
+        return
+    hold_give()
+
+
+def hold_sweep(now=False):
+    """Give back a hold nobody has: its cast is dead and it was not handed over a moment ago (`now`: handed over or not)."""
+    r = record_read()
+    if not r or cast_alive(r.get("pid")):
+        return
+    age = time.time() - float(r.get("handover") or 0)
+    if not now and 0 <= age < HANDOVER_S:
+        return
+    hold_give()
+
+
+# ---------------------------------------------------------------------------------------------------------------- scan
+PEER = re.compile(r"^\s*\[(\d+)\]\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*?))?\s*$")
+
+
+def parse_scan(text):
+    devices, cur = [], None
+    for raw in text.splitlines():
+        m = PEER.match(raw)
+        if m:
+            cur = {"id": "wfd:" + m.group(2).upper(), "index": int(m.group(1)), "mac": m.group(2).upper(), "name": re.sub(r"^(?:(.*?)\s+)?via \S+$", r"\1", (m.group(3) or "").strip()),
+                   "protocol": "wfd", "capable": False, "note": ""}
+            devices.append(cur)
+            continue
+        if cur is None:
+            continue
+        s = raw.strip()
+        if s.startswith("WFD capability data detected"):
+            cur["capable"] = True
+        elif s.startswith(("not advertising Wi-Fi Display", "advertising Wi-Fi Display as a source", "already running its own group", "pairs by PIN only")):
+            cur["note"] = (cur["note"] + "; " if cur["note"] else "") + s
+    return devices
+
+
+def cmd_scan(a):
+    ver = fluxcast_version()
+    if ver is None:
+        fail("tool", "fluxcast is not installed")
+    hold_sweep()
+    secs = int(a.get("--seconds", "8"))
+    rc, text = run([FLUX, "--protocol", "wfd", "--wfd-scan", "--wfd-timeout", str(secs)], secs + 40)
+    if rc is None:
+        fail("scan", text, 1)
+    err = re.search(r"\[FluxCast WFD\] ERROR: (.*)", text)
+    if rc != 0 or err:
+        fail("scan", err.group(1) if err else text.strip()[-200:], 1)
+    protocols = ["wfd"]
+    py = os.environ.get("LARES_CAST_PY") or ("/opt/fluxcast/venv/bin/python3" if os.access("/opt/fluxcast/venv/bin/python3", os.X_OK) else "python3")
+    if run([py, "-c", "import upnpclient"], 10)[0] == 0:
+        protocols.append("dlna")
+    emit({"devices": parse_scan(text), "fluxcast": ver, "shim": shim_needed(ver), "protocols": protocols})
+
+
+def cmd_doctor(a):
+    ver = fluxcast_version()
+    if ver is None:
+        fail("tool", "fluxcast is not installed")
+    rc, text = run([FLUX, "--doctor-json"], 30)
+    try:
+        checks = json.loads(text[text.index("{"):text.rindex("}") + 1])
+    except ValueError:
+        checks = None
+    rc2, ff = run(["ffmpeg", "-version"], 10)
+    m = re.search(r"ffmpeg version (\S+)", ff or "")
+    rc3, nm = run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"], 10)
+    p2p = any(l.split(":")[1:2] == ["wifi-p2p"] for l in (nm or "").splitlines()) if rc3 is not None else False
+    emit({"fluxcast": ver, "shim": shim_needed(ver), "ffmpeg": m.group(1) if m else "", "p2p": p2p, "checks": checks})
+
+
+# ---------------------------------------------------------------------------------------------------------------- the figures
+BEAT = fenv("LARES_CAST_BEAT", 1)
+WINDOW = 3            # beats a rate is taken over: at 30 fps a frame more or less in 1 s is 29..31, in 3 s it is 30
+IW_EVERY = 5          # beats between two looks at the radio (a slow figure changes ON a beat)
+IW_WAIT = 2.0         # s: a look that takes longer is given up
+ECHO_TRIES = 10       # a TV that answered none of the first ten echoes is not asked again
+LOG_EVERY = 10        # every tenth set goes into the transcript
+BLOCK_STALE = 2.5     # s: the sender says something twice a second; older than this it has nothing to say
+
+
+def fnum(v):
+    """ffmpeg's progress values: a number, or None for N/A."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+class Figures:
+    """What a cast's stream does, as ONE set of figures a beat (`stats`), from what is there already:
+
+      fps, dropped, repeated, behindMs   the sender's own progress (ffmpeg `-progress` into a fifo, cast_ffmpeg_shim): frames encoded and sent,
+                              frames its rate control left out, frames it sent twice because none came in time; `behindMs` is how much later the
+                              stream's newest moment comes out than at the best instant of this run: it grows when the encoder cannot keep up
+      kbps                    the group interface's tx_bytes: what was handed to the Wi-Fi card (headers in, retransmissions out)
+      rttMs                   one ICMP echo a second to the address the stream goes to, on a ping socket (no root; a TV that never answers is
+                              left alone after ECHO_TRIES): the network's round trip and nothing else
+      signalDbm, linkMbps     `iw dev <group> station dump`, every IW_EVERY beats: a read of the driver's figures (NL80211_CMD_GET_STATION), never a scan
+      age, reconnects         since the stream first came up, and how often it was made again
+
+    A key is there once its figure has been had; a live figure not known right now is null. NOT here, because the figure would be untrue: the picture's
+    way to the glass (the TV's buffer tells nobody), the TV's own losses (RTCP reports go to a port the encoder holds and never reads), the Wi-Fi's
+    retries and losses (`tx retries` / `tx failed`: iwlwifi counts every frame of an aggregate it reclaims as delivered).
+    Totals run over the whole cast (a reconnect is the same cast); `dropped` and `repeated` never go back.
+    """
+
+    def __init__(self, fifo=""):
+        self.fd = -1
+        if fifo:
+            try:
+                os.mkfifo(fifo)
+                self.fd = os.open(fifo, os.O_RDWR | os.O_NONBLOCK)     # both ends: the encoder's open never waits, and no end of file comes
+            except OSError:
+                self.fd = -1
+        self.known = set()
+        self.first = None            # the stream first came up (monotonic)
+        self.links = 0
+        self.done = {"frame": 0, "drop": 0, "dup": 0}      # what earlier senders of this cast counted
+        self.run = {"frame": 0, "drop": 0, "dup": 0}       # the sender that runs now
+        self.sock, self.seq, self.out, self.answered, self.deaf = None, 0, {}, [], False
+        self.sum = {"held": 0.0, "frames": 0, "frames_s": 0.0, "behind": 0, "sent": 0, "sent_s": 0.0, "rtt": 0.0, "rtt_n": 0, "rtt_max": 0.0, "asked": 0,
+                    "signal": 0, "signal_n": 0, "signal_min": 0}
+        self.iw = None
+        self.begin()
+
+    # ---- a link (one run of fluxcast)
+    def begin(self):
+        """A new attempt: nothing of the last link's live figures is true any more."""
+        self.up = None
+        self.tv = ""
+        self.net, self.tx0 = "", None
+        self.samples = []
+        self.next_sender()
+        self.at, self.from_at, self.behind = None, None, None
+        self.buf, self.block = b"", {}
+        if self.fd >= 0:                                   # what the last sender left unread
+            try:
+                while os.read(self.fd, 65536):
+                    pass
+            except OSError:
+                pass
+        self.radio = (None, None)
+        self.beats, self.iw_beat = 0, 1
+        self.close_echo()
+        self.close_iw()
+
+    def came_up(self, now):
+        self.up = now
+        self.links += 1
+        if self.first is None:
+            self.first = now
+
+    def went_down(self, now):
+        """The link's end: what it held goes into the cast's totals."""
+        if self.up is None:
+            return
+        self.sum["held"] += now - self.up
+        if self.from_at is not None:
+            self.sum["frames"] += self.total("frame") - self.from_at[1]
+            self.sum["frames_s"] += self.at - self.from_at[0]
+        self.up = None
+
+    # ---- what the loop waits on
+    def fds(self):
+        return [f for f in (self.fd, self.sock.fileno() if self.sock else -1, self.iw[1].stdout.fileno() if self.iw else -1) if f >= 0]
+
+    def wait(self, now, most):
+        """How long the loop may sleep: to the next beat."""
+        if self.up is None:
+            return most
+        return max(0.0, min(most, self.up + (self.beats + 1) * BEAT - now))
+
+    def ready(self, fd, now):
+        if fd == self.fd:
+            self.read_progress(now)
+        elif self.sock and fd == self.sock.fileno():
+            self.read_echo(now)
+        elif self.iw and fd == self.iw[1].stdout.fileno():
+            self.read_iw()
+
+    # ---- the sender
+    def read_progress(self, now):
+        try:
+            self.buf += os.read(self.fd, 65536)
+        except OSError:
+            return
+        lines = self.buf.split(b"\n")
+        self.buf = lines.pop()
+        for raw in lines:
+            k, _, v = raw.decode("ascii", "replace").partition("=")
+            self.block[k.strip()] = v.strip()
+            if k == "progress":
+                self.on_block(self.block, now)
+                self.block = {}
+
+    def on_block(self, b, now):
+        frame = fnum(b.get("frame"))
+        if frame is None:
+            return
+        got = {"frame": int(frame), "drop": int(fnum(b.get("drop_frames")) or 0), "dup": int(fnum(b.get("dup_frames")) or 0)}
+        if got["frame"] < self.run["frame"]:               # another sender under the same link (the TV paused and played again)
+            self.next_sender()
+        self.run = got
+        self.at = now
+        if self.up is not None and self.from_at is None:
+            self.from_at = (now, self.total("frame"))
+        us = fnum(b.get("out_time_us"))
+        if us is not None:
+            off = now - us / 1e6
+            self.off = off if self.off is None else min(self.off, off)
+            self.behind = max(0, int(round((off - self.off) * 1000)))
+            self.sum["behind"] = max(self.sum["behind"], self.behind)
+
+    def next_sender(self):
+        """Its counts start again: what the last one counted stays in the cast's totals."""
+        for k in self.done:
+            self.done[k] += self.run[k]
+            self.run[k] = 0
+        self.off = None
+
+    def total(self, k):
+        return self.done[k] + self.run[k]
+
+    # ---- the interface
+    def tx_bytes(self):
+        if not self.net:
+            return None
+        try:
+            with open(os.path.join(SYSNET, self.net, "statistics", "tx_bytes")) as f:
+                return int(f.read())
+        except (OSError, ValueError):
+            return None
+
+    # ---- the round trip
+    def ask_echo(self, now):
+        if self.deaf or not self.tv:
+            return
+        if self.sock is None:
+            try:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
+                self.sock.setblocking(False)
+                self.sock.connect((self.tv, 0))
+            except OSError as e:                           # ping sockets are not allowed here (net.ipv4.ping_group_range)
+                log("figures: no echo: %s" % e)
+                self.deaf = True
+                return self.close_echo()
+        if self.sum["asked"] >= ECHO_TRIES and self.sum["rtt_n"] == 0:
+            log("figures: the TV answers no echo")
+            self.deaf = True
+            return self.close_echo()
+        self.seq = (self.seq + 1) & 0xffff
+        self.out[self.seq] = now
+        self.sum["asked"] += 1
+        try:
+            self.sock.send(struct.pack("!BBHHH", 8, 0, 0, 0, self.seq) + b"lares-cast")     # the kernel fills in the id and the checksum
+        except OSError:
+            pass
+
+    def read_echo(self, now):
+        while True:
+            try:
+                d = self.sock.recv(512)
+            except OSError:
+                return
+            if len(d) < 8 or d[0] != 0:
+                continue
+            t = self.out.pop(struct.unpack("!H", d[6:8])[0], None)
+            if t is not None:
+                ms = (now - t) * 1000
+                self.answered.append((now, ms))
+                self.sum["rtt"] += ms
+                self.sum["rtt_n"] += 1
+                self.sum["rtt_max"] = max(self.sum["rtt_max"], ms)
+
+    def close_echo(self):
+        if self.sock:
+            self.sock.close()
+        self.sock, self.out, self.answered = None, {}, []
+
+    # ---- the radio
+    def ask_iw(self, now):
+        if self.iw and now - self.iw[0] > IW_WAIT:
+            self.close_iw()
+        if self.iw or not self.net or not shutil.which("iw"):
+            return
+        try:
+            p = subprocess.Popen(["iw", "dev", self.net, "station", "dump"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            os.set_blocking(p.stdout.fileno(), False)
+            self.iw = [now, p, b""]
+        except OSError:
+            self.iw = None
+
+    def read_iw(self):
+        try:
+            d = os.read(self.iw[1].stdout.fileno(), 65536)
+        except BlockingIOError:
+            return
+        except OSError:
+            d = b""
+        if d:
+            self.iw[2] += d
+            return
+        text = self.iw[2].decode("utf-8", "replace")
+        self.close_iw()
+        m, r = re.search(r"^\s*signal:\s*(-?\d+)", text, re.M), re.search(r"^\s*tx bitrate:\s*([\d.]+) MBit/s", text, re.M)
+        self.radio = (int(m.group(1)) if m else None, float(r.group(1)) if r else None)
+        if m:
+            self.sum["signal"] += self.radio[0]
+            self.sum["signal_n"] += 1
+            self.sum["signal_min"] = min(self.sum["signal_min"], self.radio[0])
+
+    def close_iw(self):
+        if not self.iw:
+            return
+        p, self.iw = self.iw[1], None
+        p.stdout.close()
+        if p.poll() is None:                               # never waited for: a look the driver holds may not die at once
+            p.kill()
+
+    # ---- the beat
+    def beat(self, now):
+        """The set of figures when the next beat is due, else None."""
+        if self.up is None or now < self.up + (self.beats + 1) * BEAT:
+            return None
+        self.beats = int((now - self.up) / BEAT + 1e-6)
+        g = groups()
+        net = g[0] if g else ""
+        if net != self.net:
+            self.net, self.samples, self.tx0 = net, [], None
+        tx = self.tx_bytes()
+        live = self.at is not None and now - self.at <= BLOCK_STALE
+        self.samples = [x for x in self.samples if now - x[0] <= (WINDOW + 0.5) * BEAT] + [(now, tx, self.at if live else None, self.total("frame"))]
+        a, b = self.samples[0], self.samples[-1]
+        ev = {"event": "stats", "age": int(now - self.first + 1e-6), "reconnects": self.links - 1}
+
+        def put(k, v):
+            if v is not None:
+                self.known.add(k)
+            if k in self.known:
+                ev[k] = v
+
+        fps = None
+        if live and a[2] is not None and b[2] > a[2]:
+            fps = round((b[3] - a[3]) / (b[2] - a[2]), 1)
+        seen = self.at is not None or "dropped" in self.known
+        put("fps", fps)
+        put("dropped", self.total("drop") if seen else None)
+        put("repeated", self.total("dup") if seen else None)
+        put("behindMs", self.behind if live else None)
+        kbps = None
+        if tx is not None and a[1] is not None and b[0] > a[0] and tx >= a[1]:
+            kbps = int(round((tx - a[1]) * 8 / 1000 / (b[0] - a[0])))
+        if tx is not None:
+            if self.tx0 is not None and tx >= self.tx0[1]:
+                self.sum["sent"] += tx - self.tx0[1]
+                self.sum["sent_s"] += now - self.tx0[0]
+            self.tx0 = (now, tx)
+        put("kbps", kbps)
+        self.answered = [x for x in self.answered if now - x[0] <= WINDOW * BEAT]
+        put("rttMs", round(sum(x[1] for x in self.answered) / len(self.answered), 1) if self.answered else None)
+        put("signalDbm", self.radio[0])
+        put("linkMbps", self.radio[1])
+        # what the next beats read
+        self.out = {k: t for k, t in self.out.items() if now - t < 5}
+        self.ask_echo(now)
+        if self.beats >= self.iw_beat:
+            self.iw_beat = self.beats + IW_EVERY
+            self.ask_iw(now)
+        if self.beats % LOG_EVERY == 0:
+            log("stats " + json.dumps({k: v for k, v in ev.items() if k != "event"}, separators=(",", ":")))
+        return ev
+
+    def summary(self):
+        """The cast in one line of the transcript: the averages over all of it."""
+        t = self.sum
+        if t["held"] <= 0:
+            return ""
+        out = ["held %d s" % round(t["held"]), "reconnects %d" % max(0, self.links - 1)]
+        if t["frames_s"] > 0:
+            out += ["%.1f fps" % (t["frames"] / t["frames_s"]), "dropped %d" % self.total("drop"), "repeated %d" % self.total("dup"), "behind at most %d ms" % t["behind"]]
+        if t["sent_s"] > 0:
+            out.append("sent %.1f MB (%.1f Mbit/s)" % (t["sent"] / 1e6, t["sent"] * 8 / 1e6 / t["sent_s"]))
+        if t["rtt_n"]:
+            out.append("round trip %.1f ms (at most %.1f, %d of %d unanswered)" % (t["rtt"] / t["rtt_n"], t["rtt_max"], t["asked"] - t["rtt_n"], t["asked"]))
+        if t["signal_n"]:
+            out.append("signal %d dBm (worst %d)" % (round(t["signal"] / t["signal_n"]), t["signal_min"]))
+        return "average " + ", ".join(out)
+
+    def close(self):
+        self.close_echo()
+        self.close_iw()
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
+# ---------------------------------------------------------------------------------------------------------------- start
+RANK = {"scanning": 0, "connecting": 1, "negotiating": 2, "streaming": 3}
+RE_MODE = re.compile(r"Negotiated media mode:\s*(\d+)x(\d+)p(\d+)")
+RE_TX = re.compile(r"Sender health:.*?tx\+(\d+) KiB")
+RE_TARGET = re.compile(r"RTP target\s*:\s*(\d+\.\d+\.\d+\.\d+):\d+")
+RETRIES = {"activation": 1, "link": 1}       # how often each is tried again in one cast; a stream that held REARM_S earns the link's again
+REARM_S = 60
+TEARDOWN_S = 5
+RE_ERR = re.compile(r"\[FluxCast WFD\] ERROR: (.*)")
+
+
+def classify(detail, streamed):
+    if re.search(r"Timed out waiting for NetworkManager Wi-Fi Direct activation|P2P group interface could not be determined", detail):
+        return "activation"
+    if re.search(r"wf-recorder|ffmpeg|capture|x11grab", detail, re.I):
+        return "capture"
+    if re.search(r"cancel|reject|declin|denied", detail, re.I):
+        return "cancelled"
+    return "peer-gone" if streamed else "tool"
+
+
+class Ctx:
+    child = None
+    fig = None
+    held_s = 0.0
+    stopping = False
+
+
+def wifi_back(deadline_s):
+    """True when a Wi-Fi device (not p2p-dev-*) reads connected again, within deadline_s."""
+    end = time.monotonic() + deadline_s
+    poll = fenv("LARES_CAST_POLL", 1)
+    while True:
+        rc, text = run(["nmcli", "-t", "-f", "DEVICE,STATE", "device"], 5)
+        if rc == 0:
+            for l in text.splitlines():
+                dev, _, st = l.partition(":")
+                if dev.startswith("wl") and st.startswith("connected"):
+                    return True
+        if time.monotonic() >= end:
+            return False
+        time.sleep(poll)
+
+
+def attempt(argv, env, ctx):
+    """One run of fluxcast. Returns (kind, reason, detail): kind "failed" | "ended". ctx.held_s: how long it streamed."""
+    rank = [-1]
+    ctx.held_s = 0.0
+    fig = ctx.fig
+    fig.begin()
+    seen, gone_at, sent, sent_at, since = False, None, -1, None, None
+    stall, grace = fenv("LARES_CAST_STALL", 20), fenv("LARES_CAST_LINK_GRACE", 1)
+
+    def state(s):
+        if RANK[s] > rank[0]:
+            rank[0] = RANK[s]
+            emit({"event": "state", "state": s})
+
+    state("scanning")
+    ctx.child = subprocess.Popen(["setpriv", "--pdeathsig", "TERM", "--"] + argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, env=env, start_new_session=True)
+    fd = ctx.child.stdout.fileno()
+    buf, last_err, streamed, dead_sender = b"", "", False, False
+    tail = []
+
+    def line(text):
+        nonlocal last_err, streamed, dead_sender, sent, sent_at, since
+        text = text.strip()
+        if not text:
+            return
+        log("flux  " + text)
+        tail.append(text)
+        del tail[:-8]
+        m = RE_ERR.search(text)
+        if m:
+            last_err = m.group(1).strip()
+        if "Connecting to " in text or "NetworkManager activation started" in text:
+            state("connecting")
+        elif "P2P link is activated" in text:
+            state("negotiating")
+        m = RE_MODE.search(text)
+        if m:
+            state("negotiating")
+            emit({"event": "mode", "width": int(m.group(1)), "height": int(m.group(2)), "fps": int(m.group(3))})
+        if "Sender health:" in text or "first RTP bytes after PLAY" in text:
+            if not streamed:
+                since = sent_at = time.monotonic()
+                fig.came_up(since)
+            streamed = True
+            state("streaming")
+        m = RE_TX.search(text)
+        if m:
+            if int(m.group(1)) != sent:
+                sent, sent_at = int(m.group(1)), time.monotonic()
+        m = RE_TARGET.search(text)
+        if m:
+            fig.tv = m.group(1)
+        if "Sender health:" in text and "exited=" in text:
+            dead_sender = True
+        if streamed and "Stopping RTP stream" in text:      # the TV's teardown: fluxcast would wait for the next session for ever
+            sent_at = min(sent_at, time.monotonic() - stall + TEARDOWN_S)
+
+    while True:
+        r, _, _ = select.select([fd] + fig.fds(), [], [], fig.wait(time.monotonic(), 0.5))
+        now = time.monotonic()
+        for f in r:
+            if f != fd:
+                fig.ready(f, now)
+        if fd in r:
+            data = os.read(fd, 4096)
+            if not data:
+                break
+            buf += data
+            parts = re.split(rb"[\r\n]+", buf)
+            buf = parts.pop()
+            for p in parts:
+                line(p.decode("utf-8", "replace"))
+        elif ctx.child.poll() is not None:
+            break
+        # the link watch: fluxcast itself never ends when the link dies
+        now = time.monotonic()
+        if since is not None:
+            ctx.held_s = now - since
+        if groups():
+            seen, gone_at = True, None
+        elif seen and gone_at is None:
+            gone_at = now
+        if streamed and gone_at is not None and now - gone_at >= grace:
+            return lost(ctx, "link", "the Wi-Fi Direct link went down")
+        if streamed and now - sent_at >= stall:
+            return lost(ctx, "link" if not groups() else "peer-gone", "nothing was sent for %d s" % stall)
+        ev = fig.beat(now)
+        if ev:
+            emit(ev, keep=False)
+    if buf:
+        line(buf.decode("utf-8", "replace"))
+    code = ctx.child.wait()
+    reap_group(ctx.child.pid)
+    ctx.child = None
+    if code == 0 and not streamed:
+        return "failed", "tool", last_err or "fluxcast ended before streaming"
+    if code == 0:
+        return "failed", "peer-gone", last_err or "the display ended the session"
+    detail = last_err or (tail[-1] if tail else "fluxcast exited %d" % code)
+    reason = classify(detail, streamed)
+    if reason == "tool" and dead_sender:
+        reason = "capture"
+    return "failed", reason, detail
+
+
+def lost(ctx, reason, detail):
+    log("link watch: " + detail)
+    ctx.fig.went_down(time.monotonic())
+    stop_child(ctx)
+    return "failed", reason, detail
+
+
+def reap_group(pgid):
+    """Whatever fluxcast left in its session (a recorder, an ffmpeg) goes with it."""
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def stop_child(ctx):
+    ch = ctx.child
+    if ch is None:
+        return
+    try:
+        ch.send_signal(signal.SIGINT)
+    except ProcessLookupError:
+        pass
+    end = time.monotonic() + fenv("LARES_CAST_STOP_WAIT", 5)
+    while ch.poll() is None and time.monotonic() < end:
+        try:  # keep the pipe drained so a chatty fluxcast is never blocked in its own cleanup
+            if select.select([ch.stdout.fileno()], [], [], 0.1)[0]:
+                os.read(ch.stdout.fileno(), 65536)
+        except (OSError, ValueError):
+            time.sleep(0.1)
+    if ch.poll() is None:
+        try:
+            os.killpg(ch.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        ch.wait()
+    reap_group(ch.pid)
+    ctx.child = None
+
+
+def monitor_ok(name):
+    rc, text = run(["xrandr", "--query"], 10)
+    if rc is None:
+        return False
+    return any(l.split()[:1] == [name] and l.split()[1:2] == ["connected"] for l in text.splitlines())
+
+
+def wait_monitor(name):
+    """A just-created headless output reaches Xwayland a moment after Hyprland lists it: poll up to LARES_CAST_MONITOR_WAIT s (3), 100 ms apart."""
+    end = time.time() + fenv("LARES_CAST_MONITOR_WAIT", 3)
+    while True:
+        if monitor_ok(name):
+            return True
+        if time.time() >= end:
+            return False
+        time.sleep(0.1)
+
+
+def cmd_start(a):
+    dev, mon = a.get("--device", ""), a.get("--monitor", "")
+    if not re.fullmatch(r"wfd:[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", dev):
+        fail("device", "a device id is wfd:<mac>: " + dev)
+    if not mon:
+        fail("monitor", "no --monitor")
+    ver = fluxcast_version()
+    if ver is None:
+        fail("tool", "fluxcast is not installed")
+    if not wait_monitor(mon):
+        fail("monitor", "%s is not a connected output in xrandr --query" % mon)
+    argv = [FLUX, "--protocol", "wfd", "--monitor", mon, "--wfd-peer", dev[4:].upper(), "--fps", a.get("--fps", "30"),
+            "--bitrate", a.get("--bitrate", "8M")]
+    if a.get("--res"):
+        argv += ["--output-res", a["--res"]]
+    if "--no-audio" in a:
+        argv.append("--wfd-no-audio")
+    if a.get("--audio-device"):
+        argv += ["--wfd-audio-device", a["--audio-device"]]
+    env = dict(os.environ, PYTHONUNBUFFERED="1", LARES_CAST_DROP="1" if shim_needed(ver) else "0")
+    tmp = None
+    ctx = Ctx()
+    signal.signal(signal.SIGTERM, _stop_handler)
+    signal.signal(signal.SIGINT, _stop_handler)
+    signal.signal(signal.SIGUSR1, _keep_handler)
+    code = 0
+    open_log()
+    log("start " + " ".join(argv))
+    left, n = dict(RETRIES), 0
+    try:
+        hold_sweep()
+        try:
+            tmp = tempfile.mkdtemp(prefix="lares-cast-")
+            os.symlink(SHIM, os.path.join(tmp, "ffmpeg"))
+            env["PATH"] = tmp + os.pathsep + env.get("PATH", "")
+            env["LARES_CAST_PROGRESS"] = os.path.join(tmp, "progress")
+        except OSError as e:
+            log("no wrapper: %s" % e)
+        ctx.fig = Figures(env.get("LARES_CAST_PROGRESS", ""))
+        while True:
+            why = hold_take()
+            emit({"event": "hold", "ok": why == "", "why": why})
+            kind, reason, detail = attempt(argv, env, ctx)
+            ctx.fig.went_down(time.monotonic())
+            if ctx.held_s >= REARM_S:
+                left = dict(RETRIES)
+            if left.get(reason, 0) > 0 and ctx.held_s > 0:
+                emit({"event": "lost"})                  # a stream that was up is gone and may be made again: said now, not once the Wi-Fi is back
+            if left.get(reason, 0) > 0 and wifi_back(fenv("LARES_CAST_WIFI_WAIT", 20)):
+                left[reason] -= 1
+                n += 1
+                emit({"event": "retry", "n": n})
+                continue
+            emit({"event": "failed", "reason": reason, "detail": detail})
+            code = 1
+            break
+    except Stop:
+        ctx.stopping = True
+        if ctx.fig is not None:
+            ctx.fig.went_down(time.monotonic())
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+        emit_quiet({"event": "state", "state": "stopping"})
+        stop_child(ctx)
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+        if ctx.child is not None:
+            stop_child(ctx)
+        if ctx.fig is not None:
+            if ctx.fig.summary():
+                log(ctx.fig.summary())
+            ctx.fig.close()
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+        if KEEP_HOLD[0]:
+            hold_pass()
+        else:
+            hold_give()
+    emit_quiet({"event": "state", "state": "ended"})
+    emit_quiet({"event": "ended", "code": code})
+    sys.exit(code)
+
+
+def parse_args(argv):
+    flags = {"--no-audio", "--json", "--now"}
+    out, i = {}, 0
+    while i < len(argv):
+        k = argv[i]
+        if k in flags:
+            out[k] = True
+        elif k.startswith("--") and i + 1 < len(argv):
+            out[k] = argv[i + 1]
+            i += 1
+        else:
+            fail("usage", "unexpected argument: " + k)
+        i += 1
+    return out
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in ("scan", "start", "doctor", "restore"):
+        fail("usage", "lares-cast scan|start|doctor|restore ...")
+    a = parse_args(sys.argv[2:])
+    {"scan": cmd_scan, "start": cmd_start, "doctor": cmd_doctor, "restore": lambda a: hold_sweep("--now" in a)}[sys.argv[1]](a)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,822 @@
+{
+ "Code": 1000,
+ "MaxTier": 2,
+ "LastModifiedTime": 0,
+ "ExpirationTime": 0,
+ "LoadsExpirationTime": 0,
+ "ResponseMetadata": {},
+ "LogicalServers": [
+  {
+   "Name": "IS-NL#1",
+   "EntryCountry": "IS",
+   "ExitCountry": "NL",
+   "Domain": "is-nl-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 1,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 2.9691553626,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-0==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.10",
+     "ExitIP": "192.0.2.10",
+     "Domain": "node-nl-01.protonvpn.net",
+     "ID": "fake-node-0-0==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.10",
+     "ExitIP": "192.0.2.10",
+     "Domain": "node-nl-214.protonvpn.net",
+     "ID": "fake-node-0-1==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.10",
+     "ExitIP": "192.0.2.10",
+     "Domain": "node-nl-213.protonvpn.net",
+     "ID": "fake-node-0-2==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.10",
+     "ExitIP": "192.0.2.10",
+     "Domain": "node-nl-221.protonvpn.net",
+     "ID": "fake-node-0-3==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 0,
+     "ServicesDown": 35,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 56
+  },
+  {
+   "Name": "IS-BE#1",
+   "EntryCountry": "IS",
+   "ExitCountry": "BE",
+   "Domain": "is-be-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 1,
+   "Region": null,
+   "City": "Brussels",
+   "Score": 1.9741401235,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-1==",
+   "Location": {
+    "Lat": 50.85,
+    "Long": 4.35
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.11",
+     "ExitIP": "192.0.2.11",
+     "Domain": "node-be-05.protonvpn.net",
+     "ID": "fake-node-1-0==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.11",
+     "ExitIP": "192.0.2.11",
+     "Domain": "node-be-02.protonvpn.net",
+     "ID": "fake-node-1-1==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 65
+  },
+  {
+   "Name": "SE-NL#1",
+   "EntryCountry": "SE",
+   "ExitCountry": "NL",
+   "Domain": "se-nl-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 1,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 2.9509536555,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-2==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-53.protonvpn.net",
+     "ID": "fake-node-2-0==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-28.protonvpn.net",
+     "ID": "fake-node-2-1==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-29.protonvpn.net",
+     "ID": "fake-node-2-2==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-30.protonvpn.net",
+     "ID": "fake-node-2-3==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-216.protonvpn.net",
+     "ID": "fake-node-2-4==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-219.protonvpn.net",
+     "ID": "fake-node-2-5==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-220.protonvpn.net",
+     "ID": "fake-node-2-6==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-217.protonvpn.net",
+     "ID": "fake-node-2-7==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.12",
+     "ExitIP": "192.0.2.12",
+     "Domain": "node-nl-218.protonvpn.net",
+     "ID": "fake-node-2-8==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 0,
+     "ServicesDown": 35,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 63
+  },
+  {
+   "Name": "NL#85",
+   "EntryCountry": "NL",
+   "ExitCountry": "NL",
+   "Domain": "node-nl-47.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 2.9406311167,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-3==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.13",
+     "ExitIP": "192.0.2.13",
+     "Domain": "node-nl-47.protonvpn.net",
+     "ID": "fake-node-3-0==",
+     "Label": "0",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 56
+  },
+  {
+   "Name": "NL#86",
+   "EntryCountry": "NL",
+   "ExitCountry": "NL",
+   "Domain": "node-nl-47.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 2.9451851109,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-4==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.14",
+     "ExitIP": "192.0.2.14",
+     "Domain": "node-nl-47.protonvpn.net",
+     "ID": "fake-node-4-0==",
+     "Label": "1",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 53
+  },
+  {
+   "Name": "NL#87",
+   "EntryCountry": "NL",
+   "ExitCountry": "NL",
+   "Domain": "node-nl-47.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Rotterdam",
+   "Score": 2.9458565439,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-5==",
+   "Location": {
+    "Lat": 51.92,
+    "Long": 4.48
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.15",
+     "ExitIP": "192.0.2.15",
+     "Domain": "node-nl-47.protonvpn.net",
+     "ID": "fake-node-5-0==",
+     "Label": "2",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 61
+  },
+  {
+   "Name": "NL-FREE#133",
+   "EntryCountry": "NL",
+   "ExitCountry": "NL",
+   "Domain": "node-nl-173.protonvpn.net",
+   "Tier": 0,
+   "Features": 16,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 4.9993747037,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-6==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.16",
+     "ExitIP": "192.0.2.16",
+     "Domain": "node-nl-173.protonvpn.net",
+     "ID": "fake-node-6-0==",
+     "Label": "0",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.16",
+     "ExitIP": "192.0.2.16",
+     "Domain": "node-nl-173.protonvpn.net",
+     "ID": "fake-node-6-1==",
+     "Label": "1",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.16",
+     "ExitIP": "192.0.2.16",
+     "Domain": "node-nl-173.protonvpn.net",
+     "ID": "fake-node-6-2==",
+     "Label": "2",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.16",
+     "ExitIP": "192.0.2.16",
+     "Domain": "node-nl-173.protonvpn.net",
+     "ID": "fake-node-6-3==",
+     "Label": "3",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 75
+  },
+  {
+   "Name": "NL-FREE#135",
+   "EntryCountry": "NL",
+   "ExitCountry": "NL",
+   "Domain": "node-nl-175.protonvpn.net",
+   "Tier": 0,
+   "Features": 16,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 4.9970138456,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-7==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.17",
+     "ExitIP": "192.0.2.17",
+     "Domain": "node-nl-175.protonvpn.net",
+     "ID": "fake-node-7-0==",
+     "Label": "0",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.17",
+     "ExitIP": "192.0.2.17",
+     "Domain": "node-nl-175.protonvpn.net",
+     "ID": "fake-node-7-1==",
+     "Label": "1",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.17",
+     "ExitIP": "192.0.2.17",
+     "Domain": "node-nl-175.protonvpn.net",
+     "ID": "fake-node-7-2==",
+     "Label": "2",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.17",
+     "ExitIP": "192.0.2.17",
+     "Domain": "node-nl-175.protonvpn.net",
+     "ID": "fake-node-7-3==",
+     "Label": "3",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 79
+  },
+  {
+   "Name": "BE#29",
+   "EntryCountry": "BE",
+   "ExitCountry": "BE",
+   "Domain": "node-be-05.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Brussels",
+   "Score": 1.9600685217,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-8==",
+   "Location": {
+    "Lat": 50.85,
+    "Long": 4.35
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.18",
+     "ExitIP": "192.0.2.18",
+     "Domain": "node-be-05.protonvpn.net",
+     "ID": "fake-node-8-0==",
+     "Label": "0",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 68
+  },
+  {
+   "Name": "BE#30",
+   "EntryCountry": "BE",
+   "ExitCountry": "BE",
+   "Domain": "node-be-05.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Brussels",
+   "Score": 1.9590988164,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-9==",
+   "Location": {
+    "Lat": 50.85,
+    "Long": 4.35
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.19",
+     "ExitIP": "192.0.2.19",
+     "Domain": "node-be-05.protonvpn.net",
+     "ID": "fake-node-9-0==",
+     "Label": "1",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 63
+  },
+  {
+   "Name": "BE#31",
+   "EntryCountry": "BE",
+   "ExitCountry": "BE",
+   "Domain": "node-be-05.protonvpn.net",
+   "Tier": 2,
+   "Features": 28,
+   "Region": null,
+   "City": "Brussels",
+   "Score": 1.964024578,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-10==",
+   "Location": {
+    "Lat": 50.85,
+    "Long": 4.35
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.20",
+     "ExitIP": "192.0.2.20",
+     "Domain": "node-be-05.protonvpn.net",
+     "ID": "fake-node-10-0==",
+     "Label": "2",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 63
+  },
+  {
+   "Name": "IS#10",
+   "EntryCountry": "IS",
+   "ExitCountry": "IS",
+   "Domain": "node-is-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 12,
+   "Region": null,
+   "City": "Reykjavik",
+   "Score": 5.9762245326,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-11==",
+   "Location": {
+    "Lat": 64.13,
+    "Long": -21.93
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.21",
+     "ExitIP": "192.0.2.21",
+     "Domain": "node-is-01.protonvpn.net",
+     "ID": "fake-node-11-0==",
+     "Label": "0",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 68
+  },
+  {
+   "Name": "IS#11",
+   "EntryCountry": "IS",
+   "ExitCountry": "IS",
+   "Domain": "node-is-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 12,
+   "Region": null,
+   "City": "Reykjavik",
+   "Score": 5.9792949579,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-12==",
+   "Location": {
+    "Lat": 64.13,
+    "Long": -21.93
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.22",
+     "ExitIP": "192.0.2.22",
+     "Domain": "node-is-01.protonvpn.net",
+     "ID": "fake-node-12-0==",
+     "Label": "1",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 69
+  },
+  {
+   "Name": "IS#12",
+   "EntryCountry": "IS",
+   "ExitCountry": "IS",
+   "Domain": "node-is-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 12,
+   "Region": null,
+   "City": "Reykjavik",
+   "Score": 5.9763397082,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-13==",
+   "Location": {
+    "Lat": 64.13,
+    "Long": -21.93
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.23",
+     "ExitIP": "192.0.2.23",
+     "Domain": "node-is-01.protonvpn.net",
+     "ID": "fake-node-13-0==",
+     "Label": "2",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 70
+  },
+  {
+   "Name": "CH-BE#2",
+   "EntryCountry": "CH",
+   "ExitCountry": "BE",
+   "Domain": "ch-be-01.protonvpn.net",
+   "Tier": 2,
+   "Features": 1,
+   "Region": null,
+   "City": "Brussels",
+   "Score": 1.9626716215,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-14==",
+   "Location": {
+    "Lat": 50.85,
+    "Long": 4.35
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.24",
+     "ExitIP": "192.0.2.24",
+     "Domain": "node-be-04.protonvpn.net",
+     "ID": "fake-node-14-0==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 71
+  },
+  {
+   "Name": "NL#999",
+   "EntryCountry": "IS",
+   "ExitCountry": "NL",
+   "Domain": "is-nl-01.protonvpn.net",
+   "Tier": 3,
+   "Features": 1,
+   "Region": null,
+   "City": "Amsterdam",
+   "Score": 2.9691553626,
+   "HostCountry": null,
+   "OrganizationID": null,
+   "VPNGatewayID": null,
+   "ID": "fake-id-15==",
+   "Location": {
+    "Lat": 52.37,
+    "Long": 4.89
+   },
+   "Servers": [
+    {
+     "EntryIP": "192.0.2.25",
+     "ExitIP": "192.0.2.25",
+     "Domain": "node-nl-01.protonvpn.net",
+     "ID": "fake-node-15-0==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.25",
+     "ExitIP": "192.0.2.25",
+     "Domain": "node-nl-214.protonvpn.net",
+     "ID": "fake-node-15-1==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.25",
+     "ExitIP": "192.0.2.25",
+     "Domain": "node-nl-213.protonvpn.net",
+     "ID": "fake-node-15-2==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 1,
+     "ServicesDown": 0,
+     "ServicesDownReason": null
+    },
+    {
+     "EntryIP": "192.0.2.25",
+     "ExitIP": "192.0.2.25",
+     "Domain": "node-nl-221.protonvpn.net",
+     "ID": "fake-node-15-3==",
+     "Label": "",
+     "X25519PublicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+     "Generation": 0,
+     "Status": 0,
+     "ServicesDown": 35,
+     "ServicesDownReason": null
+    }
+   ],
+   "Status": 1,
+   "Load": 56
+  }
+ ]
+}

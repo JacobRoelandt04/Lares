@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# stub ping: answers like iputils for one echo, unless $AERIAL_STUB_DIR/pingfail exists (or pingfailn counts down)
+echo "$*" >> "$AERIAL_STUB_DIR/ping.log"
+target=${@: -1}
+# $AERIAL_STUB_DIR/pingfailn holds N: the next N calls fail, then it answers (one lost ping, then a working gateway)
+fail=0
+if [ -e "$AERIAL_STUB_DIR/pingfail" ]; then fail=1; fi
+if [ -s "$AERIAL_STUB_DIR/pingfailn" ]; then
+    n=$(cat "$AERIAL_STUB_DIR/pingfailn")
+    if [ "$n" -gt 0 ] 2> /dev/null; then echo $((n - 1)) > "$AERIAL_STUB_DIR/pingfailn"; fail=1; fi
+fi
+if [ "$fail" = 1 ]; then
+    printf 'PING %s (%s) 56(84) bytes of data.\n\n--- %s ping statistics ---\n1 packets transmitted, 0 received, 100%% packet loss, time 0ms\n\n' "$target" "$target" "$target"
+    exit 1
+fi
+printf 'PING %s (%s) 56(84) bytes of data.\n64 bytes from %s: icmp_seq=1 ttl=64 time=1.23 ms\n\n--- %s ping statistics ---\n1 packets transmitted, 1 received, 0%% packet loss, time 0ms\nrtt min/avg/max/mdev = 1.230/1.230/1.230/0.000 ms\n' "$target" "$target" "$target" "$target"

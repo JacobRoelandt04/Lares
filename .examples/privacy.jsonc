@@ -1,0 +1,18 @@
+// privacy.jsonc -- what may never leave this machine in a published copy of the repository (docs/publishing.md). The template of
+// ~/.config/quickshell/config/privacy.jsonc, which is never tracked. Read by tools only: tools/publish/privacy_check.py (the leak
+// check: the quick tier and every `lares publish`), `lares publish` itself and the fixture scrubbers (tools/aerial/make_fixtures.py).
+// `//` and `/* */` comments are allowed.
+{
+    // Real value -> the stand-in a scrubber writes for it ("my-home-wifi": "HomeNet"). Every real value here is also forbidden: the
+    // leak check fails on it anywhere in the published tree, any case, with spaces, `-` and `_` interchangeable, and a MAC address in
+    // every spelling (aa:bb.., AA-BB.., aabb..).
+    "replace": {},
+    // Values that are forbidden with no stand-in: an e-mail address, a serial number, a disk's UUID, a street, a town.
+    "forbid": [],
+    "publish": {
+        // The name and e-mail address an exported commit carries (lares publish refuses without them). Use GitHub's no-reply address
+        // (Settings > Emails), not your own: a public commit shows it to everyone.
+        "name": "",
+        "email": ""
+    }
+}

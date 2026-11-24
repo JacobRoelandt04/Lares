@@ -1,0 +1,20 @@
+// power.jsonc -- the power reel (modules/shell/ReelItems.js, ReelActions.qml). The template of ~/.config/quickshell/config/power.jsonc.
+// Every key is optional and every value below IS the default. `//` and `/* */` comments are allowed. Keep only what you change.
+{
+    // The items of the reel, in the order they stand on its ring. One left out is not there; "lock" always is (left out, it comes last).
+    // Read as the shell starts.
+    "items": ["sleep", "poweroff", "reboot", "hibernate", "logout", "lock"],
+    // The item the reel rests on when the shell starts: a right click fires the item it rests on. One of "items".
+    "rest": "lock",
+
+    // What an item runs instead of its own command, as a list: { "sleep": ["systemctl", "suspend"], "poweroff": ["systemctl", "poweroff"],
+    // "reboot": ["systemctl", "reboot"], "logout": ["hyprctl", "dispatch", "hl.dsp.exit()"] } is what they run now. "hibernate" runs nothing (it
+    // says so in a notification) until it has a command here: ["systemctl", "hibernate"], ["systemctl", "suspend-then-hibernate"]. "lock" is
+    // the lock's own and cannot be changed. With session restore on, the session is still saved first for poweroff, reboot and logout.
+    "commands": {},
+
+    // Power off, reboot, hibernate and log out wait until their glyph's flourish has played. false: they run at once. true | false.
+    "waitForFlourish": true,
+    // A right click fires the item (scrolling never does). true: a left click fires it too. true | false.
+    "leftClickFires": false
+}

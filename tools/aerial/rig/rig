@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# The aerial test bed's runner. Installed root-owned to /usr/local/lib/lares/aerial-rig/rig by install.sh and run ONLY by
+# lares-aerial-rig.service; the repo's copy is never executed as root. README.md beside it.
+#
+#   rig prepare   (ExecStartPre)  four mac80211_hwsim radios straight into netns lares-rig, a veth to the host, the PKI, the run dir
+#   rig run       (ExecStart)     enters the netns AND private mount + UTS namespaces, then `rig inner` in the foreground
+#   rig inner     (inside)        masks /dev/rfkill and resolv.conf, starts the bus, the supplicants, the APs, DHCP/DNS, the
+#                                 portal and NetworkManager; tells systemd "ready" (Type=notify) when every part answers; waits
+#   rig cleanup   (ExecStopPost)  the netns goes, the radios go (only ones this run made), the domain goes back, /run/lares-rig goes
+#   rig status                    what is up
+#
+# A step that fails stops the unit, and the unit's ExecStopPost (cleanup) runs after a failed prepare too: nothing half-made stays.
+set -euo pipefail
+LIB=/usr/local/lib/lares/aerial-rig
+RUN=/run/lares-rig
+NS=lares-rig
+HOST_IF=lrig-h          # the veth's host end (the user's netns); the user's NetworkManager ignores it (the conf.d line)
+NS_IF=lrig-n
+log() { printf 'lares-aerial-rig: %s\n' "$*" >&2; }
+
+user_ids() {   # USER_NAME / USER_UID / USER_GID from the root-owned file install.sh wrote
+    USER_NAME=$(cat "$LIB/user")
+    USER_UID=$(id -u "$USER_NAME")
+    USER_GID=$(id -g "$USER_NAME")
+}
+
+hwsim_phys() {   # the phys mac80211_hwsim made (by their device), in phy order
+    local p
+    for p in /sys/class/ieee80211/*; do
+        [ -e "$p" ] || continue
+        case "$(readlink -f "$p/device")" in */mac80211_hwsim/*) basename "$p" ;; esac
+    done | sort -V
+}
+
+reg_country() {   # the GLOBAL regulatory domain ("00" = the world); the self-managed AX210 has its own and is never read here
+    local out
+    out=$(iw reg get 2> /dev/null || true)
+    printf '%s\n' "$out" | awk '/^global/ { g = 1; next } g && /^country/ && !done { sub(":", "", $2); print $2; done = 1 }'
+}
+
+prepare() {
+    user_ids
+    trap 'rc=$?; trap - EXIT; [ "$rc" -eq 0 ] || { log "prepare failed ($rc): taking back what was made"; cleanup; }; exit "$rc"' EXIT
+    [ ! -e "/run/netns/$NS" ] || { log "netns $NS exists: a run is up or half-made (systemctl stop lares-aerial-rig first)"; exit 1; }
+    # mac80211_hwsim may be somebody else's: never load over it, never unload it later
+    if grep -q '^mac80211_hwsim ' /proc/modules; then log "mac80211_hwsim is already loaded (not by this rig): refusing"; exit 1; fi
+    # the rig's subnets must be free on the host: the veth brings a route for 10.77.0.0/24 into the USER's netns
+    if ip -4 route show | grep -q '^10\.77\.' || ip -4 -o addr show | grep -q ' 10\.77\.'; then
+        log "the host already uses 10.77.0.0/16: refusing (the rig's addresses would collide)"; exit 1
+    fi
+    for t in iw ip hostapd dnsmasq dbus-daemon wpa_supplicant NetworkManager openssl unshare python3 busctl setpriv; do
+        command -v "$t" > /dev/null || { log "missing program: $t (install.sh installs the packages)"; exit 1; }
+    done
+    install -d -m 0711 "$RUN"
+    install -d -m 0700 "$RUN/nm-run" "$RUN/nm-lib" "$RUN/keyfiles" "$RUN/pki" "$RUN/leases"
+    install -d -m 0755 "$RUN/pub" "$RUN/nm-conf.d" "$RUN/nm-sys-conf.d" "$RUN/udev" "$RUN/udev/data"
+    # root-owned, group-readable: a hostapd / wpa_cli control socket the user's group may talk to, nothing it may create
+    install -d -m 0750 -o root -g "$USER_GID" "$RUN/hostapd" "$RUN/wpa-phone"
+    printf 'online\n' > "$RUN/portal"; chown "$USER_UID:$USER_GID" "$RUN/portal"   # the portal switch: the one file the user writes
+    : > "$RUN/resolv.conf"
+    # A throwaway CA and server certificate for the 802.1X AP (PEAP / TTLS).
+    openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=lares rig CA" \
+        -keyout "$RUN/pki/ca.key" -out "$RUN/pki/ca.pem" 2> /dev/null
+    openssl req -newkey rsa:2048 -nodes -subj "/CN=radius.rig.lares" \
+        -keyout "$RUN/pki/server.key" -out "$RUN/pki/server.csr" 2> /dev/null
+    openssl x509 -req -in "$RUN/pki/server.csr" -CA "$RUN/pki/ca.pem" -CAkey "$RUN/pki/ca.key" -CAcreateserial \
+        -days 2 -out "$RUN/pki/server.pem" 2> /dev/null
+    cp "$RUN/pki/ca.pem" "$RUN/ca.pem"; chmod 0644 "$RUN/ca.pem"   # a test's CA-certificate field points here
+    # cfg80211's domain for the VIRTUAL radios (the AX210 is self-managed and ignores it): BE allows a 5 GHz AP. Remembered, put back.
+    reg_country > "$RUN/reg-before"
+    # cfg80211 read regulatory.db once, at boot (before wireless-regdb was installed it found none): reload it, or `set BE` stays 00
+    iw reg reload 2> /dev/null || log "iw reg reload failed (an older kernel?): the domain may stay 00"
+    iw reg set BE || log "iw reg set BE failed: 5 GHz APs will not start (is wireless-regdb installed?)"
+    # Law 3: the netns first, the radios made and moved in one breath (the user's NM ignores driver:mac80211_hwsim meanwhile)
+    ip netns add "$NS"
+    modprobe mac80211_hwsim radios=4
+    : > "$RUN/hwsim-ours"
+    local phy n=0
+    for phy in $(hwsim_phys); do
+        iw phy "$phy" set netns name "$NS"
+        n=$((n + 1))
+    done
+    [ "$n" -eq 4 ] || { log "expected 4 hwsim radios, moved $n"; exit 1; }
+    # The veth: the host's way to the rig's gateway and portal (a process of the user's runs in the user's netns, not in the rig's)
+    ip link add "$HOST_IF" type veth peer name "$NS_IF" netns "$NS"
+    ip addr add 10.77.255.2/30 dev "$HOST_IF"
+    ip link set "$HOST_IF" up
+    ip route add 10.77.0.0/24 via 10.77.255.1 dev "$HOST_IF"
+}
+
+run() {
+    [ -e "/run/netns/$NS" ] || { log "no netns $NS: prepare did not run"; exit 1; }
+    exec ip netns exec "$NS" unshare --mount --uts --propagation private "$LIB/rig" inner
+}
+
+wait_for() {   # wait_for <what> <tenths of a second> <command...>
+    local what=$1 n=$2 i
+    shift 2
+    for ((i = 0; i < n; i++)); do "$@" > /dev/null 2>&1 && return 0; sleep 0.1; done
+    log "timed out waiting for: $what"
+    return 1
+}
+
+inner() {
+    user_ids
+    # Only the rig says "ready": dbus-daemon (and any other child that knows sd_notify) would tell systemd READY the moment it is up,
+    # and `systemctl start` returned before NetworkManager existed (the first real run). The socket is kept for the one line below.
+    local notify_socket=${NOTIFY_SOCKET:-}
+    unset NOTIFY_SOCKET
+    # Anything done here is done to whatever netns this is: it must be the rig's.
+    [ "$(ip netns identify $$)" = "$NS" ] || { log "not inside netns $NS: refusing"; exit 1; }
+    # ---- laws 1, 2, 4: nothing the rig's NetworkManager does reaches the user's rfkill, resolv.conf, NM state or hostname ----
+    # /dev/rfkill is GLOBAL: the rig's NetworkManager must never reach the real one. It is masked with a FIFO the rig holds open (fd 9),
+    # NOT /dev/null: hostapd's and wpa_supplicant's rfkill_init read the device until EAGAIN, and /dev/null answers 0 bytes for ever,
+    # which they skip as a short event and read again -- both spun at 100 % before their main loop, deaf on D-Bus (the first real run).
+    # The FIFO answers EAGAIN (nothing to read, a writer present) and is never readable; whatever the rig's NetworkManager writes into it
+    # stays in the pipe (an event for idx 0 / CHANGE_ALL, which the hwsim radios' rfkill indexes do not match).
+    mkfifo -m 0600 "$RUN/rfkill-mask"
+    exec 9<> "$RUN/rfkill-mask"
+    [ ! -e /dev/rfkill ] || mount --bind "$RUN/rfkill-mask" /dev/rfkill
+    mount --bind "$RUN/resolv.conf" /etc/resolv.conf
+    install -d /run/NetworkManager /var/lib/NetworkManager /run/udev   # (they exist wherever NetworkManager runs)
+    mount --bind "$RUN/nm-run" /run/NetworkManager
+    mount --bind "$RUN/nm-lib" /var/lib/NetworkManager
+    mount --bind "$RUN/udev" /run/udev   # NetworkManager manages only what udev "initialized": written below, for the rig's links only
+    [ ! -e /dev/rfkill ] || [ "$(stat -L -c %F /dev/rfkill)" = fifo ] || { log "/dev/rfkill is not masked"; exit 1; }
+    [ "$(stat -c %d:%i /etc/resolv.conf)" = "$(stat -c %d:%i "$RUN/resolv.conf")" ] || { log "/etc/resolv.conf is not masked"; exit 1; }
+    export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$RUN/bus"
+
+    # The four radios by role, in phy order (hwsim made them in order): A and B the access points, then the client, then the "phone".
+    local ifs=() i line
+    mapfile -t ifs < <(iw dev | awk '/^phy#/ { sub("phy#", "", $1); p = $1 } /Interface/ { print p, $2 }' | sort -n | awk '{ print $2 }')
+    [ "${#ifs[@]}" -eq 4 ] || { log "expected 4 wireless interfaces in the netns, found ${#ifs[@]}"; exit 1; }
+    local AP_A=${ifs[0]} AP_B=${ifs[1]} CLIENT=${ifs[2]} PHONE=${ifs[3]}
+    printf 'ap_a=%s\nap_b=%s\nclient=%s\nphone=%s\n' "$AP_A" "$AP_B" "$CLIENT" "$PHONE" > "$RUN/roles"
+
+    ip link set lo up
+    ip addr add 10.77.255.1/30 dev "$NS_IF"
+    ip link set "$NS_IF" up
+    ip link add br-rig type bridge
+    ip addr add 10.77.0.1/24 dev br-rig
+    ip link set br-rig up
+    # udev's database says "initialized" for each link (a netns has no udevd), in the private /run/udev only
+    ip -o link | while IFS=': ' read -r idx _; do printf 'I:1\n' > "$RUN/udev/data/n$idx"; done
+
+    # The private bus first: the supplicant and NetworkManager both sit on it.
+    dbus-daemon --nofork --config-file="$LIB/conf/bus.conf" --print-address=3 3> "$RUN/bus.address" &
+    wait_for "the bus socket" 100 test -S "$RUN/bus" || exit 1
+    chown "$USER_UID:$USER_GID" "$RUN/bus"; chmod 0600 "$RUN/bus"
+
+    # Access points. 5 GHz only when the domain really is BE (wireless-regdb): else AP B takes 2.4 GHz channel 11.
+    local band_b=a chan_b=36 vht=1 country=1
+    for i in $(seq 30); do [ "$(reg_country)" = BE ] && break; sleep 0.1; done
+    if [ "$(reg_country)" != BE ]; then band_b=g; chan_b=11; vht=0; country=0; log "no BE domain (wireless-regdb?): AP B on 2.4 GHz channel 11"; fi
+    local f ifc
+    for f in a b; do
+        case $f in a) ifc=$AP_A ;; *) ifc=$AP_B ;; esac
+        sed -e "s/@IF@/$ifc/g" -e "s|@RUN@|$RUN|g" -e "s/@GID@/$USER_GID/g" -e "s/@MODE@/$band_b/" -e "s/@CHAN@/$chan_b/" -e "s/@VHT@/$vht/" \
+            "$LIB/conf/hostapd-$f.conf" | awk -v c="$country" '/^@COUNTRY@$/ { if (c == 1) { print "country_code=BE"; print "ieee80211d=1" } next } { print }' > "$RUN/hostapd-$f.conf"
+        hostapd -P "$RUN/hostapd-$f.pid" "$RUN/hostapd-$f.conf" > "$RUN/hostapd-$f.log" 2>&1 &
+    done
+
+    dnsmasq --keep-in-foreground --conf-file="$LIB/conf/dnsmasq.conf" --dhcp-leasefile="$RUN/leases/dnsmasq.leases" \
+        --pid-file="$RUN/dnsmasq.pid" > "$RUN/dnsmasq.log" 2>&1 &
+    # The portal runs as the USER (it writes the switch file the user owns: as root it would follow a symlink to anywhere)
+    setpriv --reuid="$USER_UID" --regid="$USER_GID" --clear-groups -- python3 -I "$LIB/portal.py" "$RUN/portal" 10.77.0.1 8080 \
+        > "$RUN/portal.log" 2>&1 &
+
+    # NetworkManager's Wi-Fi backend on the private bus, then NetworkManager itself, managing the CLIENT radio only.
+    wpa_supplicant -u > "$RUN/wpa-nm.log" 2>&1 &
+    sed -e "s/@CLIENT@/$CLIENT/g" -e "s|@RUN@|$RUN|g" "$LIB/conf/nm.conf" > "$RUN/nm.conf"
+    NetworkManager --no-daemon --config="$RUN/nm.conf" --config-dir="$RUN/nm-conf.d" \
+        --system-config-dir="$RUN/nm-sys-conf.d" --intern-config="$RUN/nm-lib/intern.conf" \
+        --state-file="$RUN/nm-lib/NetworkManager.state" --pid-file="$RUN/nm-run/NetworkManager.pid" \
+        > "$RUN/nm.log" 2>&1 &
+
+    # The "phone": a station on its own radio that a hotspot test asks to join (wpa_cli -p $RUN/wpa-phone).
+    sed -e "s|@RUN@|$RUN|g" -e "s/@GID@/$USER_GID/" "$LIB/conf/phone.conf" > "$RUN/phone.conf"
+    wpa_supplicant -i "$PHONE" -c "$RUN/phone.conf" > "$RUN/wpa-phone.log" 2>&1 &
+
+    # What only this netns can see, for the user's processes (they run in another one): the counters, the stations, the link.
+    (
+        while :; do
+            for pair in "/proc/net/wireless:wireless" "/proc/net/dev:net_dev"; do cp "${pair%%:*}" "$RUN/pub/${pair##*:}.tmp" 2> /dev/null && mv -f "$RUN/pub/${pair##*:}.tmp" "$RUN/pub/${pair##*:}"; done
+            iw dev "$CLIENT" station dump > "$RUN/pub/iw_station.tmp" 2>&1 && mv -f "$RUN/pub/iw_station.tmp" "$RUN/pub/iw_station.txt"
+            iw dev "$CLIENT" link > "$RUN/pub/iw_link.tmp" 2>&1 && mv -f "$RUN/pub/iw_link.tmp" "$RUN/pub/iw_link.txt"
+            iw reg get > "$RUN/pub/iw_reg.tmp" 2>&1 && mv -f "$RUN/pub/iw_reg.tmp" "$RUN/pub/iw_reg.txt"
+            sleep 0.5
+        done
+    ) &
+
+    # ready = every part answers
+    wait_for "the access points" 100 bash -c "iw dev $AP_A info | grep -q 'type AP' && iw dev $AP_B info | grep -q 'type AP'" || exit 1
+    wait_for "NetworkManager on the private bus" 200 busctl --address="$DBUS_SYSTEM_BUS_ADDRESS" status org.freedesktop.NetworkManager || exit 1
+    wait_for "NetworkManager to know the client radio" 200 busctl --address="$DBUS_SYSTEM_BUS_ADDRESS" call org.freedesktop.NetworkManager \
+        /org/freedesktop/NetworkManager org.freedesktop.NetworkManager GetDeviceByIpIface s "$CLIENT" || exit 1
+    wait_for "the portal" 50 python3 -I -c "import urllib.request as u; u.urlopen('http://10.77.0.1:8080/nm-check.txt', timeout=2)" || exit 1
+    date +%s > "$RUN/ready"
+    log "ready: bus $RUN/bus, client $CLIENT, gateway 10.77.0.1 (the host reaches it through $HOST_IF)"
+    [ -z "$notify_socket" ] || NOTIFY_SOCKET=$notify_socket systemd-notify --ready 2> /dev/null || true
+    wait -n || true
+    log "a rig process ended; the unit stops"
+    exit 1
+}
+
+cleanup() {
+    set +e
+    [ "$RUN" = /run/lares-rig ] || exit 1
+    local ours=0
+    [ -e "$RUN/hwsim-ours" ] && ours=1
+    local before
+    before=$(cat "$RUN/reg-before" 2> /dev/null)
+    rm -f "$RUN/ready"
+    ip netns delete "$NS" 2> /dev/null
+    ip link delete "$HOST_IF" 2> /dev/null
+    if [ "$ours" = 1 ]; then
+        for _ in 1 2 3 4 5; do modprobe -r mac80211_hwsim 2> /dev/null && break; sleep 0.5; done
+        grep -q '^mac80211_hwsim ' /proc/modules && log "mac80211_hwsim would not unload"
+    fi
+    # put the domain back -- as a country only: an intersection the kernel reported ("98", "99") is no code `iw reg set` takes, so
+    # anything but two letters goes back as the world, 00 (the second real run left "98"; the self-managed AX210 never reads it)
+    case "$before" in [A-Z][A-Z]|00) ;; *) before=00 ;; esac
+    iw reg set "$before" 2> /dev/null
+    rm -rf "$RUN"
+    return 0
+}
+
+status() {
+    [ -e "/run/netns/$NS" ] && echo "netns: up" || echo "netns: down"
+    if [ -e "$RUN/ready" ]; then echo "ready since $(date -d "@$(cat "$RUN/ready")")"; else echo "not ready"; fi
+    [ ! -e "$RUN/roles" ] || cat "$RUN/roles"
+    return 0
+}
+
+case "${1:-}" in
+    prepare) prepare ;;
+    run) run ;;
+    inner) inner ;;
+    cleanup) cleanup ;;
+    status) status ;;
+    *) echo "usage: rig prepare|run|inner|cleanup|status" >&2; exit 2 ;;
+esac

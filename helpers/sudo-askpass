@@ -1,0 +1,11 @@
+#!/bin/sh
+# yay's sudo for the system update run: update-run.sh passes this file as
+# `yay --sudo`, so EVERY sudo call yay makes asks SUDO_ASKPASS (the auth
+# toast) and never the run's PTY.
+#
+# `--sudoflags -A` is not enough. yay 13 applies --sudoflags to the calls it
+# makes for pacman, but --sudoloop's own `sudo -v` runs with NO flags
+# (the process tree holds a bare `sudo -v`, the transcript ends in "[sudo]
+# password for user:", and the run waits on a terminal nobody can type
+# into). yay's sudo binary is used for that call too, so the -A goes here.
+exec sudo -A "$@"

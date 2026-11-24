@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# cast_ffmpeg_shim -- installed by lares-cast as `ffmpeg` at the head of fluxcast's PATH, for two things (both off unless the tool asks):
+#   LARES_CAST_PROGRESS=<fifo>  the SENDER (the run with an rtp_mpegts output) says what it does there, twice a second (`-progress`): the cast's figures
+#   LARES_CAST_DROP=1           every `-thread_queue_size <n>` pair is dropped: fluxcast <= 0.3.0 passes it where ffmpeg n9.1 refuses it ("cannot be
+#                               applied to input url pipe:0"; docs/agent_added_files_and_folders/panorama/CAST.md, break 1)
+# Then it execs the REAL ffmpeg, found in PATH after this script's own directory (never a hard-coded /usr/bin).
+self_dir=$(cd "$(dirname "$0")" && pwd)
+real=""
+IFS=: read -r -a dirs <<< "$PATH"
+for d in "${dirs[@]}"; do
+    [ -n "$d" ] || continue
+    d=$(cd "$d" 2>/dev/null && pwd) || continue
+    [ "$d" = "$self_dir" ] && continue
+    if [ -x "$d/ffmpeg" ]; then real="$d/ffmpeg"; break; fi
+done
+[ -n "$real" ] || { echo "cast_ffmpeg_shim: no real ffmpeg in PATH" >&2; exit 127; }
+args=()
+# a fifo somebody reads: the tool holds both ends open, so this never waits for a reader
+case " $* " in *" rtp_mpegts "*) [ -p "${LARES_CAST_PROGRESS:-}" ] && args=(-progress "$LARES_CAST_PROGRESS") ;; esac
+while [ $# -gt 0 ]; do
+    if [ "${LARES_CAST_DROP:-0}" = 1 ] && [ "$1" = "-thread_queue_size" ]; then shift; [ $# -gt 0 ] && shift; continue; fi
+    args+=("$1"); shift
+done
+exec "$real" "${args[@]}"

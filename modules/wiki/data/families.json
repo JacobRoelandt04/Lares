@@ -1,0 +1,541 @@
+{
+  "v": 1,
+  "hitsAsOf": "2026-09-30",
+  "source": "2026-09-30. The 64 articletopic values are the list on mediawiki.org Help:CirrusSearch/articletopic; every one was queried live on en.wikipedia.org (list=search, hastemplate:\"Good article\" and \"Featured article\", one request each, UA lares-wiki/0.1 (https://github.com/JacobRoelandt04/Lares)) and none returned the 'Unrecognized value' warning. Family hits are the union counts (articletopic:a|b|c), not sums. Glyphs verified against the installed font's cmap.",
+  "font": {
+    "family": "Symbols Nerd Font",
+    "file": "/usr/share/fonts/TTF/SymbolsNerdFont-Regular.ttf"
+  },
+  "query": {
+    "good": "hastemplate:\"Good article\"",
+    "featured": "hastemplate:\"Featured article\"",
+    "topic": "articletopic:{topics}",
+    "topicJoin": "|",
+    "exclude": "-articletopic:{topics}",
+    "maxClauseChars": 300,
+    "note": "one query per quality; topic values OR with | (articletopic:a|b|c), two articletopic keywords AND, negation with a leading -; the request may hold at most 300 chars beside articletopic and hastemplate. Every request carries the identified User-Agent 'lares-wiki/0.1 (https://github.com/JacobRoelandt04/Lares)' (the form with '(+github.com/...)' is treated as unidentified: 10 req/min and 429s); on a 429 wait for Retry-After."
+  },
+  "doc": {
+    "hits": "Good + Featured article totalhits of the family's topics OR-ed (a union, not a sum), on hitsAsOf; sanity figures, not a contract.",
+    "discoverExclude": "articletopic values appended as negations (-articletopic:v) to every Discover query so computing and software never enter through another family; verified to work.",
+    "glyph": "hex codepoint in the font above; hue is a Theme token name."
+  },
+  "discover": [
+    {
+      "id": "history",
+      "label": "History",
+      "glyph": "f1da",
+      "hue": "mdOrange",
+      "topics": [
+        "history",
+        "military-and-warfare"
+      ],
+      "hits": {
+        "ga": 6659,
+        "fa": 1485
+      }
+    },
+    {
+      "id": "geography",
+      "label": "Geography",
+      "glyph": "f0ac",
+      "hue": "mdTeal",
+      "topics": [
+        "geographical"
+      ],
+      "hits": {
+        "ga": 22119,
+        "fa": 3634
+      },
+      "note": "geographical is places; the 22 region topics are an ORTHOGONAL lens (an article about a battle in Europe carries europe), so geographical is weighted to half of the family's picks",
+      "lenses": [
+        "africa",
+        "central-africa",
+        "eastern-africa",
+        "northern-africa",
+        "southern-africa",
+        "western-africa",
+        "central-america",
+        "north-america",
+        "south-america",
+        "asia",
+        "central-asia",
+        "east-asia",
+        "north-asia",
+        "south-asia",
+        "southeast-asia",
+        "west-asia",
+        "europe",
+        "eastern-europe",
+        "northern-europe",
+        "southern-europe",
+        "western-europe",
+        "oceania"
+      ],
+      "lensNote": "Region topics are an orthogonal lens (a battle in Europe carries europe), never a family member: the planner queries articletopic:geographical AND one random lens for variety. Verified 2026-09-30: geographical+europe GA|FA = 174."
+    },
+    {
+      "id": "people",
+      "label": "People",
+      "glyph": "f007",
+      "hue": "mdPink",
+      "topics": [
+        "biography",
+        "women"
+      ],
+      "hits": {
+        "ga": 9878,
+        "fa": 1540
+      }
+    },
+    {
+      "id": "visual-arts",
+      "label": "Visual arts & architecture",
+      "glyph": "f1fc",
+      "hue": "mdPurple",
+      "topics": [
+        "visual-arts",
+        "architecture"
+      ],
+      "hits": {
+        "ga": 2751,
+        "fa": 373
+      }
+    },
+    {
+      "id": "performing-arts",
+      "label": "Music & performing arts",
+      "glyph": "f001",
+      "hue": "mdRed",
+      "topics": [
+        "music",
+        "performing-arts",
+        "films",
+        "television",
+        "radio"
+      ],
+      "hits": {
+        "ga": 11056,
+        "fa": 1057
+      },
+      "note": "films, television and radio ride here as the recorded performing arts"
+    },
+    {
+      "id": "literature",
+      "label": "Literature & language",
+      "glyph": "f02d",
+      "hue": "mdYellow",
+      "topics": [
+        "literature",
+        "books",
+        "linguistics",
+        "libraries-and-information"
+      ],
+      "hits": {
+        "ga": 2404,
+        "fa": 336
+      },
+      "note": "libraries-and-information has 11 GA and 0 FA; it is here for coverage only"
+    },
+    {
+      "id": "philosophy",
+      "label": "Philosophy & religion",
+      "glyph": "eee9",
+      "hue": "mdBlue",
+      "topics": [
+        "philosophy-and-religion"
+      ],
+      "hits": {
+        "ga": 1101,
+        "fa": 192
+      }
+    },
+    {
+      "id": "society",
+      "label": "Society, politics & economics",
+      "glyph": "f24e",
+      "hue": "mdOrange",
+      "topics": [
+        "politics-and-government",
+        "society",
+        "education",
+        "business-and-economics"
+      ],
+      "hits": {
+        "ga": 2418,
+        "fa": 366
+      },
+      "note": "business-and-economics (290 GA+FA) and education (280) fell under the 300 floor and merged in"
+    },
+    {
+      "id": "physical-sciences",
+      "label": "Physical sciences, maths & space",
+      "glyph": "ee99",
+      "hue": "mdPurple",
+      "topics": [
+        "physics",
+        "chemistry",
+        "space",
+        "mathematics"
+      ],
+      "hits": {
+        "ga": 6142,
+        "fa": 1468
+      },
+      "note": "stem is the STEM catch-all parent (6140 GA: hurricanes, mushrooms, jets) -- kept for coverage at half weight; mathematics (196 GA+FA) fell under the 300 floor and merged in"
+    },
+    {
+      "id": "life-sciences",
+      "label": "Life sciences & medicine",
+      "glyph": "ed7d",
+      "hue": "mdGreen",
+      "topics": [
+        "biology",
+        "medicine-and-health"
+      ],
+      "hits": {
+        "ga": 2562,
+        "fa": 784
+      }
+    },
+    {
+      "id": "earth",
+      "label": "Earth & environment",
+      "glyph": "f06c",
+      "hue": "mdTeal",
+      "topics": [
+        "earth-and-environment"
+      ],
+      "hits": {
+        "ga": 1783,
+        "fa": 358
+      }
+    },
+    {
+      "id": "technology",
+      "label": "Technology & engineering",
+      "glyph": "f013",
+      "hue": "mdBlue",
+      "topics": [
+        "technology",
+        "engineering",
+        "transportation"
+      ],
+      "hits": {
+        "ga": 4031,
+        "fa": 583
+      }
+    },
+    {
+      "id": "everyday",
+      "label": "Everyday life",
+      "glyph": "f0f4",
+      "hue": "mdYellow",
+      "topics": [
+        "food-and-drink",
+        "sports",
+        "fashion",
+        "video-games",
+        "comics-and-anime",
+        "entertainment"
+      ],
+      "hits": {
+        "ga": 20922,
+        "fa": 2252
+      },
+      "note": "media is the Media catch-all parent (15055 GA: songs, episodes, wrestlers), kept for coverage at half weight; internet-culture is in practice the video-game tag (2753 of its 2836 GA+FA also carry video-games; the other 83 are genuine internet articles), so it rides here at quarter weight and must NOT be negated from Discover"
+    }
+  ],
+  "discoverExclude": [
+    "computing",
+    "software"
+  ],
+  "guest": {
+    "id": "computing",
+    "label": "Computing",
+    "glyph": "f2db",
+    "hue": "mdGray",
+    "topics": [
+      "computing"
+    ],
+    "bClassFallback": true,
+    "tiers": [
+      "intersection",
+      "phrase",
+      "bClass"
+    ],
+    "partners": [
+      {
+        "topic": "history",
+        "ga": 1,
+        "fa": 0
+      },
+      {
+        "topic": "biography",
+        "ga": 6,
+        "fa": 0
+      },
+      {
+        "topic": "women",
+        "ga": 1,
+        "fa": 0
+      },
+      {
+        "topic": "mathematics",
+        "ga": 8,
+        "fa": 1
+      },
+      {
+        "topic": "visual-arts",
+        "ga": 0,
+        "fa": 0
+      },
+      {
+        "topic": "video-games",
+        "ga": 7,
+        "fa": 0
+      },
+      {
+        "topic": "europe",
+        "ga": 2,
+        "fa": 0
+      },
+      {
+        "topic": "northern-europe",
+        "ga": 3,
+        "fa": 0
+      },
+      {
+        "topic": "eastern-europe",
+        "ga": 1,
+        "fa": 0
+      }
+    ],
+    "excludedPartners": [
+      {
+        "topic": "technology",
+        "ga": 68,
+        "fa": 2,
+        "why": "the near side: Windows, Rust, Debian, Mac Mini"
+      },
+      {
+        "topic": "stem",
+        "ga": 142,
+        "fa": 7,
+        "why": "near side and far side mixed, 142 GA + 7 FA (Windows XP, Rust, Debian beside Binary search, Caesar cipher); the phrase tier is the way into its far side"
+      },
+      {
+        "topic": "media",
+        "ga": 75,
+        "fa": 2,
+        "why": "largely the same articles as technology (75 GA + 2 FA)"
+      },
+      {
+        "topic": "business-and-economics",
+        "ga": 8,
+        "fa": 0,
+        "why": "Salesforce, Smartsheet, Juniper, Qapital: products"
+      },
+      {
+        "topic": "internet-culture",
+        "ga": 18,
+        "fa": 0,
+        "why": "web platforms next to a few early games"
+      },
+      {
+        "topic": "north-america",
+        "ga": 1,
+        "fa": 0,
+        "why": "Salesforce Marketing Cloud only"
+      },
+      {
+        "topic": "sports",
+        "ga": 1,
+        "fa": 0,
+        "why": "Turochamp only, which video-games already gives"
+      }
+    ],
+    "allow": [
+      "history of computing",
+      "computer pioneer",
+      "computer scientist",
+      "mainframe",
+      "stored-program",
+      "algorithm",
+      "data structure",
+      "computational complexity",
+      "cipher",
+      "Turing",
+      "supercomputer",
+      "computer architecture",
+      "home computer",
+      "computer graphics",
+      "human–computer interaction",
+      "video game",
+      "computer game"
+    ],
+    "deny": [
+      "linux",
+      "operating system",
+      "software",
+      "internet",
+      "data science",
+      "machine learning",
+      "artificial intelligence",
+      "programming language",
+      "web browser",
+      "open source",
+      "open-source",
+      "data breach",
+      "malware",
+      "botnet"
+    ],
+    "denyScope": "case-insensitive substring of the title plus the first sentence of the lead; a hit rejects the candidate",
+    "queries": {
+      "quality": {
+        "good": "hastemplate:\"Good article\"",
+        "featured": "hastemplate:\"Featured article\""
+      },
+      "qualityNote": "one query per quality, run separately and merged (the | inside hastemplate also ORs the two: 125 = 97 + 28 for physics, verified, but the per-quality form is the contract)",
+      "intersection": {
+        "template": "articletopic:computing articletopic:{partners} {quality}",
+        "partnerTemplate": "articletopic:computing articletopic:{partner} {quality}",
+        "exact": {
+          "good": "articletopic:computing articletopic:history|biography|women|mathematics|visual-arts|video-games|europe|northern-europe|eastern-europe hastemplate:\"Good article\"",
+          "featured": "articletopic:computing articletopic:history|biography|women|mathematics|visual-arts|video-games|europe|northern-europe|eastern-europe hastemplate:\"Featured article\""
+        },
+        "note": "an AND of two articletopic keywords, the second an OR of the partners; the far side survives it (Engelbart, Hamming, Bartik, Kilburn, Caesar cipher, X + Y sorting, the Manchester machines, the early games); a free-text keyword does not (\"history\" alone: 112 hits led by History of Microsoft and Windows 1.0)"
+      },
+      "phrase": {
+        "template": "articletopic:computing {quality} ({clause})",
+        "clauseJoin": " OR ",
+        "clauseMaxChars": 300,
+        "exact": [
+          {
+            "good": "articletopic:computing hastemplate:\"Good article\" (\"history of computing\" OR \"computer pioneer\" OR \"computer scientist\" OR \"mainframe\" OR \"stored-program\" OR \"algorithm\" OR \"data structure\" OR \"computational complexity\" OR \"cipher\" OR \"Turing\" OR \"supercomputer\" OR \"computer architecture\" OR \"home computer\" OR \"computer graphics\")",
+            "featured": "articletopic:computing hastemplate:\"Featured article\" (\"history of computing\" OR \"computer pioneer\" OR \"computer scientist\" OR \"mainframe\" OR \"stored-program\" OR \"algorithm\" OR \"data structure\" OR \"computational complexity\" OR \"cipher\" OR \"Turing\" OR \"supercomputer\" OR \"computer architecture\" OR \"home computer\" OR \"computer graphics\")"
+          },
+          {
+            "good": "articletopic:computing hastemplate:\"Good article\" (\"human–computer interaction\" OR \"video game\" OR \"computer game\")",
+            "featured": "articletopic:computing hastemplate:\"Featured article\" (\"human–computer interaction\" OR \"video game\" OR \"computer game\")"
+          }
+        ],
+        "note": "second tier, run when the intersections are exhausted: clause = the allow phrases double-quoted and joined by clauseJoin, filled greedily in list order to at most clauseMaxChars (CirrusSearch refuses more), one query per clause and quality; merge titles; the deny filter is then mandatory"
+      },
+      "bClass": {
+        "template": "articletopic:computing articletopic:{partners}",
+        "exact": "articletopic:computing articletopic:history|biography|women|mathematics|visual-arts|video-games|europe|northern-europe|eastern-europe",
+        "filter": "prop=pageassessments&palimit=max&titles=<up to 50 titles>: keep a page when any WikiProject class is exactly \"B\" (skip pages whose classes are all Start, Stub, C, List, ...)",
+        "note": "third tier, only while bClassFallback is true and both tiers above are exhausted; no hastemplate, so the search returns every quality (7706 hits, 115 of them B-only, 24 GA, 1 FA, measured 2026-09-30) -- page through with srsort=random and let pageassessments choose; the deny filter applies as everywhere"
+      }
+    },
+    "hits": {
+      "computingGa": 145,
+      "computingFa": 7,
+      "intersectionGa": 24,
+      "intersectionFa": 1,
+      "intersectionAfterDeny": 19,
+      "phraseTitles": 75,
+      "phraseAfterDeny": 54,
+      "bothTiersTitles": 79,
+      "bothTiersAfterDeny": 55,
+      "bClassAny": 7706,
+      "bClassB": 115
+    },
+    "note": "A guest, not a family: articletopic:computing is the near side (Deepen's wikipedia-cs); Discover draws only the far side -- history and pioneers, theory/algorithms/complexity, hardware history, graphics/HCI, games and culture. Held at the floor share by the planner. The pool is small (about 55 GA/FA titles after the deny filter), hence the B-class fallback."
+  },
+  "deepen": [
+    {
+      "id": "arch-installed",
+      "label": "Arch · yours",
+      "share": 0.3,
+      "glyph": "f487",
+      "hue": "mdBlue",
+      "source": "archlinux",
+      "host": "wiki.archlinux.org",
+      "note": "Arch wiki pages of packages and enabled units that are installed"
+    },
+    {
+      "id": "arch-discovery",
+      "label": "Arch · new",
+      "share": 0.3,
+      "glyph": "f14e",
+      "hue": "mdTeal",
+      "source": "archlinux",
+      "host": "wiki.archlinux.org",
+      "note": "Arch wiki pages of software that is not installed"
+    },
+    {
+      "id": "wikipedia-cs",
+      "label": "Wikipedia · computing",
+      "share": 0.15,
+      "glyph": "f121",
+      "hue": "mdGray",
+      "source": "wikipedia",
+      "host": "en.wikipedia.org",
+      "topics": [
+        "computing",
+        "software"
+      ],
+      "hits": {
+        "ga": 176,
+        "fa": 10
+      },
+      "note": "the near side of computing: GA and FA under computing and software, minus what the guest may draw (the far side); a small pool (about 190 GA+FA before that subtraction). Discover never draws these topics."
+    },
+    {
+      "id": "arch-tips",
+      "label": "Arch · tips",
+      "share": 0.15,
+      "glyph": "f0eb",
+      "hue": "mdYellow",
+      "source": "archlinux",
+      "host": "wiki.archlinux.org",
+      "note": "the Tips and tricks sections of installed software's pages"
+    },
+    {
+      "id": "other-wikis",
+      "label": "Other wikis",
+      "share": 0.1,
+      "glyph": "f17c",
+      "hue": "mdPurple",
+      "sources": [
+        {
+          "id": "gentoo",
+          "label": "Gentoo Wiki",
+          "host": "wiki.gentoo.org"
+        },
+        {
+          "id": "kernel",
+          "label": "Linux kernel docs",
+          "host": "docs.kernel.org"
+        },
+        {
+          "id": "freedesktop",
+          "label": "freedesktop specifications",
+          "host": "specifications.freedesktop.org"
+        }
+      ]
+    }
+  ],
+  "marks": {
+    "generated": "f51b",
+    "edited": "f040",
+    "more": "f067",
+    "less": "f068",
+    "knew": "f00c",
+    "save": "f0c7",
+    "next": "f054",
+    "back": "f053",
+    "installed": "f487",
+    "otd": "f073"
+  },
+  "unused": {
+    "stem": "catch-all parent (hurricanes, mushrooms, jets): would label them Physical sciences",
+    "media": "catch-all parent (songs, episodes, wrestlers): its children are already families",
+    "internet-culture": "2753 of its 2836 GA+FA also carry video-games (already in Everyday life); never negated (that would drop video-games)",
+    "regions": "used only as geography lenses (geography.lenses)"
+  },
+  "discoverDeny": true,
+  "discoverDenyNote": "The guest deny list (title + first lead sentence) applies to every Discover candidate, so near-side computing cannot enter through technology or video-game adjacent topics."
+}

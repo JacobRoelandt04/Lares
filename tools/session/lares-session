@@ -1,0 +1,858 @@
+#!/usr/bin/env python3
+"""lares-session -- save the Hyprland session and bring it back (docs/session.md).
+
+    lares-session save                 take a snapshot now and keep it
+    lares-session list                 the kept snapshots, newest first
+    lares-session show [<n|id>]        what a snapshot holds and what a restore would do with each terminal
+    lares-session restore [<n|id>] [--dry] [--type-all] [--no-focus] [--json [--progress]]
+                                    start what is missing, prepare it out of sight and show it at once; --dry prints
+                                    the plan only, --type-all runs no command by itself, --progress adds a JSON line
+                                    per step before the result's
+    lares-session reveal               show every window a restore left on a hidden staging workspace (none, normally)
+    lares-session preset list|current|save|rename|delete|undelete|load ...    named pictures of the whole desktop (below)
+    lares-session forget [<n|id>|--all]
+    lares-session status               the state, the config in force, whether the bash hook is in use
+    lares-session classify [--typed '<line>' --kind file|alias|function [--alias '<value>']] -- <argv...>
+                                    the verdict for one command: run, or only type
+
+  The shell's own calls (modules/session/SessionService.qml, modules/shell/ReelActions.qml):
+    lares-session begin                a session starts: decide (none | auto | ask | ask-critical), one JSON line
+    lares-session watch                keep rolling.json current until the compositor goes (one line per write)
+    lares-session end <logout|reboot|poweroff>   the reel's last step before the session ends
+    lares-session answer <restore|discard>       the user's answer to an ask
+    lares-session refocus              the focus a restore could not give under the lock, once the session is unlocked
+
+Presets (docs/session.md "Presets"; `--json` answers one JSON object, see docs/contracts/session.md "Presets"):
+    lares-session preset list [--json]                    the saved presets, by name
+    lares-session preset current [--json]                 the desktop as it is: windows, workspaces, the face
+    lares-session preset save <name> [--over] [--json]    keep the desktop as <name> (refused when the name exists, unless --over)
+    lares-session preset rename <old> <new> [--json]      lares-session preset delete|undelete <name> [--json]
+    lares-session preset load <name> --add|--replace [--dry] [--json [--progress]]
+                                    --add keeps every open window and adds what is missing; --replace first closes every
+                                    open window the preset has no place for. A window already open is MOVED to the
+                                    preset's place instead of opened twice (both modes); --dry lists what would happen
+
+Exit status: 0 done, 1 failed, 2 usage, 3 nothing to do (no snapshot, no compositor), 4 refused (safe mode, a restore
+already runs).
+"""
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sessionlib import capture as capturelib  # noqa: E402
+from sessionlib import classify as classifylib  # noqa: E402
+from sessionlib import plan as planlib  # noqa: E402
+from sessionlib import policy  # noqa: E402
+from sessionlib import presets as presetlib  # noqa: E402
+from sessionlib import state as st  # noqa: E402
+from sessionlib.hypr import Hypr, HyprError, split_event  # noqa: E402
+from sessionlib.procs import Proc  # noqa: E402
+from sessionlib.restore import Restore, close_windows, reveal_stranded  # noqa: E402
+
+WATCH_EVENTS = {"openwindow", "closewindow", "movewindowv2", "windowtitlev2", "changefloatingmode", "fullscreen",
+                "moveintogroup", "moveoutofgroup", "togglegroup", "pin", "activespecialv2", "workspacev2",
+                "monitoraddedv2", "monitorremovedv2"}
+DEBOUNCE_S = 2.0
+TICK_S = 30.0
+RESTORING_CLEAR_S = 60.0
+
+
+def die(code, text):
+    print("lares-session: " + text, file=sys.stderr)
+    sys.exit(code)
+
+
+class Ctx:
+    def __init__(self):
+        self.paths = st.Paths()
+        self.cfg = st.load_config(self.paths)
+        self.rules = st.effective(st.load_rules(), self.cfg)
+        self.hy = Hypr()
+        self.proc = Proc(os.environ.get("LARES_SESSION_PROC", "/proc"))
+        self._desktops = None
+
+    def need_hypr(self):
+        if not self.hy.available():
+            die(3, "no Hyprland to talk to (HYPRLAND_INSTANCE_SIGNATURE)")
+
+    def take(self):
+        # The .desktop entries are read once per process: the watcher takes a picture every 30 s.
+        if self._desktops is None:
+            self._desktops = capturelib.Desktops()
+        snap = capturelib.capture(self.hy, self.proc, self.paths, self.rules, self._desktops)
+        snap["bootId"] = st.boot_id(self.proc.root)
+        return snap
+
+
+def _crash_report(paths, prev):
+    """The time of Hyprland's crash report for the previous session's compositor, if it left one."""
+    pid, started = prev.get("hyprPid"), prev.get("started") or 0
+    if not pid:
+        return None
+    try:
+        t = os.stat(os.path.join(paths.cache, "hyprland", "hyprlandCrashReport%d.txt" % pid)).st_mtime
+    except OSError:
+        return None
+    return t if t >= started - 5 else None
+
+
+# -- commands ------------------------------------------------------------------------------------------------------------
+def cmd_save(ctx, args):
+    ctx.need_hypr()
+    snap = ctx.take()
+    with st.locked(ctx.paths):
+        sid = st.freeze(ctx.paths, snap, "manual", ctx.cfg["keep"])
+    print("saved %s  %s" % (sid, st.summary(snap)))
+
+
+def cmd_end(ctx, args):
+    if not args or args[0] not in ("logout", "reboot", "poweroff"):
+        die(2, "end <logout|reboot|poweroff>")
+    ctx.need_hypr()
+    snap = ctx.take()
+    now = time.time()
+    with st.locked(ctx.paths):
+        sid = st.freeze(ctx.paths, snap, args[0], ctx.cfg["keep"])
+        state = st.load_state(ctx.paths)
+        cur = state.get("current")
+        if not cur or cur.get("sig") != ctx.hy.sig:
+            cur = {"sig": ctx.hy.sig, "bootId": st.boot_id(ctx.proc.root), "hyprPid": ctx.hy.pid(), "started": now, "restoring": None}
+        cur.update(ended=args[0], endedAt=now, endSnapshot=sid)
+        state["current"] = cur
+        st.save_state(ctx.paths, state)
+    print("ended %s %s  %s" % (args[0], sid, st.summary(snap)))
+
+
+def cmd_begin(ctx, args):
+    ctx.need_hypr()
+    if ctx.hy.safe_mode(ctx.proc.root):
+        print(json.dumps({"decision": "none", "cause": "safe mode"}))
+        return
+    now = time.time()
+    with st.locked(ctx.paths):
+        state = st.load_state(ctx.paths)
+        cur = state.get("current")
+        if cur and cur.get("sig") == ctx.hy.sig:
+            cand = state.get("candidate") or {}
+            if cand.get("decision") in ("ask", "ask-critical") and not cand.get("answered"):
+                print(json.dumps(dict(_public(cand), repeat=True)))
+            else:
+                print(json.dumps({"decision": "none", "cause": "the shell restarted in a running session"}))
+            return
+        prev, sid, snap = cur, None, None
+        if prev and not prev.get("ended"):
+            found = journal_end(prev.get("bootId"), st.boot_id(ctx.proc.root))
+            if found:
+                prev.update(ended="system", endedHow=found[0], endedAt=found[1])
+        if prev:
+            restoring = prev.get("restoring")
+            if restoring and restoring.get("preset"):
+                # A preset load is no restore of a snapshot: a crash during one is an ordinary crash (the rolling picture),
+                # never a lookup of the preset, and never "the last restore ended in a crash" (policy.py reads `restoring`).
+                restoring = None
+                prev = dict(prev, restoring=None)
+            ended_clean = prev.get("ended") in ("logout", "reboot", "poweroff")
+            if ended_clean and prev.get("endSnapshot"):
+                sid = prev["endSnapshot"]
+            elif restoring and restoring.get("snapshot"):
+                sid = restoring["snapshot"]                 # the restore that was cut short: its own snapshot, not the half of it
+            else:
+                rolling = st.read_json(ctx.paths.rolling)
+                if isinstance(rolling, dict) and rolling.get("sig") == prev.get("sig") and rolling.get("windows"):
+                    sid = st.freeze(ctx.paths, rolling, "system" if prev.get("ended") == "system" else "unclean", ctx.cfg["keep"])
+            snap = st.load_snapshot(ctx.paths, sid) if sid else None
+        try:
+            os.unlink(ctx.paths.rolling)
+        except OSError:
+            pass
+        d = policy.decide(prev, {"bootId": st.boot_id(ctx.proc.root), "time": now, "safeMode": False,
+                                 "crashReport": _crash_report(ctx.paths, prev) if prev else None},
+                          {"time": snap.get("time", 0), "windows": len(snap.get("windows", []))} if snap else None, ctx.cfg)
+        cand = {"snapshot": sid, "decision": d["decision"], "cause": d["cause"], "clean": d["clean"],
+                "summary": st.summary(snap) if snap else "", "time": snap.get("time") if snap else None,
+                "answered": d["decision"] == "none", "from": prev}
+        state["candidate"] = cand
+        state["current"] = {"sig": ctx.hy.sig, "bootId": st.boot_id(ctx.proc.root), "hyprPid": ctx.hy.pid(), "started": now,
+                            "ended": None, "restoring": None}
+        st.save_state(ctx.paths, state)
+    print(json.dumps(_public(cand)))
+
+
+def _public(cand):
+    return {k: cand.get(k) for k in ("decision", "cause", "clean", "snapshot", "summary", "time")}
+
+
+def cmd_answer(ctx, args):
+    if not args or args[0] not in ("restore", "discard"):
+        die(2, "answer <restore|discard>")
+    with st.locked(ctx.paths):
+        state = st.load_state(ctx.paths)
+        cand = state.get("candidate")
+        if cand:
+            cand["answered"] = True
+            cand["answer"] = args[0]
+            st.save_state(ctx.paths, state)
+    print("answered " + args[0])
+
+
+class _Stop(Exception):
+    pass
+
+
+def cmd_watch(ctx, args):
+    ctx.need_hypr()
+    stop = {"why": None}
+
+    def on_term(signum, frame):
+        # Raised, not flagged: Python restarts an interrupted select() by itself (PEP 475), and a flag would be read
+        # only at the next event or tick -- up to 30 s after the shell asked.
+        raise _Stop()
+
+    ev = ctx.hy.events()
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, on_term)
+    print("watching %s" % ctx.hy.sig, flush=True)
+    try:
+        _watch_loop(ctx, ev, stop)
+    except _Stop:
+        stop["why"] = "signal"
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    _mark_system_end(ctx)                                        # first: the scopes are being killed around us
+    ev.close()
+    print("stopped (%s)" % stop["why"], flush=True)
+
+
+def _watch_loop(ctx, ev, stop):
+    last_fp, dirty_at, next_tick = None, time.monotonic(), time.monotonic() + TICK_S
+    while stop["why"] is None:
+        now = time.monotonic()
+        wake = min(next_tick, dirty_at if dirty_at is not None else next_tick)
+        try:
+            lines = ev.wait(max(0.05, wake - now))
+        except HyprError:
+            lines = None
+        if lines is None:
+            stop["why"] = "gone"
+            break
+        if any(split_event(x)[0] in WATCH_EVENTS for x in lines):
+            dirty_at = time.monotonic() + DEBOUNCE_S
+        now = time.monotonic()
+        due = dirty_at is not None and now >= dirty_at
+        tick = now >= next_tick
+        if tick:
+            next_tick = now + TICK_S
+            _clear_restoring(ctx)
+        if not (due or tick):
+            continue
+        if due:
+            dirty_at = None
+        if _restoring(ctx):
+            dirty_at = time.monotonic() + DEBOUNCE_S          # a restore is filling the session: its halves are no picture
+            continue
+        try:
+            # No window may be left on a restore's hidden staging workspace (one that opened after its restore gave up):
+            # its name says where it belongs.
+            if reveal_stranded(ctx.hy):
+                print("revealed a window a restore had left staged", flush=True)
+            snap = ctx.take()
+        except HyprError:
+            continue
+        if tick and not due and not any(a["kind"] == "terminal" for a in snap["apps"]):
+            continue
+        fp = capturelib.fingerprint(snap)
+        if fp != last_fp:
+            last_fp = fp
+            st.write_json(ctx.paths.rolling, snap)
+            print("wrote %s" % st.summary(snap), flush=True)
+
+
+def _restoring(ctx):
+    cur = st.load_state(ctx.paths).get("current") or {}
+    r = cur.get("restoring")
+    return bool(r) and r.get("done") is None and cur.get("sig") == ctx.hy.sig
+
+
+def _clear_restoring(ctx):
+    """A restore that ended a minute ago did not crash anything: forget it (policy.py reads what is left)."""
+    state = st.load_state(ctx.paths)
+    cur = state.get("current") or {}
+    r = cur.get("restoring")
+    if r and r.get("done") and time.time() - r["done"] >= RESTORING_CLEAR_S:
+        with st.locked(ctx.paths):
+            state = st.load_state(ctx.paths)
+            if (state.get("current") or {}).get("restoring"):
+                state["current"]["restoring"] = None
+                st.save_state(ctx.paths, state)
+
+
+def _run_out(argv):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+# A queued job for one of these targets says which way the machine is going down.
+_END_TARGETS = {"reboot.target": "reboot", "kexec.target": "reboot", "soft-reboot.target": "reboot",
+                "poweroff.target": "poweroff", "halt.target": "poweroff"}
+
+
+def system_end_kind(run=_run_out):
+    """"reboot" | "poweroff" | "system" while the machine is going down, else None.
+
+    The system manager's own state is asked first: "stopping" from the moment a shutdown's job is queued, whoever asked
+    for it (`systemctl reboot` typed in a terminal, the MUX switch's reboot). logind's PreparingForShutdown alone misses
+    them: it is true only WHILE a delay inhibitor holds the shutdown back (VS Code's "Ensure a clean shutdown"), reads
+    false again once the job runs -- which is before the session is torn down and this watcher is told to stop -- and
+    never reads true with no delay inhibitor at all (the user's two MUX reboots of 2026-11-15 came back as crashes)."""
+    stopping = run(["systemctl", "is-system-running"]).strip() == "stopping"
+    if not stopping and run(["busctl", "get-property", "org.freedesktop.login1", "/org/freedesktop/login1",
+                             "org.freedesktop.login1.Manager", "PreparingForShutdown"]).strip() != "b true":
+        return None
+    for line in run(["systemctl", "list-jobs", "--no-legend", "--plain"]).splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in _END_TARGETS:
+            return _END_TARGETS[parts[1]]
+    return "system"
+
+
+_JOURNAL_RE = "System is (rebooting|powering down|halting)"
+
+
+def _journal_out(argv):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=4).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def journal_end(prev_boot, this_boot, run=_journal_out):
+    """(how, time) when the PREVIOUS boot's journal says the machine was shut down by logind, else None.
+
+    The watcher's own mark (`_mark_system_end`) races the shutdown: the session's scopes are killed within ~25 ms of
+    the request and its three asks run inside one (the MUX switch's reboots, a typed `poweroff`, all came back as
+    crashes). logind writes "System is rebooting." / "System is powering down." the moment a shutdown is accepted, and
+    the journal keeps it: asked at the NEXT start there is no race. A power cut or a crash leaves no such line. Fails
+    closed: no boot id, the same boot (the compositor crashed in a running system), or no answer = None."""
+    if not prev_boot or prev_boot == this_boot:
+        return None
+    out = run(["journalctl", "-b", prev_boot.replace("-", ""), "-u", "systemd-logind", "-o", "short-unix", "--no-pager",
+               "-g", _JOURNAL_RE])
+    for line in reversed(out.splitlines()):
+        m = re.match(r"(\d+(?:\.\d+)?)\s.*" + _JOURNAL_RE, line)
+        if m:
+            return ("reboot" if m.group(2) == "rebooting" else "poweroff"), float(m.group(1))
+    return None
+
+
+def _wlog(ctx, text):
+    """One line per call in watch-end.log (the last 200 kept): the race of _mark_system_end measured later."""
+    path = os.path.join(os.path.dirname(ctx.paths.rolling), "watch-end.log")
+    try:
+        try:
+            with open(path) as f:
+                lines = f.read().splitlines()[-199:]
+        except OSError:
+            lines = []
+        lines.append("%.3f %s" % (time.time(), text.replace("\n", " | ")))
+        with open(path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+    except OSError:
+        pass
+
+
+def _mark_system_end(ctx):
+    """The compositor went, or we were told to stop: was the machine shutting down?"""
+    seen = []
+
+    def run(argv):
+        try:
+            out = _run_out(argv)
+        except Exception as e:                                   # the evidence must survive whatever kills us
+            out = ""
+            seen.append("%s !%r" % (argv[0], e))
+        seen.append("%s=%r" % (" ".join(argv[:2]), out.strip()[:60]))
+        return out
+
+    how = None
+    try:
+        how = system_end_kind(run)
+    except Exception as e:
+        seen.append("raised %r" % e)
+    _wlog(ctx, "how=%s %s" % (how, " ".join(seen)))
+    if how is None:
+        return
+    with st.locked(ctx.paths):
+        state = st.load_state(ctx.paths)
+        cur = state.get("current")
+        if cur and cur.get("sig") == ctx.hy.sig and not cur.get("ended"):
+            cur.update(ended="system", endedHow=how, endedAt=time.time())
+            st.save_state(ctx.paths, state)
+
+
+def cmd_refocus(ctx, args):
+    ctx.need_hypr()
+    if ctx.hy.locked():
+        die(4, "the session is locked")
+    with st.locked(ctx.paths):
+        state = st.load_state(ctx.paths)
+        cur = state.get("current") or {}
+        addr = cur.get("refocus") if cur.get("sig") == ctx.hy.sig else None
+        if addr:
+            cur["refocus"] = None
+            st.save_state(ctx.paths, state)
+    if not addr or not any(c.get("address") == addr for c in ctx.hy.json("clients")):
+        print("nothing to focus")
+        return
+    ctx.hy.focus_window(addr)
+    print("focused " + addr)
+
+
+def cmd_reveal(ctx, args):
+    ctx.need_hypr()
+    n = reveal_stranded(ctx.hy)
+    print("revealed %d window%s" % (n, "" if n == 1 else "s"))
+
+
+def cmd_list(ctx, args):
+    snaps = st.list_snapshots(ctx.paths)
+    if not snaps:
+        print("no snapshots")
+        sys.exit(3)
+    for i, (sid, path) in enumerate(snaps, 1):
+        print("%d  %s  %s" % (i, sid, st.summary(st.read_json(path) or {})))
+
+
+def _verdict_line(ctx, app, clean=True):
+    term = app.get("terminal") or {}
+    if not term.get("shell"):
+        prog = term.get("rootArgv") or term.get("program") or []
+        return "no shell: %s" % " ".join(prog) if prog else "a shell"
+    if not term.get("job"):
+        return "at its prompt"
+    v = classifylib.classify(term["job"], ctx.rules, ctx.cfg, clean, claude=ctx.cfg["claude"])
+    if v["mode"] == "run":
+        return "RUN   %s" % v["command"]
+    return "type  %s   (%s)" % (v["command"], v["reason"])
+
+
+def cmd_show(ctx, args):
+    as_json = "--json" in args
+    args = [a for a in args if a != "--json"]
+    snap = st.load_snapshot(ctx.paths, args[0] if args else None)
+    if not snap:
+        die(3, "no such snapshot")
+    if as_json:
+        print(json.dumps(snap, indent=1, ensure_ascii=False))
+        return
+    apps = {a["id"]: a for a in snap["apps"]}
+    print("%s  %s  %s" % (snap.get("id", "?"), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(snap["time"])),
+                          st.summary(snap)))
+    if not snap.get("hook"):
+        print("  (the bash hook was not in use: commands were read from /proc alone)")
+    for w in sorted(snap["windows"], key=planlib._order):
+        a = apps[w["app"]]
+        place = "ws %s" % w["workspace"]["key"]
+        if w["floating"]:
+            place += " float %dx%d+%d+%d" % (w["size"][0], w["size"][1], w["at"][0], w["at"][1])
+        if w["group"]:
+            place += " tab %d%s of %s" % (w["group"]["index"] + 1, "*" if w["group"]["active"] else "", w["group"]["id"])
+        if w["fullscreen"]:
+            place += " fullscreen" if w["fullscreen"] == 2 else " maximized"
+        print("  %-22s %-34s %s" % (a["name"][:22], (w["title"] or "")[:34], place))
+        if a["kind"] == "terminal":
+            print("      %s   in %s" % (_verdict_line(ctx, a), a["terminal"].get("cwd")))
+        elif a.get("skip") or not a.get("launch"):
+            print("      NOT restored: %s" % (a.get("why") or "no way to start it is known"))
+        else:
+            print("      %s%s" % (" ".join(a["launch"]), "   (restores its own windows)" if a.get("selfRestore") else ""))
+
+
+def cmd_forget(ctx, args):
+    with st.locked(ctx.paths):
+        snaps = st.list_snapshots(ctx.paths)
+        if args and args[0] == "--all":
+            gone = snaps
+        elif args:
+            one = st.load_snapshot(ctx.paths, args[0])
+            gone = [(s, p) for s, p in snaps if one and s == one.get("id")]
+        else:
+            gone = snaps[:1]
+        for sid, path in gone:
+            os.unlink(path)
+            print("forgot " + sid)
+    if not gone:
+        sys.exit(3)
+
+
+def cmd_status(ctx, args):
+    state = st.load_state(ctx.paths)
+    out = {"enabled": bool(ctx.cfg.get("enabled")), "config": ctx.paths.config,
+           "configError": ctx.cfg.get("_error"),
+           "afterLogout": ctx.cfg.get("afterLogout"), "afterReboot": ctx.cfg.get("afterReboot"),
+           "afterCrash": ctx.cfg.get("afterCrash"),
+           "hook": os.path.isdir(os.path.join(ctx.paths.runtime, "tty")),
+           "safeMode": ctx.hy.safe_mode(ctx.proc.root) if ctx.hy.available() else None,
+           "snapshots": [s for s, _ in st.list_snapshots(ctx.paths)],
+           "current": state.get("current"), "candidate": _public(state["candidate"]) if state.get("candidate") else None}
+    if "--json" in args:
+        print(json.dumps(out))
+        return
+    print("session restore: %s" % ("on" if out["enabled"] else "off (config/session.jsonc \"enabled\")"))
+    if out["configError"]:
+        print("  config error: " + out["configError"])
+    print("  after a log-out: %s, after a reboot: %s, after a crash: %s" % (out["afterLogout"], out["afterReboot"], out["afterCrash"]))
+    print("  bash hook: %s" % ("in use" if out["hook"] else "not seen (no terminal has written a mark this boot)"))
+    print("  snapshots: %s" % (", ".join(out["snapshots"]) or "none"))
+    cur = out["current"] or {}
+    if cur:
+        print("  this session: since %s%s" % (time.strftime("%H:%M", time.localtime(cur.get("started", 0))),
+                                             ", a restore is in flight" if (cur.get("restoring") or {}).get("done") is None
+                                             and cur.get("restoring") else ""))
+
+
+def cmd_classify(ctx, args):
+    unclean = False
+    kind, alias, text = "file", "", None
+    rest = list(args)
+    argv = []
+    while rest:
+        a = rest.pop(0)
+        if a == "--":
+            argv = rest
+            break
+        if a == "--typed":
+            text = rest.pop(0)
+        elif a == "--kind":
+            kind = rest.pop(0)
+        elif a == "--alias":
+            alias = rest.pop(0)
+        elif a == "--unclean":
+            unclean = True
+        else:
+            argv = [a] + rest
+            break
+    if not argv:
+        die(2, "classify [--typed '<line>' --kind <kind>] -- <argv...>")
+    job = {"tops": [{"argv": argv}], "typed": {"kind": kind, "alias": alias, "text": text} if text is not None else None,
+           "root": False, "claude": None}
+    v = classifylib.classify(job, ctx.rules, ctx.cfg, not unclean, claude=ctx.cfg["claude"])
+    print("%s\t%s\t%s" % (v["mode"], v["command"], v["reason"]))
+
+
+def _extra_env():
+    return json.loads(os.environ["LARES_SESSION_LAUNCH_ENV"]) if os.environ.get("LARES_SESSION_LAUNCH_ENV") else {}
+
+
+def cmd_restore(ctx, args):
+    dry = "--dry" in args
+    type_all = "--type-all" in args
+    no_focus = "--no-focus" in args
+    as_json = "--json" in args
+    with_progress = "--progress" in args
+    pos = [a for a in args if not a.startswith("--")]
+    ctx.need_hypr()
+    if ctx.hy.safe_mode(ctx.proc.root):
+        die(4, "Hyprland runs in safe mode: nothing is restored")
+    state = st.load_state(ctx.paths)
+    cand = state.get("candidate") or {}
+    sid = pos[0] if pos else None
+    snap = st.load_snapshot(ctx.paths, sid or cand.get("snapshot")) or (st.load_snapshot(ctx.paths) if not sid else None)
+    if not snap:
+        die(3, "no snapshot to restore")
+    clean = not type_all
+    why = "asked with --type-all"
+    if cand.get("snapshot") == snap.get("id") and cand.get("clean") is False:
+        clean, why = False, "the last session did not end cleanly"
+    if not dry:
+        reveal_stranded(ctx.hy)             # an earlier restore that was cut short
+    live = [c for c in ctx.hy.json("clients") if c.get("mapped", True)]
+    plan = planlib.build(snap, live, ctx.rules, ctx.cfg, clean, why, claude=ctx.cfg["claude"])
+    extra_env = _extra_env()
+    if dry:
+        _print_plan(plan, extra_env)
+        return
+    _execute(ctx, snap, plan, extra_env, as_json, with_progress, no_focus,
+             {"snapshot": snap.get("id"), "since": time.time(), "done": None}, answered=True)
+
+
+def _execute(ctx, snap, plan, extra_env, as_json, with_progress, no_focus, restoring, answered, pre=None):
+    """Carry a plan out. `restoring` is what current.restoring says meanwhile (the watcher pauses its pictures); `answered`
+    marks the login candidate answered (a restore of it does, a preset load does not); `pre()` runs after the state says so
+    and before anything starts, and answers the fields it adds to the result (a preset's close step)."""
+    try:
+        lock = st.locked(ctx.paths, wait=False)
+        lock.__enter__()
+    except BlockingIOError:
+        _refuse(as_json, 4, "busy", "another lares-session holds the state (a restore runs)")
+    try:
+        state = st.load_state(ctx.paths)
+        cur = state.get("current")
+        if not cur or cur.get("sig") != ctx.hy.sig:
+            cur = {"sig": ctx.hy.sig, "bootId": st.boot_id(ctx.proc.root), "hyprPid": ctx.hy.pid(), "started": time.time(), "ended": None}
+            state["current"] = cur
+        cur["restoring"] = restoring
+        if answered and state.get("candidate"):
+            state["candidate"]["answered"] = True
+        st.save_state(ctx.paths, state)
+    finally:
+        lock.__exit__(None, None, None)
+
+    t0 = time.monotonic()
+    log = (lambda kind, text: None) if as_json else (lambda kind, text: print("  %s: %s" % (kind, text), flush=True))
+    progress = (lambda d: print(json.dumps(d), flush=True)) if (as_json and with_progress) else None
+    extra = {}
+    r = Restore(ctx.hy, ctx.proc, ctx.paths, plan, log, extra_env, progress)
+    try:
+        if pre:
+            extra = pre()
+        result = r.run()
+        if not no_focus and result["restored"]:
+            r.focus(snap)
+        result["unclaimed"] = r.unclaimed()
+        # Under a session lock Hyprland gives no window the focus: it is owed, and given at the unlock (`refocus`).
+        result["refocus"] = bool(r.focused) and ctx.hy.locked()
+    except HyprError as e:
+        result = {"restored": len(r.addr), "planned": 0, "skipped": plan["skipped"], "ran": 0, "typed": 0, "waiting": [],
+                  "failed": [{"name": "restore", "why": str(e)}], "later": [], "unclaimed": 0}
+    result["ms"] = int((time.monotonic() - t0) * 1000)
+    result["snapshot"] = snap.get("id")
+    result.update(extra)
+
+    with st.locked(ctx.paths):
+        state = st.load_state(ctx.paths)
+        if (state.get("current") or {}).get("restoring"):
+            state["current"]["restoring"]["done"] = time.time()
+            state["current"]["refocus"] = r.focused if result.get("refocus") else None
+            st.save_state(ctx.paths, state)
+
+    if as_json:
+        print(json.dumps(dict(result, event="result")), flush=True)
+    else:
+        print("restored %d of %d windows in %.1f s" % (result["restored"], result["planned"], result["ms"] / 1000.0))
+        if "closed" in result:
+            print("  closed %d window%s, reused %d" % (result["closed"], "" if result["closed"] == 1 else "s", result["reused"]))
+        for k in result.get("kept") or []:
+            print("  still open (it asked first): %s %r" % (k.get("class"), (k.get("title") or "")[:40]))
+        for f in result["failed"]:
+            print("  NOT restored: %s -- %s" % (f["name"], f["why"]))
+        for f in result.get("later") or []:
+            print("  still starting: %s -- its window opens on workspace %s when it is up" % (f["name"], f["workspace"]))
+        for s in result["skipped"]:
+            print("  skipped: %s %r -- %s" % (s.get("name"), (s.get("title") or "")[:40], s["why"]))
+        for w in result["waiting"]:
+            print("  typed, waits for Enter: %s   (%s)" % (w["command"], w["why"]))
+        if result["unclaimed"]:
+            print("  %d command(s) were not taken by a shell: is tools/session/session-hook.bash sourced in ~/.bashrc?"
+                  % result["unclaimed"])
+    sys.stdout.flush()
+    # A window of a launch that gave up can still open, on its hidden staging workspace, while Hyprland's exec rule lives:
+    # a child of this command stays that long and shows it. The command itself returns now.
+    left = r.late_possible()
+    if left > 0:
+        try:
+            if os.fork() == 0:
+                try:
+                    os.setsid()
+                    devnull = os.open(os.devnull, os.O_RDWR)
+                    for fd in (0, 1, 2):
+                        os.dup2(devnull, fd)
+                    r.linger(left)
+                finally:
+                    os._exit(0)
+        except OSError:
+            pass
+    sys.exit(1 if result["failed"] else 0)
+
+
+def _refuse(as_json, code, reason, text):
+    if as_json:
+        print(json.dumps({"ok": False, "reason": reason}))
+    else:
+        print("lares-session: " + text, file=sys.stderr)
+    sys.exit(code)
+
+
+# -- presets -------------------------------------------------------------------------------------------------------------
+def _flags(args, known):
+    """(positional words, the known flags that were given); an unknown --flag is a usage error."""
+    pos, got = [], set()
+    for a in args:
+        if a.startswith("--"):
+            if a not in known:
+                die(2, "unknown option %s" % a)
+            got.add(a)
+        else:
+            pos.append(a)
+    return pos, got
+
+
+def _say(as_json, ok, text, **fields):
+    if as_json:
+        print(json.dumps(dict({"ok": ok}, **fields)))
+    else:
+        print(text, file=sys.stdout if ok else sys.stderr)
+
+
+def _stamp(t):
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "?"
+
+
+def cmd_preset(ctx, args):
+    if not args or args[0] not in PRESET_VERBS:
+        die(2, "preset <%s> ..." % "|".join(PRESET_VERBS))
+    PRESET_VERBS[args[0]](ctx, args[1:])
+
+
+def _preset_list(ctx, args):
+    pos, fl = _flags(args, {"--json"})
+    items = presetlib.listing(ctx.paths)
+    if "--json" in fl:
+        print(json.dumps({"presets": items}))
+        return
+    if not items:
+        print("no presets")
+        return
+    for p in items:
+        print("%-24s %3d windows on %d workspace%s   saved %s" % (
+            p["name"], p["windows"], p["workspaces"], "" if p["workspaces"] == 1 else "s", _stamp(p["updated"])))
+
+
+def _preset_current(ctx, args):
+    pos, fl = _flags(args, {"--json"})
+    ctx.need_hypr()
+    snap = ctx.take()
+    out = dict(presetlib.counts(snap), face=presetlib.face(snap))
+    if "--json" in fl:
+        print(json.dumps(out))
+    else:
+        print("%d windows on %d workspaces" % (out["windows"], out["workspaces"]))
+        for ws in out["face"]["workspaces"]:
+            print("  %s: %s" % (ws["name"], ", ".join(w["class"] or "?" for w in ws["windows"])))
+
+
+def _preset_edit(verb):
+    def run(ctx, args):
+        pos, fl = _flags(args, {"--json", "--over"} if verb == "save" else {"--json"})
+        want = 2 if verb == "rename" else 1
+        if len(pos) != want:
+            die(2, "preset %s %s" % (verb, "<old> <new>" if verb == "rename" else "<name>"))
+        as_json = "--json" in fl
+        try:
+            if verb == "save":
+                ctx.need_hypr()
+                snap = ctx.take()                                # before the lock: a capture is slow
+                with st.locked(ctx.paths):
+                    slug = presetlib.save(ctx.paths, pos[0], snap, over="--over" in fl)
+                _say(as_json, True, "saved %s" % pos[0].strip(), name=pos[0].strip(), slug=slug)
+                return
+            with st.locked(ctx.paths):
+                if verb == "rename":
+                    slug = presetlib.rename(ctx.paths, pos[0], pos[1])
+                else:
+                    slug = (presetlib.delete if verb == "delete" else presetlib.undelete)(ctx.paths, pos[0])
+            name = pos[1] if verb == "rename" else pos[0]
+            _say(as_json, True, "%s %s" % (verb + "d" if verb != "undelete" else "undeleted", name.strip()), name=name.strip(), slug=slug)
+        except presetlib.PresetError as e:
+            _say(as_json, False, "lares-session: preset %s: %s" % (verb, e.reason), reason=e.reason)
+            sys.exit(2 if e.reason == "name" else 4)
+    return run
+
+
+def _preset_load(ctx, args):
+    pos, fl = _flags(args, {"--add", "--replace", "--dry", "--json", "--progress", "--no-focus"})
+    if len(pos) != 1 or ("--add" in fl) == ("--replace" in fl):
+        die(2, "preset load <name> --add|--replace [--dry] [--json [--progress]]")
+    as_json, replace, dry = "--json" in fl, "--replace" in fl, "--dry" in fl
+    ctx.need_hypr()
+    if ctx.hy.safe_mode(ctx.proc.root):
+        _refuse(as_json, 4, "safe-mode", "Hyprland runs in safe mode: nothing is loaded")
+    data = presetlib.load(ctx.paths, pos[0])
+    if not data:
+        _refuse(as_json, 4, "missing", "no preset named %r" % pos[0])
+    if not data.get("windows"):
+        _refuse(as_json, 3, "empty", "the preset holds no windows")
+    if not dry:
+        reveal_stranded(ctx.hy)
+    live_snap = ctx.take()                                       # the desktop as it is: what stands for what, what would close
+    plan, reuse, closing = planlib.preset_plan(data, live_snap, [c for c in ctx.hy.json("clients") if c.get("mapped", True)],
+                                               ctx.rules, ctx.cfg, replace)
+    shown = lambda c: {"address": c["address"], "class": c.get("class"), "title": c.get("title")}  # noqa: E731
+    if dry:
+        launch = []
+        for l in plan["launches"]:
+            for wid in l["windows"]:
+                launch.append({"class": plan["windows"][wid].get("class"), "name": l.get("name")})
+        if as_json:
+            print(json.dumps({"close": [shown(c) for c in closing], "reuse": [shown(c) for c in reuse.values()],
+                              "launch": launch, "skipped": plan["skipped"]}))
+        else:
+            for c in closing:
+                print("close   %s %r" % (c.get("class"), (c.get("title") or "")[:50]))
+            for c in reuse.values():
+                print("move    %s %r" % (c.get("class"), (c.get("title") or "")[:50]))
+            for l in launch:
+                print("open    %s (%s)" % (l["name"], l["class"]))
+            for s in plan["skipped"]:
+                print("skipped: %s %r -- %s" % (s.get("name"), (s.get("title") or "")[:40], s["why"]))
+            if not (closing or reuse or launch):
+                print("nothing to do")
+        return
+
+    def close_step():
+        closed, kept = close_windows(ctx.hy, ctx.paths, [shown(c) for c in closing], int(ctx.cfg.get("closeTimeoutMs", 8000)) / 1000.0)
+        return {"reused": len(reuse), "closed": len(closed), "kept": [{"class": k["class"], "title": k["title"]} for k in kept],
+                "preset": data["preset"]["name"]}
+
+    _execute(ctx, data, plan, _extra_env(), as_json, "--progress" in fl, "--no-focus" in fl,
+             {"preset": presetlib.slug_of(data["preset"]["name"]), "since": time.time(), "done": None}, answered=False,
+             pre=close_step)
+
+
+PRESET_VERBS = {"list": _preset_list, "current": _preset_current, "save": _preset_edit("save"), "rename": _preset_edit("rename"),
+                "delete": _preset_edit("delete"), "undelete": _preset_edit("undelete"), "load": _preset_load}
+
+
+def _print_plan(plan, extra_env):
+    for l in plan["launches"]:
+        wins = [plan["windows"][w] for w in l["windows"]]
+        print("%s  [%s]  %s" % (l["name"], l["mode"], planlib.shell_command(dict(l, token="<token>"), extra_env)))
+        print("    rule: %s" % ", ".join("%s=%s" % kv for kv in l["rule"].items()))
+        for w in wins:
+            print("    window: %r on %s" % ((w["title"] or "")[:50], w["workspace"]["key"]))
+        if l.get("pending"):
+            p = l["pending"]
+            print("    %s: %s%s" % (p["mode"].upper() if p["mode"] == "run" else "type", p["command"],
+                                    "   (%s)" % p["reason"] if p.get("reason") else ""))
+    for g in plan["groups"]:
+        print("group %s: %d tabs" % (g["id"], len(g["members"])))
+    for s in plan["skipped"]:
+        print("skipped: %s %r -- %s" % (s.get("name"), (s.get("title") or "")[:40], s["why"]))
+    if not plan["launches"]:
+        print("nothing to start")
+
+
+COMMANDS = {"save": cmd_save, "end": cmd_end, "begin": cmd_begin, "answer": cmd_answer, "watch": cmd_watch,
+            "list": cmd_list, "show": cmd_show, "forget": cmd_forget, "status": cmd_status, "classify": cmd_classify,
+            "restore": cmd_restore, "refocus": cmd_refocus, "reveal": cmd_reveal, "preset": cmd_preset}
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ("-h", "--help", "help") or argv[1] not in COMMANDS:
+        print(__doc__.strip())
+        sys.exit(0 if len(argv) > 1 and argv[1] in ("-h", "--help", "help") else 2)
+    ctx = Ctx()
+    try:
+        COMMANDS[argv[1]](ctx, argv[2:])
+    except HyprError as e:
+        die(1, str(e))
+
+
+if __name__ == "__main__":
+    main(sys.argv)

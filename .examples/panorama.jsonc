@@ -1,0 +1,24 @@
+// Panorama (the displays): tunables only. The arrangements themselves are the popup's (~/.local/state/lares/panorama/setups.json).
+// Copy to ~/.config/quickshell/config/panorama.jsonc; every key is optional and read hot.
+{
+    // the "Keep these display settings?" toast's countdown, seconds (5..60)
+    "keepSeconds": 15,
+    // a pointer resting this long on a tile shows that screen's name on the screen itself, ms (0..2000)
+    "identifyDelayMs": 250,
+    "toasts": {
+        // a display never seen before says so, with Mirror / Only external / Arrange...
+        "newDisplay": true,
+        // "<display> disconnected"
+        "unplug": true
+    },
+    // the tab the popup opens on: "situation" (the displays when there is more than one or something to settle, else the presets) |
+    // "displays" | "presets" | "last"
+    "openTab": "situation",
+    // casting to a TV (Miracast) from the Displays view: a found TV appears as a chip beside the canvas. OFF until you try it
+    // (the Wi-Fi card may drop for ~8 s while pairing; docs/agent_added_files_and_folders/panorama/CAST.md)
+    "cast": false,
+    // a TV you have not set up yet: the picture's size, its frames a second (10..60), its bit rate, and whether the sound goes along
+    "castQuality": { "res": "1920x1080", "fps": 30, "bitrate": "8M", "audio": true },
+    // the port words in a display's name ("HDMI · Sony TV"): laptop, hdmi, usbc, displaylink, dvi, vga, virtual, cast, other
+    "portLabels": {}
+}

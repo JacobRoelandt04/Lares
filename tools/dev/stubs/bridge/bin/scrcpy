@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""A stand-in for scrcpy: logs its argv ($BRIDGE_STUB_LOG), prints scrcpy's startup lines and stays alive until TERM.
+`--version` answers like scrcpy 5.0.1. $BRIDGE_SCRCPY_FAIL=<text> makes it print `ERROR: <text>` and exit 1 (a missing device)."""
+import os
+import signal
+import sys
+import time
+
+a = sys.argv[1:]
+if os.environ.get("BRIDGE_STUB_LOG"):
+    with open(os.environ["BRIDGE_STUB_LOG"], "a") as f:
+        f.write("scrcpy " + " ".join(a) + "\n")
+if "--version" in a:
+    print("scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>")
+    sys.exit(0)
+if os.environ.get("BRIDGE_SCRCPY_FAIL"):
+    print("INFO: scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>", flush=True)
+    print("ERROR: " + os.environ["BRIDGE_SCRCPY_FAIL"], flush=True)
+    sys.exit(1)
+print("INFO: scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>", flush=True)
+print("INFO: Renderer: opengl", flush=True)
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+while True:
+    time.sleep(3600)

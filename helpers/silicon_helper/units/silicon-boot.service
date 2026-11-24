@@ -1,0 +1,26 @@
+# silicon: at every boot, record the firmware's power limits (before anything lowers them), then
+# apply the stored boot profile and the stored battery charge limit. Installed by install.sh.
+#
+# Ordered after asusd and asus-boot-quiet (while they exist) so that silicon's values are the
+# last word at boot. Nothing is ordered after this unit: a knob that registers late is waited
+# for (up to 30 s, inside the helper) without holding the boot.
+#
+# And after powertop.service (a unit of the user's that runs `powertop --auto-tune`, where there
+# is one): powertop 2.16 and later writes every policy's energy_performance_preference to
+# balance_performance, and intel_pstate's min_perf_pct to 50, a second or more into its run (it
+# measures before it tunes). Started beside this unit it finished AFTER it in 14 of 15 boots
+# (2026-11-10 .. 11-15) and the boot profile's EPP was gone before the login. An ordering on a
+# unit that does not exist is ignored.
+[Unit]
+Description=silicon: record the firmware's power limits and apply the boot profile
+After=sysinit.target systemd-modules-load.service asusd.service asus-boot-quiet.service powertop.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/silicon-helper boot-apply
+TimeoutStartSec=90
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

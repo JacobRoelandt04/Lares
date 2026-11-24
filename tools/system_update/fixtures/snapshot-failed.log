@@ -1,0 +1,38 @@
+Script started on 2026-11-22 16:47:39+00:00 [COMMAND="stty cols 200 rows 50; pacman -S --noconfirm figlet" <not executed on terminal>]
+[?25lresolving dependencies...
+looking for conflicting packages...
+
+Packages (1) figlet-2.2.5-6
+
+Total Download Size:   0.10 MiB
+Total Installed Size:  0.63 MiB
+
+:: Proceed with installation? [Y/n] 
+:: Retrieving packages...
+ figlet-2.2.5-6-x86_64
+[1F figlet-2.2.5-6-x86_64                                                                         0.0   B  0.00   B/s --:-- [------------------------------------------------------------------------]   0%
+ figlet-2.2.5-6-x86_64                                                                       102.7 KiB   376 KiB/s 00:00 [########################################################################] 100%
+[1E(0/1) checking keys in keyring                                                                                           [------------------------------------------------------------------------]   0%
+(1/1) checking keys in keyring                                                                                           [########################################################################] 100%
+
+(0/1) checking package integrity                                                                                         [------------------------------------------------------------------------]   0%
+(1/1) checking package integrity                                                                                         [########################################################################] 100%
+
+(0/1) loading package files                                                                                              [------------------------------------------------------------------------]   0%
+(1/1) loading package files                                                                                              [########################################################################] 100%
+
+(0/1) checking for file conflicts                                                                                        [------------------------------------------------------------------------]   0%
+(1/1) checking for file conflicts                                                                                        [########################################################################] 100%
+
+(0/1) checking available disk space                                                                                      [------------------------------------------------------------------------]   0%
+(1/1) checking available disk space                                                                                      [########################################################################] 100%
+
+:: Running pre-transaction hooks...
+(1/1) Making a system snapshot if this update asks for one...
+lares-snapshot: notice To update without a snapshot this once, make the file /etc/lares/snapshot.off as root and remove it afterwards.
+lares-snapshot: failed space 9.0 GB left, the update needs 762.1 KB and 500 GB must stay free.
+error: command failed to execute correctly
+error: failed to commit transaction (failed to run transaction hooks)
+Errors occurred, no packages were upgraded.
+[?25h
+Script done on 2026-11-22 16:47:41+00:00 [COMMAND_EXIT_CODE="1"]

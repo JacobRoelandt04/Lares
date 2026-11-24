@@ -1,0 +1,47 @@
+// System snapshots (docs/snapshots.md). Copy this file to config/snapshots.jsonc and keep only the lines you want to change.
+// The root tool reads it as plain data; a wrong value falls back to its default and is listed in `lares-snapshot status`.
+{
+  // false: no update makes a snapshot (a snapshot you ask for with `lares-snapshot create` still works).
+  "enabled": true,
+
+  "rule": {
+    // A snapshot is made before an update that installs or upgrades at least this many packages (1 to 9999).
+    "minPackages": 40,
+    // Or that touches one of these packages, by name; `*` matches any text. This list replaces the built-in one (kernels, graphics driver, glibc, systemd, pacman and so on).
+    // "critical": ["linux", "linux-lts", "nvidia*", "mesa", "glibc", "systemd", "pacman"],
+    // Packages to add to the built-in list without replacing it.
+    "criticalAlso": []
+  },
+
+  // How many of the newest snapshots stay (1 to 50). A snapshot you mark as kept stays on top of these.
+  "keep": 5,
+  // The update stops with nothing installed when a snapshot would leave less than this much free disk space, in GB (1 to 500).
+  "minFreeGB": 10,
+  // A snapshot that adds more than this many GB to the repository is stopped (1 to 500). The first snapshot is never limited this way.
+  "maxAddedGB": 15,
+  // A snapshot that takes longer than this many minutes is stopped (1 to 120). The first snapshot gets 60 minutes.
+  "maxMinutes": 15,
+  // After an update, copy what it brought in the background (when the computer is idle), so the snapshot before the next update is short.
+  "prime": true,
+
+  // More folders to leave out, written in full. Only below /var/lib, /opt, /srv, /root and /usr/local, never /var/lib/pacman, no wildcards.
+  "exclude": [],
+  // "stop": a snapshot that fails stops the update. "continue": the update goes on without it.
+  "onFail": "stop",
+
+  "offsite": {
+    // Copy the snapshots to Proton Drive as well (lares-offsite).
+    "enabled": false,
+    // The folder on Proton Drive that holds the copies (it begins with /my-files/). Every machine has a folder of its own in it, and every repository one in that.
+    "folder": "/my-files/Lares snapshots",
+    // This machine's folder; empty: the host's name.
+    "machine": "",
+    // Also copy while running on the battery.
+    "onBattery": false,
+    // Also copy on a metered connection.
+    "metered": false,
+    // A copy at most every this many hours (1 to 720), and one soon after an update that made a snapshot.
+    "everyHours": 24,
+    "afterUpdate": true
+  }
+}

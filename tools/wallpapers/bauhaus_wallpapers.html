@@ -1,0 +1,1358 @@
+<!doctype html>
+<!-- Bauhaus wallpapers: procedural wallpapers for the shell, one composition drawn in the eva theme's light and dark palettes.
+     Self-contained: open it from disk. Nothing is fetched and no canvas makes the files: the engine rasterises and encodes the PNG itself.
+     tools/wallpapers/check.js judges the engine in node. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bauhaus wallpapers</title>
+<style>
+:root { color-scheme: light; --r: 14px; --r2: 10px; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--surface); color: var(--textPrimary); font: 12px/1.45 Inter, "Noto Sans", system-ui, sans-serif; }
+.app { display: grid; grid-template-columns: 372px minmax(0, 1fr); height: 100vh; gap: 12px; padding: 12px; }
+.panel { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+h1 { font: 700 16px Audiowide, Inter, sans-serif; margin: 2px 2px 0; letter-spacing: .02em; }
+.carved { background: var(--listBox); border-radius: var(--r); box-shadow: inset 0 0 3px 0 var(--shadowDeep), 0 0 0 1px var(--bevel); }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; flex: none; }
+.tabs button { all: unset; text-align: center; padding: 6px 0; border-radius: var(--r2); cursor: pointer; color: var(--textMuted); transition: color .16s, background-color .16s; }
+.tabs button:hover { color: var(--textPrimary); }
+.tabs button.on { background: var(--accent); color: var(--surface); }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.tab { display: none; flex-direction: column; gap: 10px; }
+.tab.on { display: flex; }
+.group { font-weight: 600; color: var(--textMuted); margin: 8px 0 -4px; text-transform: none; }
+.group:first-child { margin-top: 0; }
+.row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 50px; align-items: center; gap: 8px; min-height: 24px; }
+.row label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--textMuted); font-size: 11px; }
+.row.sel { grid-template-columns: 96px minmax(0, 1fr); }
+.star { color: var(--accent); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; margin: 0; cursor: pointer; }
+input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--headerBox); box-shadow: inset 0 0 2px var(--shadowDeep); }
+input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--surface); box-shadow: 0 0 3px var(--shadowDeep), inset 0 0 1px var(--bevel); }
+input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--headerBox); box-shadow: inset 0 0 2px var(--shadowDeep); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 3px var(--shadowDeep); }
+select, input[type=text], input[type=number], textarea {
+    font: inherit; color: var(--textPrimary); background: var(--panelSunk); border: 0; border-radius: var(--r2); padding: 5px 9px; width: 100%; outline: none;
+    box-shadow: inset 0 0 3px 0 var(--shadowDeep), 0 0 0 1px var(--bevel);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { box-shadow: inset 0 0 3px 0 var(--accent), 0 0 0 1px var(--accent); }
+textarea { resize: none; height: 66px; font: 11px/1.4 "JetBrains Mono", Consolas, monospace; word-break: break-all; }
+#snippet { height: 92px; white-space: pre; overflow-x: auto; word-break: normal; }
+button.btn { all: unset; cursor: pointer; text-align: center; padding: 6px 12px; border-radius: var(--r2); background: var(--surface); color: var(--textPrimary);
+    box-shadow: 0 0 5px var(--shadowDeep), inset 0 0 1.5px var(--buttonBevel); transition: background-color .16s; }
+button.btn:hover { background: var(--bevel); }
+button.btn.lead { background: var(--accent); color: var(--surface); }
+button.btn:disabled { color: var(--textFaint); cursor: default; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btns .btn { flex: 1; }
+.gens { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.gen { all: unset; cursor: pointer; border-radius: var(--r2); overflow: hidden; background: var(--panelSunk); display: flex; flex-direction: column; box-shadow: inset 0 0 3px 0 var(--shadowDeep), 0 0 0 1px var(--bevel); }
+.gen canvas { width: 100%; aspect-ratio: 16 / 9; display: block; }
+.gen span { padding: 4px 8px 5px; color: var(--textMuted); }
+.gen.on { box-shadow: 0 0 0 2px var(--accent); }
+.gen.on span { color: var(--textPrimary); }
+.blurb { color: var(--textMuted); margin: 0; }
+.seed { display: grid; grid-template-columns: 28px minmax(0, 1fr) 28px auto; gap: 6px; align-items: center; }
+.seed .btn { padding: 5px 0; }
+.seed .wide { padding: 5px 12px; }
+.pal { display: grid; grid-template-columns: minmax(0, 1fr) 96px 96px; gap: 6px 8px; align-items: center; }
+.hex { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px; align-items: center; }
+.hex input[type=text] { padding: 4px 5px; font-size: 11px; }
+.hex input[type=color] { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+.hex input[type=color]::-moz-color-swatch { border: 0; border-radius: 6px; box-shadow: 0 0 0 1px var(--border); }
+.hex input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.hex input[type=color]::-webkit-color-swatch { border: 0; border-radius: 6px; }
+.note { color: var(--textMuted); margin: 0; }
+.stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.tools { display: flex; gap: 8px; align-items: center; flex: none; flex-wrap: wrap; min-height: 36px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; }
+.seg button { all: unset; padding: 4px 12px; border-radius: 8px; cursor: pointer; color: var(--textMuted); transition: color .16s; }
+.seg button:hover { color: var(--textPrimary); }
+.seg button.on { background: var(--accent); color: var(--surface); }
+.status { margin-left: auto; color: var(--textMuted); font-variant-numeric: tabular-nums; }
+.view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; }
+.view.full { align-items: flex-start; justify-content: flex-start; overflow: auto; }
+.frame { position: relative; line-height: 0; box-shadow: 0 0 0 1px var(--bevel); }
+.frame canvas { display: block; }
+.frame canvas + canvas { position: absolute; inset: 0; pointer-events: none; }
+.frame.split { cursor: ew-resize; }
+#tip { position: fixed; z-index: 10; max-width: 300px; padding: 8px 11px; border-radius: var(--r2); background: var(--surface); color: var(--textPrimary); pointer-events: none;
+    box-shadow: 0 0 8px var(--shadowDeep), inset 0 0 1.5px var(--buttonBevel); opacity: 0; transition: opacity .16s; line-height: 1.4; }
+#tip.on { opacity: 1; }
+@media (max-width: 860px) { .app { grid-template-columns: 1fr; height: auto; } .scroll { max-height: 60vh; } .view { min-height: 260px; } }
+</style>
+</head>
+<body>
+<main class="app">
+    <aside class="panel">
+        <h1>Bauhaus wallpapers</h1>
+        <nav class="tabs carved" id="tabs">
+            <button data-tab="wall" class="on" data-tip="Generator, seed and what shapes it.">Wallpaper</button>
+            <button data-tab="pal" data-tip="The role of every ink in light and in dark. Defaults: the eva theme.">Palette</button>
+            <button data-tab="out" data-tip="Resolution, download, and the settings that reproduce this picture.">Export</button>
+        </nav>
+        <div class="scroll carved">
+            <section class="tab on" id="tab-wall">
+                <div class="gens" id="gens"></div>
+                <p class="blurb" id="blurb"></p>
+                <div class="group">Seed</div>
+                <div class="seed" data-tip="One seed is one composition, at every resolution, in both modes.">
+                    <button class="btn" id="seedPrev" aria-label="Previous seed">&lt;</button>
+                    <input type="number" id="seed" min="1" max="999999" step="1">
+                    <button class="btn" id="seedNext" aria-label="Next seed">&gt;</button>
+                    <button class="btn lead wide" id="shuffle">Shuffle</button>
+                </div>
+                <div id="params" class="tab on"></div>
+                <div class="btns"><button class="btn" id="resetWall" data-tip="Every parameter of this generator back to its default. Seed and palette stay.">Reset</button></div>
+            </section>
+            <section class="tab" id="tab-pal">
+                <p class="note">One picture, two palettes. Light and dark share every edge; only these colours differ. Every default is a token of themes/eva.json.</p>
+                <div class="pal" id="pal"></div>
+                <div class="btns"><button class="btn" id="resetPal" data-tip="Every role back to its eva token.">Reset</button></div>
+            </section>
+            <section class="tab" id="tab-out">
+                <div class="group">Resolution</div>
+                <div class="row sel" data-tip="The output size. 2880 x 1620 is this panel. The picture follows the aspect ratio, so every 16:9 size is the same picture.">
+                    <label for="res">Size</label>
+                    <select id="res"></select>
+                </div>
+                <div class="row sel" data-tip="Any size. A size of another aspect ratio re-lays the composition on that frame.">
+                    <label>Custom</label>
+                    <div class="btns" style="flex-wrap:nowrap"><input type="number" id="resW" min="16" max="15360" step="1"><input type="number" id="resH" min="16" max="8640" step="1"></div>
+                </div>
+                <div class="group">Download</div>
+                <div class="btns">
+                    <button class="btn" id="dlLight" data-tip="The light picture as PNG at full size.">Light</button>
+                    <button class="btn" id="dlDark" data-tip="The dark picture as PNG at full size.">Dark</button>
+                    <button class="btn lead" id="dlBoth" data-tip="Both pictures. Same geometry, pixel for pixel: a theme switch only changes the colours.">Both</button>
+                </div>
+                <div class="group">Files</div>
+                <p class="note">Move them to ~/Pictures/wallpapers/, then in shell.jsonc inside "theme":</p>
+                <textarea id="snippet" readonly data-tip="The block for shell.jsonc: themectl hands these two files to hyprpaper, one per mode."></textarea>
+                <div class="group">Settings</div>
+                <textarea id="settings" spellcheck="false" data-tip="Everything that makes this picture. The page's address holds the same text, so a link reproduces it too."></textarea>
+                <div class="btns">
+                    <button class="btn" id="copySettings" data-tip="Copy the settings.">Copy</button>
+                    <button class="btn" id="applySettings" data-tip="Apply the settings in the field above.">Apply</button>
+                </div>
+            </section>
+        </div>
+    </aside>
+    <section class="stage">
+        <div class="tools">
+            <div class="seg carved" id="modes">
+                <button data-mode="light" data-tip="The light picture; the page follows.">Light</button>
+                <button data-mode="dark" data-tip="The dark picture; the page follows.">Dark</button>
+                <button data-mode="split" data-tip="Light on the left, dark on the right. Drag across the picture to move the seam: the two line up exactly.">Split</button>
+            </div>
+            <div class="seg carved" id="overlays">
+                <button data-over="shell" data-tip="A mock of the shell over the picture, sized as on the 2880 x 1620 panel at scale 1.25: three islands, slim bars, halo.">Shell</button>
+                <button data-over="popup" data-tip="A popup out of the centre island, on top of the shell mock.">Popup</button>
+                <button data-over="full" data-tip="The picture at its full size, pixel for pixel, in a scroll box. Slower: every change renders the whole frame.">1:1</button>
+            </div>
+            <span class="status" id="status"></span>
+        </div>
+        <div class="view carved" id="view">
+            <div class="frame" id="frame"><canvas id="canvas"></canvas><canvas id="overlay"></canvas></div>
+        </div>
+    </section>
+</main>
+<div id="tip" role="tooltip"></div>
+<script id="wp-core">
+"use strict";
+// =============================================================================
+// The drawing engine. Pure: no DOM, no canvas, no randomness but the seeded generator below. The same code runs in this page and in node
+// (a checker lifts this block out of the file), so a picture is defined by this text, not by a browser's canvas.
+//
+//   Geometry is in FRAME UNITS: the frame is `A = W / H` wide and 1 high, y down. A generator never sees a pixel except as the
+//   flattening tolerance, so one seed + one set of parameters is one picture at every resolution of one aspect ratio.
+//   A generator records OPS (a path, an ink ROLE, options); it never sees a colour. render() resolves the roles against a
+//   palette, so the light and the dark picture come from one and the same coverage: they cannot disagree about an edge.
+//   Coverage is exact signed area per pixel (the accumulation rasteriser of font-rs); colours composite in 8-bit sRGB
+//   values kept as floats, and a flat fill stays the exact token: a ground pixel IS #DCDFE6.
+// =============================================================================
+const WP = (() => {
+    const TAU = Math.PI * 2;
+    const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+
+    function hashStr(s) {
+        let h = 2166136261;
+        for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return h >>> 0;
+    }
+    function rngFor(seed, salt) {
+        let a = (Math.imul(seed | 0, 2654435761) ^ hashStr(salt)) | 0;
+        const next = () => {
+            a = a + 0x6D2B79F5 | 0;
+            let t = Math.imul(a ^ a >>> 15, 1 | a);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+        for (let i = 0; i < 4; i++) next();
+        const r = {
+            f: next,
+            range: (lo, hi) => lo + (hi - lo) * next(),
+            int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
+            pick: (list) => list[Math.floor(next() * list.length)],
+            chance: (p) => next() < p,
+            shuffle: (list) => {
+                const l = list.slice();
+                for (let i = l.length - 1; i > 0; i--) { const j = Math.floor(next() * (i + 1)); [l[i], l[j]] = [l[j], l[i]]; }
+                return l;
+            },
+            weighted: (pairs) => {
+                let t = 0; for (const [, w] of pairs) t += w;
+                let v = next() * t;
+                for (const [x, w] of pairs) { v -= w; if (v <= 0) return x; }
+                return pairs[pairs.length - 1][0];
+            }
+        };
+        return r;
+    }
+
+    // ---- the eva theme: themes/eva.json, both halves, the tokens a wallpaper uses ---------------------------------------------
+    const NIGHT_DEFAULT = 0.1;
+    const EVA = {
+        light: {
+            surface: "#EAEDF5", panelSunk: "#E1E4EB", listBox: "#E5E8EF", headerBox: "#DCDFE6", bevel: "#EDF0F7", border: "#CED1D7",
+            shadowDeep: "#AAADB4", textPrimary: "#5D5D5F", textMuted: "#68686B", textFaint: "#888888", accent: "#4480F4",
+            ok: "#44C145", warn: "#FF6D12", spill: "#D69A00", error: "#EC0000", errorStrong: "#F14C4C", catMultilib: "#00BEC4",
+            catFlatpak: "#C838C6", ballShadow: "#2A2C31", siliconEvaGhost: "#3B4150", buttonBevel: "#FFFFFF"
+        },
+        dark: {
+            surface: "#2C3037", panelSunk: "#21252B", listBox: "#282C34", headerBox: "#23272F", bevel: "#2F323C", border: "#181A1F",
+            shadowDeep: "#0B0C0E", textPrimary: "#B0B7C3", textMuted: "#9DA5B3", textFaint: "#676E95", accent: "#598DEF",
+            ok: "#4EC150", warn: "#FF8A4C", spill: "#E0AC2E", error: "#F14C4C", errorStrong: "#E51400", catMultilib: "#56B7C3",
+            catFlatpak: "#CF68E1", ballShadow: "#000000", siliconEvaGhost: "#232833", buttonBevel: "#3B3F49"
+        }
+    };
+
+    // A ROLE is what a generator paints with. Each names the eva token of each half.
+    const ROLES = [
+        { id: "ground", label: "Ground", light: "headerBox", dark: "panelSunk", tip: "The flat ground, 60-80 % of the picture. One step SUNK below the shell's surface so the bars stand on it: a ground equal to the surface loses the 6 px slim bars." },
+        { id: "plate", label: "Plate", light: "surface", dark: "surface", tip: "The shell's own surface: the white of an eye, a pale tile. Reads as a piece of the bar in both modes." },
+        { id: "mass", label: "Mass", light: "siliconEvaGhost", dark: "shadowDeep", tip: "The pack's near-black anchor, softened to the shell's own blue-grey in light. Darker than the ground in BOTH modes, so a mass never turns into a bright slab at night." },
+        { id: "line", label: "Line", light: "textPrimary", dark: "textMuted", tip: "Hairlines and thin strokes: the shell's text ink in each mode." },
+        { id: "orange", label: "Orange", light: "warn", dark: "warn", tip: "The pack's lead colour; the shell's warn / catCore." },
+        { id: "yellow", label: "Mustard", light: "spill", dark: "spill", tip: "The pack's second warm; the shell's spill." },
+        { id: "red", label: "Red", light: "errorStrong", dark: "error", tip: "The pack's red; the softer of the shell's two reds in each mode (#F14C4C in both)." },
+        { id: "blue", label: "Blue", light: "accent", dark: "accent", tip: "The pack's one cold colour; the shell's accent." },
+        { id: "cyan", label: "Cyan", light: "catMultilib", dark: "catMultilib", tip: "The shell's multilib cyan." },
+        { id: "green", label: "Green", light: "ok", dark: "ok", tip: "The shell's ok green." },
+        { id: "bevel", label: "Bevel", light: "bevel", dark: "bevel", tip: "Carved edges only: the light rim outside a carved shape (ShadowBox bevelColor)." },
+        { id: "shade", label: "Shade", light: "ballShadow", dark: "ballShadow", tip: "Carved edges only: the inset shadow inside a carved shape (the shell's own shadow colour)." }
+    ];
+    function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    // `night`: how far the bright inks sink toward the ground in the dark picture only. The dark shell is quiet; a full-strength disc is not.
+    const BRIGHT = ["orange", "yellow", "red", "blue", "cyan", "green"];
+    function palette(mode, overrides, night) {
+        const out = {};
+        for (const r of ROLES) {
+            const o = overrides && overrides[mode] && overrides[mode][r.id];
+            out[r.id] = hexRgb(o || EVA[mode][r[mode]]);
+        }
+        const t = mode === "dark" ? (night === undefined ? NIGHT_DEFAULT : night) : 0;
+        if (t > 0) for (const id of BRIGHT) out[id] = out[id].map((v, i) => lerp(v, out.ground[i], t));
+        return out;
+    }
+    function defaultHex(mode, role) { const r = ROLES.find(x => x.id === role); return EVA[mode][r[mode]]; }
+
+    // A COLOURWAY is the order of the inks: first the lead (12-35 % of the picture), then two minor ones.
+    const COLOURWAYS = {
+        signal: { label: "Signal", inks: ["orange", "yellow", "red"], tip: "The pack's own family: orange lead, mustard and red behind it." },
+        triad: { label: "Triad", inks: ["red", "blue", "yellow"], tip: "The Bauhaus primaries in eva's red, accent and spill." },
+        accent: { label: "Accent", inks: ["blue", "cyan", "yellow"], tip: "The shell's accent leads, cyan behind it, a touch of mustard." },
+        dusk: { label: "Dusk", inks: ["orange", "blue", "cyan"], tip: "The warm lead against the cold accent: the pack's orange on navy." },
+        moss: { label: "Moss", inks: ["green", "yellow", "cyan"], tip: "The green arches of the pack (#12, #23) in eva's ok." }
+    };
+
+    // ---- geometry: loops are flat arrays x0,y0,x1,y1,... in frame units ---------------------------------------------------------
+    class Scene {
+        constructor(A, H, mirror) { this.A = A; this.H = H; this.tol = 0.1 / H; this.mirror = !!mirror; this.ops = []; this.inks = COLOURWAYS.signal.inks; this.edge = null; }
+        // A straight edge on a pixel boundary: two shapes that meet there share it, and no ground shows through the seam.
+        snap(v) { return Math.round(v * this.H) / this.H; }
+        // ---- paths
+        steps(r, da) {
+            const c = Math.max(1e-9, 1 - this.tol / Math.max(r, this.tol * 2));
+            return Math.max(2, Math.ceil(Math.abs(da) / (2 * Math.acos(c))));
+        }
+        arc(out, cx, cy, r, a0, a1) {
+            const n = this.steps(r, a1 - a0);
+            for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+            return out;
+        }
+        circle(cx, cy, r, hole) { const o = this.arc([], cx, cy, r, 0, hole ? -TAU : TAU); o.length -= 2; return o; }
+        ring(cx, cy, ro, ri) { return [this.circle(cx, cy, ro), this.circle(cx, cy, ri, true)]; }
+        rect(x, y, w, h, hole) { return hole ? [x, y, x, y + h, x + w, y + h, x + w, y] : [x, y, x + w, y, x + w, y + h, x, y + h]; }
+        // A box with its own radius per corner: tl, tr, br, bl
+        rrect(x, y, w, h, rad) {
+            const o = [], [tl, tr, br, bl] = rad;
+            if (tl > 0) this.arc(o, x + tl, y + tl, tl, Math.PI, Math.PI * 1.5); else o.push(x, y);
+            if (tr > 0) this.arc(o, x + w - tr, y + tr, tr, -Math.PI / 2, 0); else o.push(x + w, y);
+            if (br > 0) this.arc(o, x + w - br, y + h - br, br, 0, Math.PI / 2); else o.push(x + w, y + h);
+            if (bl > 0) this.arc(o, x + bl, y + h - bl, bl, Math.PI / 2, Math.PI); else o.push(x, y + h);
+            return o;
+        }
+        // A disc's slice, closed through its centre: `dir` is the angle the slice faces
+        sector(cx, cy, r, a0, a1) { const o = [cx, cy]; this.arc(o, cx, cy, r, a0, a1); return o; }
+        half(cx, cy, r, dir) { return this.arc([], cx, cy, r, dir - Math.PI / 2, dir + Math.PI / 2); }
+        annularSector(cx, cy, ro, ri, a0, a1) { const o = this.arc([], cx, cy, ro, a0, a1); return this.arc(o, cx, cy, ri, a1, a0); }
+        // An arch: a half disc on a pair of legs running down to `base`
+        arch(cx, top, r, base) {
+            const o = [cx - r, base];
+            this.arc(o, cx, top + r, r, Math.PI, TAU);
+            o.push(cx + r, base);
+            return o;
+        }
+        reverse(l) { const o = new Array(l.length); for (let i = 0; i < l.length; i += 2) { o[l.length - 2 - i] = l[i]; o[l.length - 1 - i] = l[i + 1]; } return o; }
+        // ---- inks
+        tint(ink, t) { return { m: ink, to: "ground", t }; }
+        // ---- drawing
+        // opt: clip (loops), clipOut (loops), fade [y0, y1] (alpha 0 at y0 .. 1 at y1), grad { a, b, x0, y0, x1, y1 }, edge ("carve"|null|false), alpha
+        fill(loops, ink, opt) {
+            if (typeof loops[0] === "number") loops = [loops];
+            this.ops.push(Object.assign({ loops, ink }, opt));
+        }
+    }
+
+    // ---- the rasteriser --------------------------------------------------------------------------------------------------------
+    class Raster {
+        constructor(W, H) {
+            this.W = W; this.H = H; this.S = W + 2;
+            this.A = new Float32Array(this.S * (H + 1));
+            this.C = new Float32Array(W * H);
+            this.Cl = new Float32Array(W * H);
+            this.T = new Float32Array(W * H);
+            this.T2 = new Float32Array(Math.max(W, H) + 8);
+            this.F = new Float32Array(W * H * 3);
+        }
+        line(x0, y0, x1, y1, dir) {
+            const A = this.A, S = this.S, dxdy = (x1 - x0) / (y1 - y0);
+            let x = x0;
+            const ys = Math.floor(y0), ye = Math.ceil(y1);
+            for (let y = ys; y < ye; y++) {
+                const li = y * S;
+                const dy = Math.min(y + 1, y1) - Math.max(y, y0);
+                const xnext = x + dxdy * dy, d = dy * dir;
+                const xa = x < xnext ? x : xnext, xb = x < xnext ? xnext : x;
+                const xaf = Math.floor(xa), xai = xaf | 0, xbc = Math.ceil(xb), xbi = xbc | 0;
+                if (xbi <= xai + 1) {
+                    const xmf = 0.5 * (x + xnext) - xaf;
+                    A[li + xai] += d - d * xmf; A[li + xai + 1] += d * xmf;
+                } else {
+                    const s = 1 / (xb - xa), x0f = xa - xaf, a0 = 0.5 * s * (1 - x0f) * (1 - x0f), x1f = xb - xbc + 1, am = 0.5 * s * x1f * x1f;
+                    A[li + xai] += d * a0;
+                    if (xbi === xai + 2) A[li + xai + 1] += d * (1 - a0 - am);
+                    else {
+                        const a1 = s * (1.5 - x0f);
+                        A[li + xai + 1] += d * (a1 - a0);
+                        for (let xi = xai + 2; xi < xbi - 1; xi++) A[li + xi] += d * s;
+                        const a2 = a1 + (xbi - xai - 3) * s;
+                        A[li + xbi - 1] += d * (1 - a2 - am);
+                    }
+                    A[li + xbi] += d * am;
+                }
+                x = xnext;
+            }
+        }
+        edge(x0, y0, x1, y1) {
+            if (y0 === y1) return;
+            let dir = 1;
+            if (y0 > y1) { let t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; dir = -1; }
+            const H = this.H, W = this.W;
+            if (y1 <= 0 || y0 >= H) return;
+            if (y0 < 0) { x0 += (0 - y0) * (x1 - x0) / (y1 - y0); y0 = 0; }
+            if (y1 > H) { x1 += (H - y1) * (x1 - x0) / (y1 - y0); y1 = H; }
+            // Past a side the edge still counts: it runs down that side, so the row's sum is right inside the frame.
+            const cut = (bound) => {
+                if ((x0 < bound && x1 > bound) || (x0 > bound && x1 < bound)) return y0 + (bound - x0) * (y1 - y0) / (x1 - x0);
+                return null;
+            };
+            const parts = [[x0, y0]];
+            const yl = cut(0), yr = cut(W);
+            if (yl !== null && yr !== null) {
+                if (yl < yr) parts.push([0, yl], [W, yr]); else parts.push([W, yr], [0, yl]);
+            } else if (yl !== null) parts.push([0, yl]);
+            else if (yr !== null) parts.push([W, yr]);
+            parts.push([x1, y1]);
+            for (let i = 0; i + 1 < parts.length; i++) {
+                const a = parts[i], b = parts[i + 1];
+                if (a[1] === b[1]) continue;
+                this.line(clamp(a[0], 0, W), a[1], clamp(b[0], 0, W), b[1], dir);
+            }
+        }
+        // Coverage of the loops into `dst` (W x H, 0..1). Returns the bounding box, or null when nothing lands in the frame.
+        cover(loops, kx, k, mirror, A, dst) {
+            const W = this.W, H = this.H;
+            let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+            for (const l of loops) {
+                const n = l.length;
+                if (n < 6) continue;
+                let px = mirror ? (A - l[n - 2]) * kx : l[n - 2] * kx, py = l[n - 1] * k;
+                for (let i = 0; i < n; i += 2) {
+                    const x = mirror ? (A - l[i]) * kx : l[i] * kx, y = l[i + 1] * k;
+                    this.edge(px, py, x, y);
+                    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
+                    px = x; py = y;
+                }
+            }
+            const x0 = clamp(Math.floor(bx0) - 1, 0, W), x1 = clamp(Math.ceil(bx1) + 2, 0, W + 1);
+            const y0 = clamp(Math.floor(by0) - 1, 0, H), y1 = clamp(Math.ceil(by1) + 1, 0, H);
+            if (!(x1 > x0) || !(y1 > y0)) return null;
+            const Ac = this.A, S = this.S, Cx = Math.min(x1, W);
+            for (let y = y0; y < y1; y++) {
+                let acc = 0, ai = y * S + x0, ci = y * W + x0;
+                for (let x = x0; x < Cx; x++, ai++, ci++) {
+                    acc += Ac[ai]; Ac[ai] = 0;
+                    let c = acc < 0 ? -acc : acc;
+                    // The running sum of floats leaves dust; a pixel is exactly out or exactly in.
+                    dst[ci] = c < 0.001 ? 0 : c > 0.999 ? 1 : c;
+                }
+                for (let x = Cx; x <= x1 && x < S; x++) Ac[y * S + x] = 0;
+            }
+            return { x0, y0, x1: Cx, y1 };
+        }
+        // Three box passes both ways over the box: a gaussian in everything but name.
+        blur(src, dst, box, radius) {
+            const W = this.W, r = Math.max(1, Math.round(radius)), { x0, y0, x1, y1 } = box;
+            const w = x1 - x0, h = y1 - y0, line = this.T2, nrm = 1 / (2 * r + 1);
+            if (dst !== src) for (let y = y0; y < y1; y++) dst.set(src.subarray(y * W + x0, y * W + x1), y * W + x0);
+            for (let pass = 0; pass < 3; pass++) {
+                for (let y = y0; y < y1; y++) {
+                    const o = y * W + x0;
+                    for (let i = 0; i < w; i++) line[i] = dst[o + i];
+                    let s = line[0] * (r + 1); for (let i = 1; i <= r; i++) s += line[Math.min(i, w - 1)];
+                    for (let i = 0; i < w; i++) {
+                        dst[o + i] = s * nrm;
+                        s += line[Math.min(i + r + 1, w - 1)] - line[Math.max(i - r, 0)];
+                    }
+                }
+                for (let x = 0; x < w; x++) {
+                    const o = y0 * W + x0 + x;
+                    for (let i = 0; i < h; i++) line[i] = dst[o + i * W];
+                    let s = line[0] * (r + 1); for (let i = 1; i <= r; i++) s += line[Math.min(i, h - 1)];
+                    for (let i = 0; i < h; i++) {
+                        dst[o + i * W] = s * nrm;
+                        s += line[Math.min(i + r + 1, h - 1)] - line[Math.max(i - r, 0)];
+                    }
+                }
+            }
+        }
+        mixInto(i3, c, a) { const F = this.F; F[i3] += (c[0] - F[i3]) * a; F[i3 + 1] += (c[1] - F[i3 + 1]) * a; F[i3 + 2] += (c[2] - F[i3 + 2]) * a; }
+    }
+
+    function resolveInk(ink, pal) {
+        if (typeof ink === "string") return pal[ink];
+        if (Array.isArray(ink)) return ink;
+        const a = resolveInk(ink.m, pal), b = resolveInk(ink.to, pal), t = ink.t;
+        return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+    }
+
+    // One scene into the raster's float buffer, against one palette.
+    function paint(ra, scene, pal) {
+        const W = ra.W, H = ra.H, C = ra.C, Cl = ra.Cl, T = ra.T, F = ra.F, A = scene.A, mir = scene.mirror, k = H, kx = W / A;
+        const g = pal.ground;
+        for (let i = 0, n = W * H * 3; i < n; i += 3) { F[i] = g[0]; F[i + 1] = g[1]; F[i + 2] = g[2]; }
+        for (const op of scene.ops) {
+            const b = ra.cover(op.loops, kx, k, mir, A, C);
+            if (!b) continue;
+            if (op.clip || op.clipOut) {
+                const cl = ra.cover(op.clip || op.clipOut, kx, k, mir, A, Cl);
+                const inv = !!op.clipOut;
+                for (let y = b.y0; y < b.y1; y++) for (let x = b.x0, i = y * W + x; x < b.x1; x++, i++) {
+                    let m = 0;
+                    if (cl && x >= cl.x0 && x < cl.x1 && y >= cl.y0 && y < cl.y1) m = Cl[i];
+                    C[i] *= inv ? 1 - m : m;
+                }
+                if (cl) for (let y = cl.y0; y < cl.y1; y++) Cl.fill(0, y * W + cl.x0, y * W + cl.x1);
+            }
+            const ink = op.grad ? null : resolveInk(op.ink, pal);
+            const edge = (op.edge !== undefined ? op.edge : scene.edge);
+            const depth = edge ? edge.depth * k : 0;
+            let box = b;
+            if (edge) {
+                const pad = rInset(depth) * 4 + 2;
+                box = { x0: Math.max(0, b.x0 - pad), y0: Math.max(0, b.y0 - pad), x1: Math.min(W, b.x1 + pad), y1: Math.min(H, b.y1 + pad) };
+                // the light rim outside the edge: under the fill, like ShadowBox's bevel
+                ra.blur(C, T, box, rBevel(depth));
+                const bev = pal.bevel, sb = edge.bevel * thin(depth);
+                for (let y = box.y0; y < box.y1; y++) for (let x = box.x0, i = y * W + x; x < box.x1; x++, i++) {
+                    const out = (1 - C[i]) * T[i] * 2;
+                    if (out > 0.002) ra.mixInto(i * 3, bev, Math.min(1, out) * sb);
+                }
+            }
+            const alpha = op.alpha === undefined ? 1 : op.alpha;
+            const fade = op.fade;
+            for (let y = b.y0; y < b.y1; y++) {
+                let a0 = alpha;
+                if (fade) a0 *= smooth(((y + 0.5) / k - fade[0]) / (fade[1] - fade[0]));
+                if (a0 <= 0) continue;
+                for (let x = b.x0, i = y * W + x; x < b.x1; x++, i++) {
+                    const c = C[i];
+                    if (c === 0) continue;
+                    const a = c * a0, i3 = i * 3;
+                    if (ink) {
+                        if (a === 1) { F[i3] = ink[0]; F[i3 + 1] = ink[1]; F[i3 + 2] = ink[2]; }
+                        else { F[i3] += (ink[0] - F[i3]) * a; F[i3 + 1] += (ink[1] - F[i3 + 1]) * a; F[i3 + 2] += (ink[2] - F[i3 + 2]) * a; }
+                    } else {
+                        const gr = op.grad, px = mir ? A - (x + 0.5) / kx : (x + 0.5) / kx, py = (y + 0.5) / k;
+                        const dx = gr.x1 - gr.x0, dy = gr.y1 - gr.y0;
+                        const t = clamp(((px - gr.x0) * dx + (py - gr.y0) * dy) / (dx * dx + dy * dy), 0, 1);
+                        const ca = pal[gr.a], cb = pal[gr.b];
+                        F[i3] += (lerp(ca[0], cb[0], t) - F[i3]) * a;
+                        F[i3 + 1] += (lerp(ca[1], cb[1], t) - F[i3 + 1]) * a;
+                        F[i3 + 2] += (lerp(ca[2], cb[2], t) - F[i3 + 2]) * a;
+                    }
+                }
+            }
+            if (edge) {
+                // the inset shadow inside the edge: same falloff idea as ShadowBox, strongest at the edge
+                for (let y = box.y0; y < box.y1; y++) for (let x = box.x0, i = y * W + x; x < box.x1; x++, i++) T[i] = 1 - C[i];
+                ra.blur(T, T, box, rInset(depth));
+                const sh = pal.shade, st = edge.shade * thin(depth);
+                for (let y = box.y0; y < box.y1; y++) for (let x = box.x0, i = y * W + x; x < box.x1; x++, i++) {
+                    const inn = C[i] * T[i] * 2;
+                    if (inn > 0.002) ra.mixInto(i * 3, sh, Math.min(1, inn) * st);
+                }
+            }
+            for (let y = box.y0; y < box.y1; y++) C.fill(0, y * W + box.x0, y * W + box.x1);
+        }
+    }
+    // A carve thinner than a pixel cannot be drawn thinner, so it is drawn fainter: thumbnails keep the picture's weight.
+    const rInset = (depth) => Math.max(1, Math.round(depth / 3.3));
+    const rBevel = (depth) => Math.max(1, Math.round(depth / 6));
+    const thin = (depth) => Math.min(1, (depth / 3.3) * (depth / 3.3));
+
+    // ---- generators ----------------------------------------------------------------------------------------------------------
+    const GEN = [];
+    /*GEN-START*/
+    const COMMON = [
+        { key: "colourway", label: "Colourway", group: "Colour", type: "select", val: "auto", options: [["auto", "From seed"]].concat(Object.keys(COLOURWAYS).map(k => [k, COLOURWAYS[k].label])),
+          tip: "Which eva inks lead. The pack is a ground, one near-black and one to three inks, the first far ahead of the others. Signal: orange, mustard, red. Triad: the Bauhaus primaries. Accent: the shell's blue. Dusk: orange against blue. Moss: green." },
+        { key: "night", label: "Night dim", group: "Colour", type: "range", min: 0, max: 0.4, step: 0.01, val: NIGHT_DEFAULT,
+          tip: "How far the bright inks sink toward the ground in the DARK picture only. The dark shell is quiet; eva's inks at full strength over a whole disc are not. The picture keeps the same edges." },
+        { key: "material", label: "Edges", group: "Material", type: "select", val: "carved", options: [["carved", "Carved"], ["flat", "Flat"]],
+          tip: "Carved: every shape takes the shell's ShadowBox edge, a thin inset shadow inside and a light bevel outside, so the shapes read as cut into the same plate as the bars. Flat: razor edges only, as in the pack." },
+        { key: "depth", label: "Carve depth", group: "Material", type: "range", min: 0.5, max: 3, step: 0.1, val: 1,
+          tip: "1 is the shell's own carve on this panel (3 design px at scale 1.25). Only with Carved edges." },
+        { key: "clear", label: "Top clear", group: "Shell", type: "range", min: 0.06, max: 0.3, step: 0.01, val: 0.14,
+          tip: "The band under the top edge kept empty: the bar is 3 % of the height and popups grow out of it. The pack keeps its top third free for the phone's clock; this is the same rule on a desktop." },
+        { key: "vary", label: "Seed variation", group: "Seed", type: "range", min: 0, max: 1, step: 0.05, val: 1,
+          tip: "How far a seed may move the sliders you have not touched around the value they show. 1: a new seed is a new composition. 0: every slider is exact. A slider you moved (marked *) is always exact." },
+        { key: "side", label: "Mass side", group: "Shell", type: "select", val: "auto", options: [["auto", "From seed"], ["right", "Right"], ["left", "Left"]],
+          tip: "Which side carries the weight; the other stays empty, as a counterweight to the mass. From seed lets the seed choose." }
+    ];
+    // What a seed does with the sliders. Every call draws the same count from the RNG, whatever the value, so moving one slider never reshuffles the rest of the picture.
+    // A slider the user moved is pinned: the seed leaves it exactly where it stands.
+    function varier(p, r) {
+        const v = (key) => key in p.pinned ? 0 : p.vary;
+        return {
+            n: (key, spread, lo, hi) => { const d = r.range(-spread, spread); return clamp(p[key] + v(key) * d, lo, hi); },
+            i: (key, spread, lo, hi) => { const d = r.range(-spread - 0.49, spread + 0.49); return clamp(Math.round(p[key] + v(key) * d), lo, hi); },
+            c: (key, options) => { const x = r.pick(options); return p[key] === "auto" ? x : p[key]; }
+        };
+    }
+    const ROTATIONS = { 1: [[0]], 2: [[0, 1], [1, 0]], 3: [[1, 0, 2], [2, 0, 1], [1, 2, 0], [0, 2, 1]], 4: [[2, 0, 1, 3], [1, 0, 2, 3], [3, 1, 0, 2], [2, 3, 0, 1]] };
+
+    GEN.push({
+        id: "arches", name: "Arches", from: "#1 #8 #12 #23",
+        blurb: "Nested arches standing on the floor bar, each one ink running to the ground, a sun on the lowest crown.",
+        params: [
+            { key: "families", label: "Arches", group: "Form", type: "range", min: 1, max: 4, step: 1, val: 3, tip: "How many arches stand side by side. Three makes a colonnade with an empty side; one is the pack's single monument." },
+            { key: "bands", label: "Bands", group: "Form", type: "range", min: 2, max: 7, step: 1, val: 5, tip: "Nested bands in each arch. The pack uses 4 to 7." },
+            { key: "width", label: "Width", group: "Form", type: "range", min: 0.3, max: 0.9, step: 0.01, val: 0.62, tip: "Share of the frame's width the arches take. The rest is the empty side." },
+            { key: "overlap", label: "Overlap", group: "Form", type: "range", min: 0, max: 0.9, step: 0.05, val: 0.4, tip: "How far an arch stands in front of the next, as a share of its radius. A ring of ground cuts the one behind (#22's keyline)." },
+            { key: "gap", label: "Band gap", group: "Form", type: "range", min: 0, max: 1, step: 0.05, val: 0.4, tip: "Gap as a share of a band. 0.5 is the pack's measured 2:1 (#12, #17). 0 closes the bands into a solid rainbow." },
+            { key: "hollow", label: "Hollow", group: "Form", type: "range", min: 0.5, max: 3, step: 0.1, val: 1, tip: "The empty doorway inside the innermost band, in band widths." },
+            { key: "ramp", label: "Ramp", group: "Colour", type: "range", min: 0, max: 0.85, step: 0.05, val: 0.65, tip: "How far the bands of an arch step toward the ground. The pack's arches are one hue in tonal steps." },
+            { key: "sun", label: "Sun", group: "Form", type: "range", min: 0, max: 1, step: 0.05, val: 0.75, tip: "Size of the disc on the lowest crown, as a share of that arch. 0 leaves it out." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), F = j.i("families", 1, 1, 4), n = j.i("bands", 1, 2, 7), g = j.n("gap", 0.15, 0, 1), width = j.n("width", 0.07, 0.3, 0.9);
+            const ov0 = j.n("overlap", 0.2, 0, 0.9), hollow = j.n("hollow", 0.3, 0.5, 3), sun = j.n("sun", 0.2, 0, 1), ramp = j.n("ramp", 0.1, 0, 0.85);
+            const A = s.A, ov = F > 1 ? ov0 : 0;
+            const m = (hollow + n) * (1 + g) - g;
+            // Width and room decide the radius; the band follows from it, so every width below is a multiple of one module.
+            let R = width * A / (2 * F - (F - 1) * ov);
+            R = Math.min(R, 0.27);
+            const b = R / m, u = b * (1 + g), sep = -ov * R, T = F * 2 * R + (F - 1) * sep;
+            const x0 = F === 1 ? A * 0.65 - R : A * 0.95 - T;
+            const topMost = p.clear + 0.08, lowest = Math.max(topMost, Math.min(0.56, 0.86 - R));
+            const levels = r.pick(ROTATIONS[F]);
+            const stepY = F > 1 ? (lowest - topMost) / (F - 1) : 0;
+            const inner2out = r.chance(0.35);
+            const inks = [s.inks[0], s.inks[1], "mass", s.inks[2]];
+            const rank = levels.map((l, i) => i).sort((a2, b2) => levels[a2] - levels[b2]);
+            const inkOf = {}; rank.forEach((fam, i) => { inkOf[fam] = inks[i % inks.length]; });
+            const base = 1.05, key = Math.max(b * 0.45, 0.003);
+            // The tallest stands at the back; each lower one cuts a ring of ground into what is behind it.
+            rank.forEach((f, depth) => {
+                const cx = x0 + R + f * (2 * R + sep);
+                const top = Math.round((topMost + levels[f] * stepY) / u) * u, yc = top + R;
+                if (depth) s.fill(s.arch(cx, yc - R - key, R + key, base), "ground", { edge: false });
+                for (let i = 0; i < n; i++) {
+                    const ro = R - i * u, ri = ro - b, rin = g === 0 && i < n - 1 ? ri - 2 * s.tol : ri;
+                    const t = (n > 1 ? (inner2out ? 1 - i / (n - 1) : i / (n - 1)) : 0) * ramp;
+                    s.fill([s.arch(cx, yc - ro, ro, base), s.reverse(s.arch(cx, yc - rin, rin, base))], s.tint(inkOf[f], t));
+                }
+                if (depth === F - 1 && sun > 0) {
+                    const rs = sun * R * 0.62, cy = Math.max(top - rs * 0.28, p.clear + 0.05 + rs);
+                    s.fill(s.circle(cx, cy, rs + key), "ground", { edge: false });
+                    s.fill(s.circle(cx, cy, rs), s.inks[2] === inkOf[f] ? s.inks[1] : s.inks[2]);
+                }
+            });
+        }
+    });
+
+    GEN.push({
+        id: "horizon", name: "Horizon", from: "#2 #15 #21 #27",
+        blurb: "A low sun cut by a field of lines that grow toward the floor: the pack's strongest image, and the widest.",
+        params: [
+            { key: "sun", label: "Sun", group: "Form", type: "range", min: 0.14, max: 0.46, step: 0.01, val: 0.31, tip: "Radius of the disc, in frame heights." },
+            { key: "x", label: "Sun place", group: "Form", type: "range", min: 0.3, max: 0.8, step: 0.01, val: 0.65, tip: "Across the frame. Off centre: the pack's disc sits on its axis, but a wide frame needs the empty side." },
+            { key: "horizon", label: "Horizon", group: "Form", type: "range", min: 0.42, max: 0.8, step: 0.01, val: 0.6, tip: "Where the lines begin. The mass of the whole picture stays below the middle, as in the pack (ink centroid 0.61 of the height)." },
+            { key: "lines", label: "Lines", group: "Lines", type: "range", min: 6, max: 40, step: 1, val: 20, tip: "Lines between the horizon and the floor." },
+            { key: "growth", label: "Growth", group: "Lines", type: "range", min: 1, max: 3, step: 0.05, val: 1.7, tip: "How strongly the spacing widens toward the floor: perspective, drawn in flat lines." },
+            { key: "weight", label: "Weight", group: "Lines", type: "range", min: 0.15, max: 0.7, step: 0.01, val: 0.5, tip: "A line's share of its spacing at the floor. 0.5 is the pack's 1:1 stripe." },
+            { key: "rings", label: "Sun rings", group: "Form", type: "select", val: "auto", options: [["auto", "From seed"], [1, "One disc"], [2, "Two rings"], [3, "Three rings"]], tip: "One flat disc, or concentric rings of the colourway, as in #2." },
+            { key: "waves", label: "Waves", group: "Lines", type: "select", val: "auto", options: [["auto", "From seed"], ["off", "Straight"], ["on", "Swelling"]], tip: "Lines bulge into long lenses under the sun, as in #27, or run straight." },
+            { key: "swell", label: "Swell", group: "Lines", type: "range", min: 0.2, max: 1, step: 0.05, val: 0.7, tip: "How far the waves bulge." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), rs = j.n("sun", 0.07, 0.14, 0.46), px = j.n("x", 0.09, 0.3, 0.8), y0 = j.n("horizon", 0.06, 0.42, 0.8), n = j.i("lines", 5, 6, 40);
+            const growth = j.n("growth", 0.4, 1, 3), weight = j.n("weight", 0.12, 0.15, 0.7), rings = +j.c("rings", [1, 1, 1, 2, 3]), waves = j.c("waves", ["off", "off", "on"]) === "on";
+            const A = s.A, cx = px * A, cy = Math.max(y0 - rs * 0.12, p.clear + 0.06 + rs);
+            const lines = [];
+            const seedB = [];
+            for (let k = 0; k < n; k++) seedB.push([r.range(-1, 1), r.range(0.5, 1)]);
+            for (let k = 0; k < n; k++) {
+                const a = Math.pow(k / n, growth), c = Math.pow((k + 1) / n, growth);
+                const y = y0 + (1.01 - y0) * a, sp = (1.01 - y0) * (c - a);
+                if (sp < 0.0035) continue;                                 // closer than this they read as a grey band, not as lines
+                const t = Math.min(sp * lerp(0.28, weight, (k + 1) / n), 0.0135);
+                const inDisc = Math.abs(y - cy) < rs;
+                if (waves && inDisc && k % 3 === 1 && y + t < cy + rs * 0.92) {
+                    // #27: a long thin lens on a line, gone before the line reaches the rim of the disc
+                    const hw = Math.sqrt(Math.max(0, rs * rs - (y - cy) * (y - cy)));
+                    const bx = cx + seedB[k][0] * hw * 0.4, bw = hw * 0.3, amp = p.swell * Math.min(sp * 0.42, 0.016 + 0.012 * seedB[k][1]);
+                    const top = [], bot = [], dx = Math.max(0.002, s.tol * 8);
+                    for (let x = -0.02; x <= A + 0.02; x += dx) {
+                        const d = (x - bx) / bw, e = Math.abs(d) < 1.6 ? Math.pow(Math.cos(d / 1.6 * Math.PI / 2), 2) : 0;
+                        top.push(x, y - e * amp); bot.push(x, y + t + e * amp);
+                    }
+                    lines.push(top.concat(s.reverse(bot)));
+                } else lines.push(s.rect(-0.02, y, A + 0.04, t));
+            }
+            const disc = s.circle(cx, cy, rs);
+            s.fill(lines, "mass", { clipOut: [disc], edge: false });
+            s.fill(disc, s.inks[rings > 1 ? 1 : 0]);
+            if (rings > 1) s.fill(s.circle(cx, cy, rs * (rings > 2 ? 0.72 : 0.62)), s.inks[0]);
+            if (rings > 2) s.fill(s.circle(cx, cy, rs * 0.44), s.inks[2]);
+            s.fill(lines, "ground", { clip: [disc], edge: false });
+        }
+    });
+
+    GEN.push({
+        id: "orbit", name: "Eclipse", from: "#6 #26 #28 #30",
+        blurb: "Hairline orbits round an eclipse: the pack's night pictures. The only one with a gradient, on the crescent alone, as in #30.",
+        params: [
+            { key: "size", label: "Disc", group: "Form", type: "range", min: 0.12, max: 0.36, step: 0.01, val: 0.24, tip: "Radius of the eclipse, in frame heights." },
+            { key: "x", label: "Place x", group: "Form", type: "range", min: 0.25, max: 0.8, step: 0.01, val: 0.66, tip: "Across the frame." },
+            { key: "y", label: "Place y", group: "Form", type: "range", min: 0.45, max: 0.8, step: 0.01, val: 0.62, tip: "Down the frame: 0.61 is the pack's ink centroid." },
+            { key: "bite", label: "Crescent", group: "Form", type: "range", min: 0.04, max: 0.4, step: 0.01, val: 0.14, tip: "How far the shadow is off the disc: thin as in #30, fatter toward a half moon." },
+            { key: "orbits", label: "Orbits", group: "Lines", type: "range", min: 4, max: 60, step: 1, val: 26, tip: "Hairline rings. They fade out before the clear band, so the bar stands on calm ground." },
+            { key: "spread", label: "Spread", group: "Lines", type: "range", min: 0.8, max: 2, step: 0.05, val: 1.3, tip: "How much the rings' spacing grows outward." },
+            { key: "tilt", label: "Tilt", group: "Lines", type: "range", min: 0, max: 0.8, step: 0.01, val: 0, tip: "Flattens the rings into ellipses, as in #26." },
+            { key: "planets", label: "Planets", group: "Form", type: "range", min: 0, max: 8, step: 1, val: 4, tip: "Dots on the rings, in three sizes. The pack uses 2 to 6." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), Rv = Math.min(j.n("size", 0.05, 0.12, 0.36), (0.98 - p.clear) / 2.2), px = j.n("x", 0.09, 0.25, 0.8);
+            let cy0 = j.n("y", 0.05, 0.45, 0.8);
+            const bite0 = j.n("bite", 0.05, 0.04, 0.4);
+            const orbits = j.i("orbits", 8, 4, 60), spread = j.n("spread", 0.2, 0.8, 2), planets = j.i("planets", 2, 0, 8), tilted = r.chance(0.4) ? r.range(0.3, 0.6) : 0;
+            const A = s.A, cx = px * A, hair = Math.max(0.00085, s.tol * 9);
+            cy0 = Math.max(cy0, p.clear + 0.04 + Rv); const R = Rv, cy = cy0;
+            const rot = r.range(-0.5, 0.5), squash = 1 - clamp(p.tilt + ("tilt" in p.pinned ? 0 : p.vary * tilted), 0, 0.8);
+            const ell = (a, b, hole) => {
+                const n = Math.max(32, s.steps(a, TAU)), o = new Array(n * 2), cr = Math.cos(rot), sr = Math.sin(rot);
+                for (let i = 0; i < n; i++) {
+                    const t = (hole ? -1 : 1) * TAU * i / n, ex = Math.cos(t) * a, ey = Math.sin(t) * b;
+                    o[i * 2] = cx + ex * cr - ey * sr; o[i * 2 + 1] = cy + ex * sr + ey * cr;
+                }
+                return o;
+            };
+            const rings = [], radii = [], maxR = Math.hypot(Math.max(cx, A - cx), Math.max(cy, 1 - cy)) * 1.1;
+            for (let i = 0; i < orbits; i++) {
+                const t = i / Math.max(1, orbits - 1), rr = R * 1.2 + (maxR - R * 1.2) * Math.pow(t, spread);
+                radii.push(rr);
+                rings.push(ell(rr + hair / 2, (rr + hair / 2) * squash), ell(rr - hair / 2, (rr - hair / 2) * squash, true));
+            }
+            s.fill(rings, "line", { alpha: 0.42, edge: false, fade: [p.clear + 0.03, p.clear + 0.26] });
+            const phi = r.range(-2.2, -0.9), bite = bite0 * R, dx = Math.cos(phi) * bite, dy = Math.sin(phi) * bite;
+            const lit = s.circle(cx, cy, R), shadow = s.circle(cx + dx, cy + dy, R * 0.995);
+            s.fill(lit, "mass");
+            s.fill(lit, null, { clipOut: [shadow], edge: false, grad: { a: s.inks[1], b: s.inks[0], x0: cx + R * Math.cos(phi + 2.4), y0: cy + R * Math.sin(phi + 2.4), x1: cx + R * Math.cos(phi - 2.4), y1: cy + R * Math.sin(phi - 2.4) } });
+            const sizes = [0.024, 0.014, 0.009, 0.014, 0.009, 0.02, 0.011, 0.016];
+            let placed = 0, tries = 0;
+            const seen = [];
+            while (placed < planets && tries++ < 200) {
+                const rr = r.pick(radii), a = r.range(0, TAU), ex = Math.cos(a) * rr, ey = Math.sin(a) * rr * squash;
+                const x = cx + ex * Math.cos(rot) - ey * Math.sin(rot), y = cy + ex * Math.sin(rot) + ey * Math.cos(rot);
+                if (x < 0.06 || x > A - 0.06 || y > 0.95 || y < p.clear + 0.1) continue;
+                if (Math.hypot(x - cx, y - cy) > R * 2.6 + 0.2 * placed) continue;
+                if (seen.some(q => Math.hypot(q[0] - x, q[1] - y) < 0.12)) continue;
+                seen.push([x, y]);
+                const ps = sizes[placed % sizes.length];
+                s.fill(s.circle(x, y, ps * 1.5), "ground", { edge: false });
+                s.fill(s.circle(x, y, ps), placed % 2 ? s.inks[1] : s.inks[0]);
+                placed++;
+            }
+        }
+    });
+
+    GEN.push({
+        id: "field", name: "Field", from: "#11 #16 #19 #24",
+        blurb: "One compact block of tiles ruled by position: a colour per diagonal, a shape per column. A block on the ground, never wallpaper-paper.",
+        params: [
+            { key: "cols", label: "Columns", group: "Grid", type: "range", min: 3, max: 14, step: 1, val: 9, tip: "Tiles across. The pack's blocks are 5 to 7; a wide frame carries more." },
+            { key: "rows", label: "Rows", group: "Grid", type: "range", min: 2, max: 8, step: 1, val: 5, tip: "Tiles down." },
+            { key: "cell", label: "Tile", group: "Grid", type: "range", min: 0.05, max: 0.17, step: 0.001, val: 0.116, tip: "Tile size in frame heights." },
+            { key: "gap", label: "Gap", group: "Grid", type: "range", min: 0, max: 0.2, step: 0.01, val: 0.05, tip: "Gap as a share of a tile. The pack: nothing, or a hair." },
+            { key: "vocab", label: "Tiles", group: "Grid", type: "select", val: "auto", options: [["auto", "From seed"], ["morph", "Morph"], ["halves", "Half discs"], ["discs", "Discs"]], tip: "Morph: square to disc across the columns (#16). Half discs: pairs turned by position (#11, #24). Discs: a uniform field with exceptions (#19)." },
+            { key: "rule", label: "Colour rule", group: "Colour", type: "select", val: "auto", options: [["auto", "From seed"], ["diagonal", "Diagonals"], ["rows", "Row ramp"], ["few", "Exceptions"]], tip: "Diagonals: colour = (column + row) mod inks (#16). Row ramp: one ink stepping to the ground (#24). Exceptions: one ink, a handful of others on two diagonals (#19)." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), cols = j.i("cols", 2, 3, 14), rows = j.i("rows", 1, 2, 8), cell = j.n("cell", 0.014, 0.05, 0.17), gap = j.n("gap", 0.03, 0, 0.2);
+            const vocab = j.c("vocab", ["morph", "morph", "halves", "discs"]);
+            const rule = j.c("rule", vocab === "morph" ? ["diagonal"] : vocab === "halves" ? ["rows"] : ["few"]);
+            const A = s.A;
+            const fitW = 0.82 * A / (cols + (cols - 1) * gap), fitH = (1 - p.clear - 0.1) / (rows + (rows - 1) * gap);
+            const c = Math.min(vocab === "halves" ? cell * 1.3 : cell, fitW, fitH), g = c * gap, step = c + g;
+            const bw = cols * c + (cols - 1) * g, bh = rows * c + (rows - 1) * g;
+            const x0 = Math.max(A * 0.08, Math.min(A * 0.93 - bw, A * 0.62 - bw / 2));
+            const room = 1 - p.clear;
+            const y0 = p.clear + (room - bh) * 0.58;
+            const pal = ["mass", s.inks[0], s.inks[1], s.inks[2]];
+            const shift = r.int(0, 3), flipD = r.chance(0.5);
+            const hot = new Set();
+            if (rule === "few") {
+                const d1 = r.int(1, cols - 1), d2 = d1 + r.int(2, 3) * (r.chance(0.5) ? 1 : -1);
+                for (let y = 0; y < rows; y++) { hot.add((d1 + y) + "," + y); if (y % 2) hot.add((d2 - y) + "," + y); }
+            }
+            const groups = new Map();
+            const put = (ink, loop) => { const k = JSON.stringify(ink); if (!groups.has(k)) groups.set(k, { ink, loops: [] }); groups.get(k).loops.push(loop); };
+            const inkFor = (i, y, sub) => {
+                if (rule === "diagonal") return pal[((flipD ? cols - i : i) + y + shift) % pal.length];
+                if (rule === "rows") return s.tint(s.inks[0], (y + (sub ? 0.5 : 0)) / rows * 0.8);
+                return hot.has(i + "," + y) ? s.inks[(i + y) % 3] : "mass";
+            };
+            for (let row = 0; row < rows; row++) for (let i = 0; i < cols; i++) {
+                const x = s.snap(x0 + i * step), y = s.snap(y0 + row * step), side = s.snap(x0 + i * step + c) - x, q = side / 2;
+                if (vocab === "morph") {
+                    const t = i / Math.max(1, cols - 1), k = Math.round(t * 4), rad = [0, 0, 0, 0], ord = [3, 1, 2, 0];
+                    for (let e = 0; e < k; e++) rad[ord[e]] = q;
+                    put(inkFor(i, row), s.rrect(x, y, side, side, rad));
+                } else if (vocab === "discs") {
+                    put(inkFor(i, row), s.circle(x + q, y + q, q));
+                } else {
+                    const turn = (i + row) % 2 === 0;
+                    if (turn) { put(inkFor(i, row, 0), s.half(x, y + q, q, 0)); put(inkFor(i, row, 1), s.half(x + side, y + q, q, Math.PI)); }
+                    else { put(inkFor(i, row, 0), s.half(x + q, y, q, Math.PI / 2)); put(inkFor(i, row, 1), s.half(x + q, y + side, q, -Math.PI / 2)); }
+                }
+            }
+            for (const g2 of groups.values()) s.fill(g2.loops, g2.ink);
+        }
+    });
+
+    GEN.push({
+        id: "meander", name: "Meander", from: "#8 #12 #23",
+        blurb: "One ribbon of parallel lines rising from the floor and turning back on itself; a disc rests at the centre of its bends.",
+        params: [
+            { key: "lines", label: "Lines", group: "Ribbon", type: "range", min: 2, max: 14, step: 1, val: 8, tip: "Parallel lines in the ribbon. #8 has seven." },
+            { key: "share", label: "Line share", group: "Ribbon", type: "range", min: 0.1, max: 0.85, step: 0.01, val: 0.5, tip: "Line width as a share of the line + gap pitch. Low: the pack's hairlines (#8). High: bands (#12)." },
+            { key: "ribbon", label: "Ribbon", group: "Ribbon", type: "range", min: 0.06, max: 0.3, step: 0.005, val: 0.17, tip: "Width of the whole ribbon, in frame heights." },
+            { key: "hollow", label: "Bend", group: "Ribbon", type: "range", min: 0.15, max: 1.4, step: 0.05, val: 0.55, tip: "Inner radius of a bend, as a share of the ribbon." },
+            { key: "turns", label: "Turns", group: "Ribbon", type: "range", min: 1, max: 7, step: 1, val: 5, tip: "Bends in the ribbon." },
+            { key: "ramp", label: "Ramp", group: "Colour", type: "range", min: 0, max: 0.85, step: 0.05, val: 0.5, tip: "Lines step toward the ground across the ribbon, as in #12. 0 is one flat ink." },
+            { key: "lead", label: "Ribbon ink", group: "Colour", type: "select", val: "auto", options: [["auto", "From seed"], ["mass", "Mass"], ["lead", "Lead ink"]], tip: "Mass: the near-black ribbon of #8. Lead: the first ink of the colourway, #12." },
+            { key: "dots", label: "Discs", group: "Form", type: "range", min: 0, max: 4, step: 1, val: 2, tip: "Discs at the centres of the bends. The pack keeps two." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), n = j.i("lines", 2, 2, 14), share = j.n("share", 0.16, 0.1, 0.85), hollow = j.n("hollow", 0.15, 0.15, 1.4), T = j.i("turns", 2, 1, 7);
+            const ramp = j.n("ramp", 0.15, 0, 0.85), leadKind = j.c("lead", ["lead", "lead", "mass"]);
+            const A = s.A;
+            let w = j.n("ribbon", 0.035, 0.06, 0.3);
+            const room = 0.84 * A;
+            const need = (2 * T) * (hollow * w + w / 2);
+            if (need > room) w *= room / need;
+            const pitch = w / (n - 1 + share), line = pitch * share, half = w / 2, r0 = hollow * w, Rc = r0 + half;
+            const span = 2 * T * Rc;
+            const x0 = Math.max(half + 0.02, Math.min(A * 0.94 - span - half, A * 0.62 - span / 2));
+            const topMost = p.clear + 0.05 + Rc + half, lowMost = 0.93 - Rc - half;
+            const stepY = Math.max(0, (lowMost - topMost) / 3);
+            const ys = [];
+            for (let k = 0; k < T; k++) {
+                if (k % 2 === 0) ys.push(topMost + r.int(0, 2) * stepY * 0.7);
+                else ys.push(lowMost - r.int(0, 2) * stepY * 0.6);
+            }
+            for (let k = 0; k + 1 < T; k++) if (k % 2 === 0 && ys[k + 1] < ys[k] + 0.02) ys[k + 1] = ys[k] + 0.02;
+            const xEnd = x0 + 2 * T * Rc, yCut = T % 2 ? 1.03 : Math.max(ys[T - 1] - r.int(2, 4) * stepY * 0.5, p.clear + 0.05);
+            const path = (o) => {
+                const pts = [x0 - o, 1.03];
+                for (let k = 0; k < T; k++) {
+                    const cx = x0 + (2 * k + 1) * Rc;
+                    if (k % 2 === 0) s.arc(pts, cx, ys[k], Rc + o, Math.PI, TAU);
+                    else s.arc(pts, cx, ys[k], Rc - o, Math.PI, 0);
+                }
+                pts.push(T % 2 ? xEnd + o : xEnd - o, yCut);
+                return pts;
+            };
+            const lead = leadKind === "lead" ? s.inks[0] : "mass", groupsAll = [], carve = line > 0.012 ? {} : { edge: false };
+            for (let i = 0; i < n; i++) {
+                const o = -half + line / 2 + i * pitch;
+                const loop = path(o + line / 2).concat(s.reverse(path(o - line / 2)));
+                if (ramp > 0) s.fill(loop, s.tint(lead, (i / Math.max(1, n - 1)) * ramp), carve);
+                else groupsAll.push(loop);
+            }
+            if (groupsAll.length) s.fill(groupsAll, lead, carve);
+            const spots = r.shuffle(Array.from({ length: T }, (_, k) => k)).slice(0, p.dots);
+            spots.forEach((k, i) => {
+                const cx = x0 + (2 * k + 1) * Rc, rd = r0 * (i ? 0.46 : 0.72);
+                s.fill(s.circle(cx, ys[k], rd), s.inks[i % 2 ? 1 : (lead === s.inks[0] ? 2 : 0)]);
+            });
+        }
+    });
+
+    GEN.push({
+        id: "construct", name: "Construct", from: "#9 #10 #14 #18",
+        blurb: "Big primitives built outward from one great arc, each sharing a full edge with its neighbour, curves facing out.",
+        params: [
+            { key: "cell", label: "Module", group: "Grid", type: "range", min: 0.1, max: 0.3, step: 0.002, val: 0.17, tip: "One grid module, in frame heights. Everything else is a whole multiple of it." },
+            { key: "blocks", label: "Blocks", group: "Grid", type: "range", min: 4, max: 22, step: 1, val: 11, tip: "How many primitives are placed after the hero arc." },
+            { key: "lines", label: "Stripes", group: "Grid", type: "range", min: 0, max: 1, step: 0.05, val: 0.25, tip: "How often a block is a stripe field." }
+        ],
+        draw(s, p, r) {
+            const v = varier(p, r), c = v.n("cell", 0.022, 0.1, 0.3), blocks = v.i("blocks", 3, 4, 22);
+            const A = s.A, cols = Math.ceil(A / c), rows = Math.ceil(1 / c);
+            const X = (i) => s.snap(A + (i - cols) * c), Y = (j) => s.snap(1 + (j - rows) * c);
+            let minJ = 0; while (Y(minJ) < p.clear + 0.02) minJ++;
+            const occ = new Map(), key = (i, j) => i + "," + j;
+            const free = (i, j, w, h) => {
+                if (X(i) < A * 0.1 || X(i + w) > A * 0.965 || j < minJ || j + h > rows) return false;
+                for (let a = 0; a < w; a++) for (let b = 0; b < h; b++) if (occ.has(key(i + a, j + b))) return false;
+                return true;
+            };
+            const touch = (i, j, w, h) => {
+                const out = { l: 0, r: 0, t: 0, b: 0 };
+                for (let b = 0; b < h; b++) { if (occ.has(key(i - 1, j + b))) out.l++; if (occ.has(key(i + w, j + b))) out.r++; }
+                for (let a = 0; a < w; a++) { if (occ.has(key(i + a, j - 1))) out.t++; if (occ.has(key(i + a, j + h))) out.b++; }
+                return out;
+            };
+            const nbInks = (i, j, w, h) => {
+                const set = new Set();
+                for (let a = -1; a <= w; a++) for (let b = -1; b <= h; b++) { const v = occ.get(key(i + a, j + b)); if (v) set.add(v); }
+                return set;
+            };
+            const mark = (i, j, w, h, ink) => { for (let a = 0; a < w; a++) for (let b = 0; b < h; b++) occ.set(key(i + a, j + b), ink); };
+            const inkBag = [s.inks[0], s.inks[0], "mass", "mass", s.inks[1], s.inks[1], s.inks[2]];
+            const inkPick = (i, j, w, h) => {
+                const near = nbInks(i, j, w, h), ok = inkBag.filter(k => !near.has(k));
+                return r.pick(ok.length ? ok : inkBag);
+            };
+            // corner of a quarter disc: where its two straight edges have the most to lean on
+            const corner = (i, j, w, h) => {
+                const t = touch(i, j, w, h), v = [[t.t + t.l, 0], [t.t + t.r, 1], [t.b + t.r, 2], [t.b + t.l, 3]];
+                let best = v[0]; for (const e of v) if (e[0] > best[0] || (e[0] === best[0] && r.chance(0.3))) best = e;
+                return best[1];
+            };
+            const cornerAt = (i, j, w, k) => [[X(i), Y(j)], [X(i + w), Y(j)], [X(i + w), Y(j + w)], [X(i), Y(j + w)]][k];
+            const startA = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+            // the hero: a quarter ring, three modules, bled off the floor or a side
+            const H = Math.min(3, rows - minJ), hi = Math.max(1, Math.round(cols * 0.74) - H), hj = rows - H;
+            const hk = r.pick([3, 2]);
+            const [hx, hy] = cornerAt(hi, hj, H, hk === 3 ? 0 : 1);
+            const a0 = hk === 3 ? 0 : Math.PI / 2;
+            s.fill(s.annularSector(hx, hy, H * c, (H - 1) * c, a0, a0 + Math.PI / 2), s.inks[0]);
+            s.fill(s.sector(hx, hy, (H - 1) * c, a0, a0 + Math.PI / 2), "mass");
+            mark(hi, hj, H, H, s.inks[0]);
+            for (let n = 0; n < blocks; n++) {
+                const sizes = r.shuffle([[1, 1], [1, 1], [1, 1], [2, 2], [2, 1], [1, 2]]);
+                let best = null;
+                for (const [w, h] of sizes) {
+                    for (let j = minJ; j + h <= rows; j++) for (let i = 0; i + w <= cols; i++) {
+                        if (!free(i, j, w, h)) continue;
+                        const t = touch(i, j, w, h), share = t.l + t.r + t.t + t.b;
+                        if (!share) continue;
+                        const dx = (i + w / 2) / cols - 0.62, dy = (j + h / 2 - minJ) / (rows - minJ) - 0.8;
+                        const score = share * 0.6 - Math.abs(dx) * 5 - Math.abs(dy) * 2 + r.f() * 1.6;
+                        if (!best || score > best.score) best = { score, i, j, w, h };
+                    }
+                    if (best) break;
+                }
+                if (!best) break;
+                const { i, j, w, h } = best, ink = inkPick(i, j, w, h), x = X(i), y = Y(j), cw = X(i + w) - x, ch = Y(j + h) - y;
+                const pickT = r.f();
+                if (w === h && pickT < 0.55) {
+                    const k = corner(i, j, w, h), [qx, qy] = cornerAt(i, j, w, k);
+                    s.fill(s.sector(qx, qy, cw, startA[k], startA[k] + Math.PI / 2), ink);
+                } else if (w === h && pickT < 0.72) s.fill(s.circle(x + cw / 2, y + ch / 2, cw / 2), ink);
+                else if (w !== h && pickT < 0.7) {
+                    const t = touch(i, j, w, h);
+                    if (w > h) { if (t.b >= t.t) s.fill(s.half(x + cw / 2, y + ch, ch, -Math.PI / 2), ink); else s.fill(s.half(x + cw / 2, y, ch, Math.PI / 2), ink); }
+                    else { if (t.r >= t.l) s.fill(s.half(x + cw, y + ch / 2, cw, Math.PI), ink); else s.fill(s.half(x, y + ch / 2, cw, 0), ink); }
+                } else if (r.f() < p.lines) {
+                    const lines = [], nl = 7 * Math.max(w, h), pt = cw / nl;
+                    for (let e = 0; e < nl; e++) lines.push(s.rect(x + e * pt, y, pt * 0.5, ch));
+                    s.fill(lines, "mass");
+                } else s.fill(s.rect(x, y, cw, ch), ink);
+                mark(i, j, w, h, ink);
+            }
+        }
+    });
+
+    GEN.push({
+        id: "eye", name: "Eye", from: "#5 #13 #22 #25",
+        blurb: "The pack's eye: a curtain of 1:1 stripes hanging to a lid that cuts it, the white of the eye in the shell's own surface.",
+        params: [
+            { key: "stripes", label: "Stripes", group: "Curtain", type: "range", min: 8, max: 80, step: 1, val: 32, tip: "Stripes across the curtain." },
+            { key: "duty", label: "Stripe share", group: "Curtain", type: "range", min: 0.2, max: 0.7, step: 0.01, val: 0.47, tip: "Line share of the stripe pitch. The pack measures 0.47 (#22) to 0.52 (#4)." },
+            { key: "width", label: "Width", group: "Curtain", type: "range", min: 0.25, max: 0.7, step: 0.01, val: 0.42, tip: "Width of the eye and its curtain as a share of the frame." },
+            { key: "height", label: "Opening", group: "Eye", type: "range", min: 0.25, max: 0.6, step: 0.01, val: 0.42, tip: "How far the eye is open: its height as a share of half its width." },
+            { key: "lid", label: "Lower lid", group: "Eye", type: "select", val: "auto", options: [["auto", "From seed"], ["on", "Filled"], ["off", "Open"]], tip: "A block of the lead ink under the eye, cut by the lower lid (#5), or the bare eye (#22)." }
+        ],
+        draw(s, p, r) {
+            const j = varier(p, r), stripes = j.i("stripes", 7, 8, 80), duty = j.n("duty", 0.03, 0.2, 0.7), width = j.n("width", 0.05, 0.25, 0.7), height = j.n("height", 0.05, 0.25, 0.6);
+            const lid = j.c("lid", ["on", "on", "on", "off"]);
+            const A = s.A, cw = width * A, cx = A * r.range(0.66, 0.72), x0 = cx - cw / 2, pitch = cw / stripes, sw = pitch * duty;
+            const a = cw * 0.5, b = Math.min(0.22, a * height), cy = Math.max(0.62, p.clear + 0.2 + b), Rv = (a * a + b * b) / (2 * b);
+            const ang = Math.asin(a / Rv), up = s.arc([], cx, cy + Rv - b, Rv, -Math.PI / 2 - ang, -Math.PI / 2 + ang);
+            s.arc(up, cx, cy - Rv + b, Rv, Math.PI / 2 - ang, Math.PI / 2 + ang);
+            const y0 = p.clear + 0.1 + r.range(0, 0.06), lines = [];
+            for (let i = 0; i < stripes; i++) lines.push(s.rect(x0 + i * pitch + (pitch - sw) / 2, y0, sw, cy - y0));
+            s.fill(lines, "mass", { clipOut: [up], edge: false });
+            if (lid === "on") s.fill(s.rect(cx - a, cy, 2 * a, Math.min(b + 0.09, 0.94 - cy)), s.inks[0], { clipOut: [up] });
+            s.fill(up, "plate");
+            const gaze = r.range(-0.3, 0.3) * a, iris = s.inks[0] === "blue" ? "red" : s.inks[0] === "green" ? "blue" : r.pick(["blue", "blue", s.inks[2]]);
+            s.fill(s.circle(cx + gaze, cy, b * 0.82), iris, { clip: [up] });
+            s.fill(s.circle(cx + gaze, cy, b * 0.38), "mass", { clip: [up] });
+        }
+    });
+    /*GEN-END*/
+
+    function defaults(gen) { const o = {}; for (const p of COMMON.concat(gen.params)) o[p.key] = p.val; return o; }
+
+    // Build the picture's ops. Nothing here depends on the palette; only the flatness of the curves depends on the pixels.
+    function build(genId, seed, params, W, H, aspect) {
+        const gen = GEN.find(g => g.id === genId);
+        const p = Object.assign(defaults(gen), params, { pinned: params || {} });
+        const r = rngFor(seed, genId);
+        const mirror = p.side === "auto" ? r.chance(0.5) : p.side === "left";
+        const s = new Scene(aspect || W / H, H, mirror);
+        const cw = rngFor(seed, genId + ":ink").weighted([["signal", 5], ["dusk", 3], ["triad", 2], ["accent", 2], ["moss", 1]]);
+        s.inks = COLOURWAYS[p.colourway === "auto" ? cw : p.colourway].inks;
+        s.edge = p.material === "carved" ? { depth: 0.0031 * p.depth, bevel: 0.9, shade: 0.34 } : null;
+        gen.draw(s, p, r);
+        return s;
+    }
+
+    // RGB bytes of one picture: a flat fill keeps its exact byte, and an antialiased edge needs no dither.
+    function renderBytes(scene, pal, W, H, ra) {
+        ra = ra || new Raster(W, H);
+        paint(ra, scene, pal);
+        const out = new Uint8ClampedArray(W * H * 3), F = ra.F;
+        for (let i = 0, n = out.length; i < n; i++) out[i] = F[i];            // a clamped array rounds to nearest by itself
+        return out;
+    }
+    // ---- PNG: CompressionStream is the zlib the page has; nothing of canvas is involved, so a browser's fingerprint noise cannot reach a file
+    const crcTable = (() => { const t = new Int32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c; } return t; })();
+    function crc(buf, c) { for (let i = 0; i < buf.length; i++) c = crcTable[(c ^ buf[i]) & 255] ^ (c >>> 8); return c; }
+    function chunk(type, data) {
+        const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+        dv.setUint32(0, data.length);
+        for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+        out.set(data, 8);
+        dv.setUint32(8 + data.length, (crc(out.subarray(4, 8 + data.length), -1) ^ -1) >>> 0);
+        return out;
+    }
+    async function encodePng(rgb, W, H, note) {
+        const stride = W * 3, raw = new Uint8Array((stride + 1) * H);
+        for (let y = 0; y < H; y++) {
+            const o = y * (stride + 1), s = y * stride;
+            raw[o] = 2;                                            // filter Up: rows repeat in this kind of picture
+            if (y === 0) raw.set(rgb.subarray(0, stride), o + 1);
+            else for (let i = 0; i < stride; i++) raw[o + 1 + i] = rgb[s + i] - rgb[s - stride + i];
+        }
+        const cs = new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate"));
+        const z = new Uint8Array(await new Response(cs).arrayBuffer());
+        const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+        dv.setUint32(0, W); dv.setUint32(4, H); ihdr[8] = 8; ihdr[9] = 2;
+        const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr)];
+        if (note) { const t = new TextEncoder().encode("Software\0" + note); parts.push(chunk("tEXt", t)); }
+        parts.push(chunk("IDAT", z), chunk("IEND", new Uint8Array(0)));
+        return new Blob(parts, { type: "image/png" });
+    }
+
+    return { GEN, COMMON, ROLES, EVA, COLOURWAYS, NIGHT_DEFAULT, palette, defaultHex, hexRgb, defaults, build, renderBytes, encodePng, Raster, Scene, rngFor };
+})();
+</script>
+<script id="wp-ui">
+"use strict";
+(() => {
+    const $ = (id) => document.getElementById(id);
+    const RES = [[3840, 2160, "3840 x 2160 (4K)"], [2880, 1620, "2880 x 1620 (this panel)"], [2560, 1440, "2560 x 1440"], [1920, 1080, "1920 x 1080"], [3440, 1440, "3440 x 1440 (ultrawide)"], [5120, 2880, "5120 x 2880 (5K)"]];
+    const state = {
+        gen: WP.GEN[0].id, seed: 22, params: {}, pal: { light: {}, dark: {} }, w: 3840, h: 2160,
+        view: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light", shell: true, popup: false, full: false, cut: 0.5
+    };
+    for (const g of WP.GEN) state.params[g.id] = {};
+    const gen = () => WP.GEN.find(g => g.id === state.gen);
+    const pageMode = () => state.view === "dark" ? "dark" : "light";
+    const palOf = (mode) => WP.palette(mode, state.pal, state.params[state.gen].night);
+
+    // ---- the page wears the theme's own tokens -------------------------------------------------------------------------------
+    function wearTheme() {
+        const m = pageMode(), rs = document.documentElement.style;
+        for (const k of ["surface", "panelSunk", "listBox", "headerBox", "bevel", "border", "shadowDeep", "textPrimary", "textMuted", "textFaint", "accent", "buttonBevel"]) rs.setProperty("--" + k, WP.EVA[m][k]);
+        rs.setProperty("color-scheme", m);
+    }
+
+    // ---- settings <-> text ---------------------------------------------------------------------------------------------------
+    function serialise() {
+        const q = ["g=" + state.gen, "s=" + state.seed, "r=" + state.w + "x" + state.h];
+        const p = state.params[state.gen], ks = Object.keys(p).sort();
+        if (ks.length) q.push("p=" + ks.map(k => k + ":" + p[k]).join(","));
+        for (const [m, tag] of [["light", "l"], ["dark", "d"]]) {
+            const o = state.pal[m], rs = Object.keys(o).sort();
+            if (rs.length) q.push(tag + "=" + rs.map(k => k + ":" + o[k].slice(1)).join(","));
+        }
+        return q.join("&");
+    }
+    function parse(text) {
+        const out = {};
+        for (const kv of text.replace(/^.*#/, "").trim().split("&")) { const i = kv.indexOf("="); if (i > 0) out[kv.slice(0, i)] = kv.slice(i + 1); }
+        if (!out.g || !WP.GEN.some(g => g.id === out.g)) return false;
+        state.gen = out.g;
+        if (+out.s > 0) state.seed = Math.floor(+out.s);
+        const res = /^(\d+)x(\d+)$/.exec(out.r || "");
+        if (res) { state.w = +res[1]; state.h = +res[2]; }
+        const g = gen(), known = WP.COMMON.concat(g.params), fresh = {};
+        for (const e of (out.p || "").split(",")) {
+            const c = e.indexOf(":"); if (c < 0) continue;
+            const k = e.slice(0, c), v = e.slice(c + 1), d = known.find(x => x.key === k);
+            if (d) fresh[k] = d.type === "range" ? +v : v;
+        }
+        state.params[g.id] = fresh;
+        for (const [m, tag] of [["light", "l"], ["dark", "d"]]) {
+            const o = {};
+            for (const e of (out[tag] || "").split(",")) { const c = e.indexOf(":"); if (c > 0 && /^[0-9a-fA-F]{6}$/.test(e.slice(c + 1))) o[e.slice(0, c)] = "#" + e.slice(c + 1).toUpperCase(); }
+            state.pal[m] = o;
+        }
+        return true;
+    }
+    const fileName = (m) => "bauhaus-" + state.gen + "-" + String(state.seed).padStart(5, "0") + "-" + m + ".png";
+    function syncText() {
+        const s = serialise();
+        try { history.replaceState(null, "", "#" + s); } catch (e) { /* a sandboxed page has no history */ }
+        if (document.activeElement !== $("settings")) $("settings").value = s;
+        $("snippet").value = '"wallpapers": { "eva": {\n    "light": "~/Pictures/wallpapers/' + fileName("light") + '",\n    "dark": "~/Pictures/wallpapers/' + fileName("dark") + '"\n} },\n"wallpaperFit": "cover"';
+    }
+
+    // ---- the picture -------------------------------------------------------------------------------------------------------
+    let raster = null, offL = null, offD = null, previewW = 0, previewH = 0, pending = 0;
+    const canvas = $("canvas"), overlay = $("overlay"), ctx = canvas.getContext("2d");
+    function rasterFor(w, h) { if (!raster || raster.W !== w || raster.H !== h) raster = new WP.Raster(w, h); return raster; }
+    function toCanvas(rgb, w, h, into) {
+        const c = into || document.createElement("canvas");
+        c.width = w; c.height = h;
+        const x = c.getContext("2d"), id = x.createImageData(w, h), d = id.data;
+        for (let i = 0, j = 0, n = w * h; i < n; i++, j += 3) { d[i * 4] = rgb[j]; d[i * 4 + 1] = rgb[j + 1]; d[i * 4 + 2] = rgb[j + 2]; d[i * 4 + 3] = 255; }
+        x.putImageData(id, 0, 0);
+        return c;
+    }
+    function fitSize() {
+        const v = $("view"), aspect = state.w / state.h;
+        if (state.full) return [state.w, state.h, state.w / devicePixelRatio, state.h / devicePixelRatio];
+        const availW = Math.max(160, v.clientWidth - 24), availH = Math.max(90, v.clientHeight - 24);
+        let cw = availW, ch = cw / aspect;
+        if (ch > availH) { ch = availH; cw = ch * aspect; }
+        cw = Math.floor(cw); ch = Math.floor(ch);
+        const w = Math.min(state.w, Math.round(cw * devicePixelRatio));
+        return [w, Math.max(1, Math.round(w / aspect)), cw, ch];
+    }
+    function compose() {
+        const w = previewW, h = previewH;
+        canvas.width = w; canvas.height = h;
+        if (state.view === "split") {
+            const cut = Math.round(w * state.cut);
+            ctx.drawImage(offL, 0, 0, cut, h, 0, 0, cut, h);
+            ctx.drawImage(offD, cut, 0, w - cut, h, cut, 0, w - cut, h);
+        } else ctx.drawImage(state.view === "dark" ? offD : offL, 0, 0);
+        drawOverlay();
+    }
+    function renderNow() {
+        const t0 = performance.now();
+        const [w, h, cw, ch] = fitSize();
+        previewW = w; previewH = h;
+        const f = $("frame");
+        for (const c of [canvas, overlay]) { c.style.width = cw + "px"; c.style.height = ch + "px"; }
+        f.classList.toggle("split", state.view === "split");
+        const A = state.w / state.h, scene = WP.build(state.gen, state.seed, state.params[state.gen], w, h, A), ra = rasterFor(w, h);
+        if (state.view !== "dark") offL = toCanvas(WP.renderBytes(scene, palOf("light"), w, h, ra), w, h, offL);
+        if (state.view !== "light") offD = toCanvas(WP.renderBytes(scene, palOf("dark"), w, h, ra), w, h, offD);
+        compose();
+        $("status").textContent = w + " x " + h + " preview, " + Math.round(performance.now() - t0) + " ms";
+        syncText();
+    }
+    function schedule() { if (!pending) { pending = requestAnimationFrame(() => { pending = 0; renderNow(); }); } }
+
+    // ---- the shell mock: the panel's numbers, 2880 x 1620 at scale 1.25 ------------------------------------------------------
+    function shellPath(u, W, H) {
+        const bar = 50 * u, slim = 7.5 * u, j = 21 * u, flare = 18 * u;
+        const islands = [[-1, 462 * u], [W / 2 - 300 * u, W / 2 + 300 * u], [W - 620 * u, W + 1]];
+        const p = new Path2D();
+        p.rect(0, 0, W, H);
+        // the desktop: everything the shell does not cover, walked clockwise from under the left island
+        const lx = slim, rx = W - slim, by = H - slim;
+        p.moveTo(lx, bar + j);
+        p.arcTo(lx, bar, lx + j, bar, j);
+        p.lineTo(islands[0][1] - flare, bar);
+        p.quadraticCurveTo(islands[0][1], bar, islands[0][1], bar - flare);
+        p.quadraticCurveTo(islands[0][1], 0, islands[0][1] + flare, 0);
+        p.lineTo(islands[1][0] - flare, 0);
+        p.quadraticCurveTo(islands[1][0], 0, islands[1][0], bar - flare);
+        p.quadraticCurveTo(islands[1][0], bar, islands[1][0] + flare, bar);
+        p.lineTo(islands[1][1] - flare, bar);
+        p.quadraticCurveTo(islands[1][1], bar, islands[1][1], bar - flare);
+        p.quadraticCurveTo(islands[1][1], 0, islands[1][1] + flare, 0);
+        p.lineTo(islands[2][0] - flare, 0);
+        p.quadraticCurveTo(islands[2][0], 0, islands[2][0], bar - flare);
+        p.quadraticCurveTo(islands[2][0], bar, islands[2][0] + flare, bar);
+        p.lineTo(rx - j, bar);
+        p.arcTo(rx, bar, rx, bar + j, j);
+        p.lineTo(rx, by - j); p.arcTo(rx, by, rx - j, by, j);
+        p.lineTo(lx + j, by); p.arcTo(lx, by, lx, by - j, j);
+        p.closePath();
+        return p;
+    }
+    function rr(c, x, y, w, h, r) { c.beginPath(); c.roundRect(x, y, w, h, r); }
+    function drawShellMode(c, W, H, mode) {
+        const T = WP.EVA[mode], u = W / 2880, bar = 50 * u, path = shellPath(u, W, H);
+        c.save();
+        c.shadowColor = mode === "dark" ? "rgba(0,0,0,.42)" : "rgba(42,44,49,.3)";
+        c.shadowBlur = 44 * u;
+        c.fillStyle = T.surface; c.fill(path, "evenodd");
+        c.restore();
+        c.fillStyle = T.surface; c.fill(path, "evenodd");
+        // the ink: chips where the modules stand
+        c.fillStyle = T.textPrimary;
+        const chips = [[28, 7], [66, 7], [104, 7], [142, 7], [180, 7], [218, 7]];
+        for (const [x, r] of chips) { c.beginPath(); c.arc(x * u * 1.25, bar / 2, r * u * 1.4, 0, 7); c.fill(); }
+        for (const [x, r] of [[2300, 7], [2360, 7], [2420, 7], [2520, 7], [2700, 7], [2800, 7], [2850, 7]]) { c.beginPath(); c.arc(x * u, bar / 2, r * u * 1.4, 0, 7); c.fill(); }
+        c.font = "700 " + Math.round(19 * u) + "px Audiowide, Inter, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText("13:22", W / 2, bar / 2);
+        c.fillStyle = T.accent; c.beginPath(); c.arc(W / 2 - 190 * u, bar / 2, 7 * u, 0, 7); c.fill();
+        if (state.popup) {
+            const pw = 640 * u, ph = 330 * u, px = W / 2 - pw / 2, py = bar - 2 * u, rad = 20 * u;
+            c.save();
+            c.shadowColor = mode === "dark" ? "rgba(0,0,0,.42)" : "rgba(42,44,49,.3)"; c.shadowBlur = 44 * u;
+            c.fillStyle = T.surface; rr(c, px, py, pw, ph, [0, 0, rad, rad]); c.fill();
+            c.restore();
+            c.fillStyle = T.listBox; rr(c, px + 16 * u, py + 60 * u, pw - 32 * u, ph - 76 * u, 14 * u); c.fill();
+            c.strokeStyle = T.border; c.lineWidth = Math.max(1, 1.5 * u); c.stroke();
+            c.fillStyle = T.textPrimary; c.textAlign = "left"; c.font = "700 " + Math.round(20 * u) + "px Audiowide, Inter, sans-serif"; c.fillText("Popup", px + 20 * u, py + 32 * u);
+        }
+    }
+    function drawOverlay() {
+        const dpr = 1, w = previewW, h = previewH;
+        overlay.width = w * dpr; overlay.height = h * dpr;
+        const c = overlay.getContext("2d");
+        c.clearRect(0, 0, w, h);
+        if (!state.shell) { splitLine(c, w, h); return; }
+        if (state.view === "split") {
+            const cut = Math.round(w * state.cut);
+            c.save(); c.beginPath(); c.rect(0, 0, cut, h); c.clip(); drawShellMode(c, w, h, "light"); c.restore();
+            c.save(); c.beginPath(); c.rect(cut, 0, w - cut, h); c.clip(); drawShellMode(c, w, h, "dark"); c.restore();
+        } else drawShellMode(c, w, h, state.view);
+        splitLine(c, w, h);
+    }
+    function splitLine(c, w, h) {
+        if (state.view !== "split") return;
+        c.fillStyle = WP.EVA.light.accent; c.fillRect(Math.round(w * state.cut) - 1, 0, 2, h);
+    }
+
+    // ---- thumbnails ---------------------------------------------------------------------------------------------------------
+    let thumbTimer = 0;
+    function thumbs() {
+        clearTimeout(thumbTimer);
+        const list = WP.GEN.slice(), w = 320, h = 180, m = pageMode(), ra = new WP.Raster(w, h);
+        const step = () => {
+            const g = list.shift();
+            if (!g) return;
+            const c = document.querySelector('.gen[data-gen="' + g.id + '"] canvas');
+            const p = Object.assign({}, state.params[g.id]);
+            toCanvas(WP.renderBytes(WP.build(g.id, state.seed, p, w, h, 16 / 9), WP.palette(m, state.pal, p.night), w, h, ra), w, h, c);
+            thumbTimer = setTimeout(step, 0);
+        };
+        thumbTimer = setTimeout(step, 30);
+    }
+
+    // ---- the panel ----------------------------------------------------------------------------------------------------------
+    function fmt(d, v) { const dec = Math.max(0, -Math.floor(Math.log10(d.step) + 1e-9)); return (+v).toFixed(dec); }
+    function buildParams() {
+        const g = gen(), box = $("params"), vals = state.params[g.id];
+        box.innerHTML = "";
+        $("blurb").textContent = g.blurb + " Drawn from " + g.from + " of the pack.";
+        const list = g.params.concat(WP.COMMON), groups = [];
+        for (const d of list) if (!groups.includes(d.group)) groups.push(d.group);
+        for (const name of groups) {
+            const head = document.createElement("div"); head.className = "group"; head.textContent = name; box.append(head);
+            for (const d of list.filter(x => x.group === name)) {
+                const row = document.createElement("div"); row.dataset.tip = d.tip;
+                const label = document.createElement("label"); label.htmlFor = "p-" + d.key;
+                const star = document.createElement("span"); star.className = "star";
+                const mark = (v) => { label.textContent = d.label + " "; star.textContent = v !== d.val ? "*" : ""; label.append(star); };
+                const cur = d.key in vals ? vals[d.key] : d.val;
+                mark(cur);
+                const set = (v) => { if (v === d.val) delete vals[d.key]; else vals[d.key] = v; mark(v); schedule(); if (d.key === "colourway" || d.key === "night") thumbs(); };
+                if (d.type === "range") {
+                    row.className = "row";
+                    const inp = document.createElement("input"); inp.type = "range"; inp.id = "p-" + d.key; inp.min = d.min; inp.max = d.max; inp.step = d.step; inp.value = cur;
+                    const val = document.createElement("span"); val.className = "val"; val.textContent = fmt(d, cur);
+                    inp.oninput = () => { const v = +inp.value; val.textContent = fmt(d, v); set(v); };
+                    row.append(label, inp, val);
+                } else {
+                    row.className = "row sel";
+                    const sel = document.createElement("select"); sel.id = "p-" + d.key;
+                    for (const [v, t] of d.options) { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.append(o); }
+                    sel.value = cur; sel.onchange = () => set(sel.value);
+                    row.append(label, sel);
+                }
+                box.append(row);
+            }
+        }
+    }
+    function buildGens() {
+        const box = $("gens");
+        for (const g of WP.GEN) {
+            const b = document.createElement("button"); b.className = "gen"; b.dataset.gen = g.id; b.dataset.tip = g.blurb;
+            const c = document.createElement("canvas"); c.width = 320; c.height = 180;
+            const s = document.createElement("span"); s.textContent = g.name;
+            b.append(c, s);
+            b.onclick = () => { state.gen = g.id; markGen(); buildParams(); schedule(); };
+            box.append(b);
+        }
+    }
+    function markGen() { document.querySelectorAll(".gen").forEach(b => b.classList.toggle("on", b.dataset.gen === state.gen)); }
+    function buildPal() {
+        const box = $("pal"); box.innerHTML = "";
+        for (const t of ["Role", "Light", "Dark"]) { const e = document.createElement("div"); e.className = "group"; e.style.margin = "0"; e.textContent = t; box.append(e); }
+        for (const r of WP.ROLES) {
+            const lab = document.createElement("div"); lab.dataset.tip = r.tip + " Light: " + r.light + ", dark: " + r.dark + ".";
+            const star = document.createElement("span"); star.className = "star";
+            const mark = () => { lab.textContent = r.label + " "; star.textContent = (state.pal.light[r.id] || state.pal.dark[r.id]) ? "*" : ""; lab.append(star); };
+            mark(); box.append(lab);
+            for (const m of ["light", "dark"]) {
+                const def = WP.defaultHex(m, r.id), cur = state.pal[m][r.id] || def;
+                const wrap = document.createElement("div"); wrap.className = "hex"; wrap.dataset.tip = r.tip + " Default " + def + " (" + r[m] + ").";
+                const sw = document.createElement("input"); sw.type = "color"; sw.value = cur.toLowerCase();
+                const tx = document.createElement("input"); tx.type = "text"; tx.value = cur; tx.maxLength = 7; tx.spellcheck = false;
+                const set = (v) => { v = v.toUpperCase(); if (v === def) delete state.pal[m][r.id]; else state.pal[m][r.id] = v; mark(); schedule(); thumbs(); };
+                sw.oninput = () => { tx.value = sw.value.toUpperCase(); set(sw.value); };
+                tx.oninput = () => { if (/^#[0-9a-fA-F]{6}$/.test(tx.value)) { sw.value = tx.value.toLowerCase(); set(tx.value); } };
+                wrap.append(sw, tx); box.append(wrap);
+            }
+        }
+    }
+    function buildRes() {
+        const sel = $("res"); sel.innerHTML = "";
+        for (const [w, h, t] of RES) { const o = document.createElement("option"); o.value = w + "x" + h; o.textContent = t; sel.append(o); }
+        const c = document.createElement("option"); c.value = "custom"; c.textContent = "Custom"; sel.append(c);
+    }
+    function syncRes() {
+        const k = state.w + "x" + state.h, sel = $("res");
+        sel.value = RES.some(r => r[0] + "x" + r[1] === k) ? k : "custom";
+        $("resW").value = state.w; $("resH").value = state.h;
+    }
+    function syncAll() { $("seed").value = state.seed; markGen(); buildParams(); buildPal(); syncRes(); syncTools(); wearTheme(); thumbs(); schedule(); }
+    function syncTools() {
+        document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.mode === state.view));
+        document.querySelectorAll("#overlays button").forEach(b => b.classList.toggle("on", !!state[b.dataset.over]));
+        $("view").classList.toggle("full", state.full);
+    }
+    function setSeed(v) { state.seed = Math.max(1, Math.min(999999, Math.floor(v) || 1)); $("seed").value = state.seed; schedule(); thumbs(); }
+
+    // ---- export ------------------------------------------------------------------------------------------------------------
+    async function download(modes) {
+        const btns = [$("dlLight"), $("dlDark"), $("dlBoth")];
+        btns.forEach(b => b.disabled = true);
+        const W = state.w, H = state.h, st = $("status");
+        try {
+            const t0 = performance.now();
+            for (const m of modes) {
+                st.textContent = "Rendering " + m + ", " + W + " x " + H + " ...";
+                await new Promise(r => setTimeout(r, 30));
+                const scene = WP.build(state.gen, state.seed, state.params[state.gen], W, H, W / H);
+                const rgb = WP.renderBytes(scene, palOf(m), W, H, rasterFor(W, H));
+                const blob = await WP.encodePng(rgb, W, H, "bauhaus_wallpapers.html#" + serialise());
+                const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileName(m);
+                document.body.append(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+            }
+            st.textContent = modes.join(" + ") + " written in " + ((performance.now() - t0) / 1000).toFixed(1) + " s";
+        } catch (e) {
+            st.textContent = "Export failed: " + e.message;
+        } finally { btns.forEach(b => b.disabled = false); }
+    }
+
+    // ---- wiring -------------------------------------------------------------------------------------------------------------
+    document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+        document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+        document.querySelectorAll(".scroll > .tab").forEach(x => x.classList.toggle("on", x.id === "tab-" + b.dataset.tab));
+    });
+    document.querySelectorAll("#modes button").forEach(b => b.onclick = () => { state.view = b.dataset.mode; syncTools(); wearTheme(); thumbs(); schedule(); });
+    document.querySelectorAll("#overlays button").forEach(b => b.onclick = () => { const k = b.dataset.over; state[k] = !state[k]; if (k === "popup" && state.popup) state.shell = true; if (k === "shell" && !state.shell) state.popup = false; syncTools(); schedule(); });
+    $("seed").onchange = () => setSeed(+$("seed").value);
+    $("seedPrev").onclick = () => setSeed(state.seed - 1);
+    $("seedNext").onclick = () => setSeed(state.seed + 1);
+    $("shuffle").onclick = () => setSeed(1 + crypto.getRandomValues(new Uint32Array(1))[0] % 99999);
+    $("resetWall").onclick = () => { state.params[state.gen] = {}; buildParams(); schedule(); thumbs(); };
+    $("resetPal").onclick = () => { state.pal = { light: {}, dark: {} }; buildPal(); schedule(); thumbs(); };
+    $("res").onchange = () => { const v = $("res").value; if (v !== "custom") { const [w, h] = v.split("x").map(Number); state.w = w; state.h = h; syncRes(); schedule(); } };
+    for (const id of ["resW", "resH"]) $(id).onchange = () => { state.w = Math.max(16, Math.min(15360, +$("resW").value || 16)); state.h = Math.max(16, Math.min(8640, +$("resH").value || 16)); syncRes(); schedule(); };
+    $("dlLight").onclick = () => download(["light"]);
+    $("dlDark").onclick = () => download(["dark"]);
+    $("dlBoth").onclick = () => download(["light", "dark"]);
+    $("copySettings").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("settings").value);
+    $("applySettings").onclick = () => { if (parse($("settings").value)) syncAll(); };
+    addEventListener("resize", schedule);
+    addEventListener("hashchange", () => { if (location.hash.slice(1) !== serialise() && parse(location.hash)) syncAll(); });
+    let dragging = false;
+    const cutAt = (ev) => { const r = canvas.getBoundingClientRect(); state.cut = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)); compose(); };
+    canvas.onpointerdown = (ev) => { if (state.view !== "split") return; dragging = true; canvas.setPointerCapture(ev.pointerId); cutAt(ev); };
+    canvas.onpointermove = (ev) => { if (dragging) cutAt(ev); };
+    canvas.onpointerup = () => { dragging = false; };
+    // the tip: one element, placed beside what the pointer rests on
+    const tip = $("tip");
+    addEventListener("pointerover", (ev) => {
+        const el = ev.target.closest && ev.target.closest("[data-tip]");
+        if (!el) { tip.classList.remove("on"); return; }
+        tip.textContent = el.dataset.tip; tip.classList.add("on");
+        const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+        const inPanel = r.left < 380;
+        tip.style.left = Math.min(innerWidth - tw - 8, inPanel ? 392 : r.left) + "px";
+        tip.style.top = Math.max(8, Math.min(innerHeight - th - 8, inPanel ? r.top : r.bottom + 6)) + "px";
+    });
+    document.documentElement.addEventListener("pointerleave", () => tip.classList.remove("on"));
+    if (location.hash.length > 1) parse(location.hash);
+    buildGens(); buildRes();
+    syncAll();
+})();
+</script>
+</body>
+</html>

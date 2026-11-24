@@ -1,0 +1,15 @@
+#!/bin/sh
+# The LLM module's sudo (round 20). First on the PATH of every tool job, and
+# nowhere else: LlmTools puts this directory there and nothing outside a tool
+# job ever sees it.
+#
+#   -k  ignore any cached credential for THIS call, and write none -- so every
+#       sudo the model runs authenticates, even the second one in one command
+#   -A  take a password from $SUDO_ASKPASS (llm_tools/askpass.py, which asks
+#       the popup) instead of a terminal, which a tool job does not have
+#
+# Howdy is the first link of sudo's PAM stack either way: the camera is tried
+# before any password is asked for. LLM_SUDO_BIN lets a test put a stub in sudo's
+# place; a command in the job could point it anywhere, which gains it nothing it
+# could not do by running that program itself.
+exec "${LLM_SUDO_BIN:-/usr/bin/sudo}" -k -A "$@"

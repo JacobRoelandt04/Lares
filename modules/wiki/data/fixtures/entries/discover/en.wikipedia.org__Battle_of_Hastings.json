@@ -1,0 +1,110 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Battle_of_Hastings",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Battle of Hastings",
+  "url": "https://en.wikipedia.org/wiki/Battle_of_Hastings",
+  "revid": 1376904169,
+  "license": "CC BY-SA 4.0",
+  "quality": "featured"
+ },
+ "title": "Battle of Hastings",
+ "category": {
+  "family": "history",
+  "topic": "military-and-warfare",
+  "via": "thompson",
+  "why": {
+   "p": 0.13,
+   "oneIn": 8,
+   "openRate": 0.35
+  }
+ },
+ "intro": {
+  "text": "On 14 October 1066 a Norman-French army under William, Duke of Normandy, defeated the English army of King Harold Godwinson near the present-day town of Battle in East Sussex, and began the Norman Conquest of England. Harold had just marched south after beating the Norwegian king Harald Hardrada at Stamford Bridge, while William had landed at Pevensey. The fighting lasted from about nine in the morning until dusk. The English infantry held its line until the Normans pretended to flee in panic and turned on their pursuers, and Harold's death near the end of the day broke his army. William was crowned king on Christmas Day.",
+  "words": 106,
+  "provenance": "generated",
+  "stripped": [],
+  "model": "jev-1.13+ornith-1.5:9b",
+  "grounded": true,
+  "locator": {
+   "judge": "jev",
+   "para": 2,
+   "of": 5,
+   "score": 0.82,
+   "rules": {
+    "defines": true,
+    "hook": true,
+    "selfContained": true,
+    "noHowTo": true
+   }
+  },
+  "links": [
+   {
+    "s": 107,
+    "e": 123,
+    "target": "Harold Godwinson",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Harold_Godwinson"
+   },
+   {
+    "s": 190,
+    "e": 216,
+    "target": "Norman Conquest",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Norman_Conquest"
+   },
+   {
+    "s": 300,
+    "e": 315,
+    "target": "Battle of Stamford Bridge",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Battle_of_Stamford_Bridge"
+   },
+   {
+    "s": 345,
+    "e": 353,
+    "target": "Pevensey",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Pevensey"
+   }
+  ]
+ },
+ "images": [
+  {
+   "file": "img/en.wikipedia.org__Battle_of_Hastings-0.jpg",
+   "thumb": "img/en.wikipedia.org__Battle_of_Hastings-0-thumb.jpg",
+   "w": 722,
+   "h": 406,
+   "aspect": 2.76,
+   "kind": "photo",
+   "focusY": 0.5,
+   "credit": "Bayeux Tapestry, scene 51 (Norman knights and archers), photo Myrabella",
+   "license": "PD",
+   "src": "page",
+   "fileTitle": "File:Bayeux Tapestry scene51 Battle of Hastings Norman knights and archers.jpg"
+  }
+ ],
+ "installed": null,
+ "popularity": {
+  "views60d": 91000,
+  "band": 0.7
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

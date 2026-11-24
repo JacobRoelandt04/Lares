@@ -1,0 +1,73 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "breaks.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "enabled": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "false = no nudge at all.\n\nTakes true or false. Default: true."
+  },
+  "durationMin": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 600,
+   "default": 50,
+   "x-wants": "a number 1 .. 600",
+   "description": "Minutes of use until the rail is full. 1 .. 600.\n\nTakes a number 1 .. 600. Default: 50."
+  },
+  "pauseMin": {
+   "type": "number",
+   "minimum": 0.1,
+   "maximum": 120,
+   "default": 5,
+   "x-wants": "a number 0.1 .. 120",
+   "description": "An idle span of this many minutes empties even a full rail (a shorter one rewinds part of it). 0.1 .. 120.\n\nTakes a number 0.1 .. 120. Default: 5."
+  },
+  "idleGraceSec": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 3600,
+   "default": 30,
+   "x-wants": "a number 1 .. 3600",
+   "description": "Seconds without input that still count as use: a shorter idle rewinds nothing. 1 .. 3600.\n\nTakes a number 1 .. 3600. Default: 30."
+  },
+  "rewindPower": {
+   "type": "number",
+   "minimum": 0.25,
+   "maximum": 8,
+   "default": 2,
+   "x-wants": "a number 0.25 .. 8",
+   "description": "How convex the rewind is: 1 = linear in the idle time, 2 = small idles cost little and the cost grows the more idle you are.\n0.25 .. 8.\n\nTakes a number 0.25 .. 8. Default: 2."
+  },
+  "stepSec": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 3600,
+   "default": 60,
+   "x-wants": "a number 1 .. 3600",
+   "description": "The drawn fill moves only on this beat (seconds): between beats nothing repaints. 1 .. 3600.\n\nTakes a number 1 .. 3600. Default: 60."
+  },
+  "stepEaseMs": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 5000,
+   "default": 700,
+   "x-wants": "a number 0 .. 5000",
+   "description": "How long the fill takes to ease to its new place at a beat (milliseconds; 0 = it jumps). 0 .. 5000.\n\nTakes a number 0 .. 5000. Default: 700."
+  },
+  "hiddenMin": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 540,
+   "default": 10,
+   "x-wants": "a number 0 .. 540",
+   "description": "Minutes of use that are not drawn: the fill appears, easing in from the rail's start, once more than this is banked, and\neases back out when a rewind drops it under. 0 .. 90 % of durationMin.\n\nTakes a number 0 .. 540. Default: 10."
+  }
+ }
+}

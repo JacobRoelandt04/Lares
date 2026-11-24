@@ -1,0 +1,9 @@
+// Lares snapshots (tools/snapshot/root): '@USER@', on the active local session only, may make a snapshot and keep or release one without a
+// password. The actions are the ones of org.lares.snapshot.policy (pkexec picks them by the tool's path and its first argument); deleting
+// one is not here, so it asks.
+polkit.addRule(function (action, subject) {
+    if (subject.user != "@USER@" || !subject.local || !subject.active)
+        return;
+    if (action.id == "org.lares.snapshot.create" || action.id == "org.lares.snapshot.keep")
+        return polkit.Result.YES;
+});

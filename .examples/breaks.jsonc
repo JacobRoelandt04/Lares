@@ -1,0 +1,28 @@
+// breaks.jsonc -- the break nudge (modules/bar/workspaces/BreakClock.qml). The template of ~/.config/quickshell/config/breaks.jsonc.
+// While you keep using the system, the workspaces rail slowly fills the way a running timer fills it (a timer's fill draws over it).
+// When it is full a burst says it is time for a break, once. Every key is optional and every value below IS the default. Read hot.
+//
+// The fill counts USE. Idle time takes it back on a curve: a span with no input (a locked screen and a suspend are such spans too,
+// from the lock or the sleep to the unlock or the wake; causes that overlap count once) rewinds the rail by
+//     ((span - idleGraceSec) / (pauseMin * 60 - idleGraceSec)) ^ rewindPower     of the full rail,
+// clamped to 0..1. A video does not count as input.
+{
+    // false = no nudge at all.
+    "enabled": true,
+    // Minutes of use until the rail is full. 1 .. 600.
+    "durationMin": 50,
+    // An idle span of this many minutes empties even a full rail (a shorter one rewinds part of it). 0.1 .. 120.
+    "pauseMin": 5,
+    // Seconds without input that still count as use: a shorter idle rewinds nothing. 1 .. 3600.
+    "idleGraceSec": 30,
+    // How convex the rewind is: 1 = linear in the idle time, 2 = small idles cost little and the cost grows the more idle you are.
+    // 0.25 .. 8.
+    "rewindPower": 2,
+    // The drawn fill moves only on this beat (seconds): between beats nothing repaints. 1 .. 3600.
+    "stepSec": 60,
+    // How long the fill takes to ease to its new place at a beat (milliseconds; 0 = it jumps). 0 .. 5000.
+    "stepEaseMs": 700,
+    // Minutes of use that are not drawn: the fill appears, easing in from the rail's start, once more than this is banked, and
+    // eases back out when a rewind drops it under. 0 .. 90 % of durationMin.
+    "hiddenMin": 10
+}

@@ -1,0 +1,5 @@
+Script started on 2026-11-22 16:47:48+00:00 [COMMAND="stty cols 200 rows 50; python3 /home/vmuser/qs/tools/snapshot/lares-snapshot undo a8adc9bb" <not executed on terminal>]
+openssl-3, installed since, now owns /usr/lib/libcrypto.so.3, which the old openssl brings.
+Nothing was run: pacman would refuse this undo. The rescue entry in the boot menu can put everything back.
+
+Script done on 2026-11-22 16:47:50+00:00 [COMMAND_EXIT_CODE="4"]

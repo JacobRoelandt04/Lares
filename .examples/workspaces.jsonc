@@ -1,0 +1,10 @@
+// workspaces.jsonc -- the workspaces' dots round the clock (modules/bar/workspaces). The template of
+// ~/.config/quickshell/config/workspaces.jsonc. Every key is optional and every value below IS the default. Read hot. Comments are allowed.
+{
+    // The workspaces that always have a dot, whether they exist or not (a number 1 .. 20 each, 1 to 10 of them). A workspace that
+    // exists beside these gets a dot while it exists. The groove has room for two dots on each side of the clock; more stand closer.
+    "shown": [1, 2, 3, 4],
+    // "all": every bar shows every workspace. "screen": a bar shows only the workspaces that are on its own display (and, of "shown", the
+    // ones that are nowhere yet or that Panorama keeps on that display). "all" | "screen".
+    "scope": "all"
+}

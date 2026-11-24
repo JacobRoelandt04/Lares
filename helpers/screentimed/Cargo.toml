@@ -1,0 +1,38 @@
+[package]
+name = "screentimed"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Screen-time daemon of the screentime module: per-app focused-window time from Hyprland's event socket, idle fed from outside (libc + serde_json only)"
+publish = false
+
+[lib]
+name = "screentimed"
+path = "src/lib.rs"
+
+[[bin]]
+name = "screentimed"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1"
+
+# ARMs: faults armed on purpose, built only by the probes (a gate that has never
+# been seen failing proves nothing). Never enabled in the installed binary.
+[features]
+arm-nobackdate = []   # idle feed does not remove the idle time (cargo test)
+arm-nosplit = []      # the day roll does not split the open interval (cargo test)
+arm-title = []        # window titles leak into the app name (replay probe)
+arm-dst = []          # hours are bucketed by UTC hour, not local (replay probe)
+arm-nopidfd = []      # the lock pid is never watched (daemon probe)
+arm-ctlwait = []      # ctl waits for a reply (daemon probe)
+arm-tick = []         # a 1 s timer is always armed (overhead gate)
+arm-bounce = []       # a stay under MIN_STAY_MS counts as a switch (cargo test)
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

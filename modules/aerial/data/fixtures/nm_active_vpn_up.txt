@@ -1,0 +1,9 @@
+HomeNet-AP 1:a0ba3e32-ac3f-5cc1-81f5-29baedd38200:802-11-wireless:wlp47s0:activated
+pvpn-killswitch-ipv6:45f6cbcf-25be-5bf0-a123-3cc3aebf6771:dummy:ipv6leakintrf0:activated
+ProtonVPN NL#799:06bcf03c-eed9-537c-ad57-f28b81b552bd:wireguard:proton0:activated
+lo:0a529d0b-0bd8-5ea7-91dc-b4e4657e7b6a:loopback:lo:activated
+br-12d09e81b6d0:a551d481-dfd8-5416-a90a-720583a94b2c:bridge:br-12d09e81b6d0:activated
+br-44b0d84f209b:120b6f23-24fa-5e08-887c-6511b02557be:bridge:br-44b0d84f209b:activated
+br-4cd59f5988bb:16b81d83-5634-55e6-9422-f222dea1902e:bridge:br-4cd59f5988bb:activated
+br-96a749755545:382a522f-9c84-513f-bae6-d11395e3de18:bridge:br-96a749755545:activated
+docker0:215284c7-dff8-50a4-96f2-98037f0a37e3:bridge:docker0:activated

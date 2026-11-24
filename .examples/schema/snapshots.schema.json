@@ -1,0 +1,158 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "snapshots.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "enabled": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "false: no update makes a snapshot (a snapshot you ask for with `lares-snapshot create` still works).\n\nTakes true or false. Default: true."
+  },
+  "rule": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "minPackages": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 9999,
+     "default": 40,
+     "x-wants": "a whole number 1 .. 9999",
+     "description": "A snapshot is made before an update that installs or upgrades at least this many packages (1 to 9999).\n\nTakes a whole number 1 .. 9999. Default: 40."
+    },
+    "critical": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "x-wants": "a list of texts",
+     "description": "Takes a list of texts."
+    },
+    "criticalAlso": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Or that touches one of these packages, by name; `*` matches any text. This list replaces the built-in one (kernels, graphics driver, glibc, systemd, pacman and so on).\n\"critical\": [\"linux\", \"linux-lts\", \"nvidia*\", \"mesa\", \"glibc\", \"systemd\", \"pacman\"],\nPackages to add to the built-in list without replacing it.\n\nTakes a list of texts. Default: []."
+    }
+   }
+  },
+  "keep": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 50,
+   "default": 5,
+   "x-wants": "a whole number 1 .. 50",
+   "description": "How many of the newest snapshots stay (1 to 50). A snapshot you mark as kept stays on top of these.\n\nTakes a whole number 1 .. 50. Default: 5."
+  },
+  "minFreeGB": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 500,
+   "default": 10,
+   "x-wants": "a number 1 .. 500",
+   "description": "The update stops with nothing installed when a snapshot would leave less than this much free disk space, in GB (1 to 500).\n\nTakes a number 1 .. 500. Default: 10."
+  },
+  "maxAddedGB": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 500,
+   "default": 15,
+   "x-wants": "a number 1 .. 500",
+   "description": "A snapshot that adds more than this many GB to the repository is stopped (1 to 500). The first snapshot is never limited this way.\n\nTakes a number 1 .. 500. Default: 15."
+  },
+  "maxMinutes": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 120,
+   "default": 15,
+   "x-wants": "a number 1 .. 120",
+   "description": "A snapshot that takes longer than this many minutes is stopped (1 to 120). The first snapshot gets 60 minutes.\n\nTakes a number 1 .. 120. Default: 15."
+  },
+  "prime": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "After an update, copy what it brought in the background (when the computer is idle), so the snapshot before the next update is short.\n\nTakes true or false. Default: true."
+  },
+  "exclude": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a path"
+   },
+   "default": [],
+   "x-wants": "a list of paths",
+   "description": "More folders to leave out, written in full. Only below /var/lib, /opt, /srv, /root and /usr/local, never /var/lib/pacman, no wildcards.\n\nTakes a list of paths. Default: []."
+  },
+  "onFail": {
+   "enum": [
+    "stop",
+    "continue"
+   ],
+   "default": "stop",
+   "x-wants": "\"stop\" or \"continue\"",
+   "description": "\"stop\": a snapshot that fails stops the update. \"continue\": the update goes on without it.\n\nTakes \"stop\" or \"continue\". Default: \"stop\"."
+  },
+  "offsite": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "Copy the snapshots to Proton Drive as well (lares-offsite).\n\nTakes true or false. Default: false."
+    },
+    "folder": {
+     "type": "string",
+     "pattern": "^/my-files/.+",
+     "default": "/my-files/Lares snapshots",
+     "x-wants": "a text like /my-files/Lares snapshots",
+     "description": "The folder on Proton Drive that holds the copies (it begins with /my-files/). Every machine has a folder of its own in it, and every repository one in that.\n\nTakes a text like /my-files/Lares snapshots. Default: \"/my-files/Lares snapshots\"."
+    },
+    "machine": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "description": "This machine's folder; empty: the host's name.\n\nTakes a text. Default: \"\"."
+    },
+    "onBattery": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "Also copy while running on the battery.\n\nTakes true or false. Default: false."
+    },
+    "metered": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "Also copy on a metered connection.\n\nTakes true or false. Default: false."
+    },
+    "everyHours": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 720,
+     "default": 24,
+     "x-wants": "a number 1 .. 720",
+     "description": "A copy at most every this many hours (1 to 720), and one soon after an update that made a snapshot.\n\nTakes a number 1 .. 720. Default: 24."
+    },
+    "afterUpdate": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,639 @@
+#!/usr/bin/env python3
+"""silicon-helper STAND-IN -- the helper of HELPER_PROTOCOL.md (v1), in Python, over a fake tree.
+
+    silicon-helper --sysfs-root <dir> --state-dir <dir> [--proc-root <dir>] [--modules-root <dir>] [--run-root <dir>] <command> [key=value ...]
+
+Written against docs/contracts/silicon_helper_protocol.md, not
+against the real helper (helpers/silicon_helper, a Rust binary built by another stream): the data
+layer's probe (tools/dev/silicon_service_probe.sh) runs against this, and again against the real binary in
+its test mode when that exists. It implements what the shell calls:
+
+    status                         unprivileged: features, values, lists, limits, paths, prechecks, mux, boot
+    apply profile= governor= epp= turbo= max_perf_pct= pl1_w= pl2_w=      any subset, validated whole first
+    set-charge-limit 80|100        set-boot <apply args>      mux-request dgpu|hybrid      mux-cancel
+    mux-prompt-shown               mux-confirm                (systemd-only commands: refused)
+
+SAFETY. It works ONLY on a fake tree: with no `--sysfs-root` it answers exit 3 and reads nothing; every
+path is `<root>/sys/...`; as root (euid 0) any test option answers exit 4, nothing read or written.
+Test-mode faults, as the protocol has them: SILICON_TEST_FAULTS=<knob>:<fault>[,...] with `eio`,
+`ignore` or `clamp:<value>` (knob = a result `knob`). The MUX pre-checks are the real one's: for dGPU-only
+nvidia in <proc-root>/modules, and under <modules-root> a DKMS nvidia module (updates/dkms/nvidia.ko*) for
+every kernel directory that has a `pkgbase`; for BOTH directions silicon-mux.service active -- judged, as the
+real one does, by the link systemd keeps for an active unit, `<run-root>/run/systemd/units/invocation:
+silicon-mux.service` (or `<run-root>/systemd/units/...` when <run-root> is the run directory itself): it
+FAILS OPEN when no unit at all has such a link, and is not looked at without --run-root. A refused request
+carries the pre-check's `why`, "; "-joined. Every call is appended to $SILICON_STUB_LOG_DIR/helper.log when
+that is set.
+Exit codes: 0 done and read back, 1 a write failed or read back wrong, 2 refused (nothing written),
+3 I/O before any write, 4 test mode as root.
+"""
+import glob
+import json
+import os
+import sys
+import time
+
+PROTO = 1
+APPLY_KNOBS = ["profile", "governor", "epp", "turbo", "maxPerfPct", "pl1W", "pl2W"]
+ARG_KNOB = {"profile": "profile", "governor": "governor", "epp": "epp", "turbo": "turbo",
+            "max_perf_pct": "maxPerfPct", "pl1_w": "pl1W", "pl2_w": "pl2W"}
+CAP_FLOOR_W = 8
+THROTTLE = {"quiet": "2", "balanced": "0", "performance": "1"}
+
+
+class Refused(Exception):
+    def __init__(self, knob, code, why):
+        Exception.__init__(self, why)
+        self.knob, self.code, self.why = knob, code, why
+
+
+class H:
+    def __init__(self, opts, faults):
+        self.root = opts["sysfs-root"]
+        self.proc = opts["proc-root"]
+        self.state = opts["state-dir"]
+        self.modules = opts["modules-root"]
+        run = opts["run-root"]
+        # where systemd keeps one `invocation:<unit>` link per ACTIVE unit; None = not looked at (test mode, no --run-root)
+        self.units = None if run is None else os.path.join(run + "/run" if os.path.isdir(run + "/run") else run, "systemd", "units")
+        self.faults = faults
+
+    # ---- files ------------------------------------------------------------------------------
+    def p(self, path):
+        return self.root + path
+
+    def read(self, path, default=None):
+        try:
+            with open(self.p(path)) as f:
+                return f.read().strip()
+        except OSError:
+            return default
+
+    def write(self, path, text):
+        # never created: an absent knob is a hidden feature, not a file
+        full = self.p(path)
+        if not os.path.exists(full):
+            raise OSError("no such file")
+        with open(full, "w") as f:
+            f.write(text)
+
+    def exists(self, path):
+        return os.path.exists(self.p(path))
+
+    def policies(self):
+        out = glob.glob(self.p("/sys/devices/system/cpu/cpufreq/policy*"))
+        out = [d for d in out if os.path.basename(d)[6:].isdigit()]
+        out.sort(key=lambda d: int(os.path.basename(d)[6:]))
+        return ["/sys/devices/system/cpu/cpufreq/" + os.path.basename(d) for d in out]
+
+    def uniform(self, name):
+        vals = set()
+        for pol in self.policies():
+            v = self.read(pol + "/" + name)
+            if v is not None:
+                vals.add(v)
+        if not vals:
+            return None
+        return vals.pop() if len(vals) == 1 else "mixed"
+
+    def zones(self):
+        return {"msr": "/sys/class/powercap/intel-rapl:0", "mmio": "/sys/class/powercap/intel-rapl-mmio:0"}
+
+    def cap(self, zone, idx):
+        v = self.read(self.zones()[zone] + "/constraint_%d_power_limit_uw" % idx)
+        return None if v is None else int(v) / 1e6
+
+    def state_json(self, name):
+        try:
+            with open(os.path.join(self.state, name)) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    def put_state(self, name, obj):
+        os.makedirs(self.state, exist_ok=True)
+        tmp = os.path.join(self.state, name + ".tmp")
+        with open(tmp, "w") as f:
+            json.dump(obj, f)
+            f.write("\n")
+        os.replace(tmp, os.path.join(self.state, name))
+
+    # ---- status -----------------------------------------------------------------------------
+    def firmware_caps(self):
+        rec = self.state_json("firmware_caps.json")
+        if not rec:
+            return None
+        out = {}
+        for k, key in (("pl1", "pl1W"), ("pl2", "pl2W")):
+            vals = [rec[z][key] for z in ("msr", "mmio") if isinstance(rec.get(z), dict) and isinstance(rec[z].get(key), (int, float))]
+            if not vals:
+                return None
+            out[k] = min(vals)
+        return out
+
+    def dgpu(self):
+        for d in sorted(glob.glob(self.p("/sys/bus/pci/devices/*"))):
+            pci = os.path.basename(d)
+            vendor = self.read("/sys/bus/pci/devices/%s/vendor" % pci, "")
+            cls = self.read("/sys/bus/pci/devices/%s/class" % pci, "")
+            if vendor != "0x10de" or not cls.startswith("0x03"):
+                continue
+            node = {"pci": pci, "card": None, "render": None, "nvidia": None,
+                    "powerState": self.p("/sys/bus/pci/devices/%s/power_state" % pci) if self.exists("/sys/bus/pci/devices/%s/power_state" % pci) else None}
+            for e in sorted(os.listdir(os.path.realpath(d) + "/drm") if os.path.isdir(os.path.realpath(d) + "/drm") else []):
+                if e.startswith("card") and e[4:].isdigit():
+                    node["card"] = "/dev/dri/" + e
+                if e.startswith("renderD") and e[7:].isdigit():
+                    node["render"] = "/dev/dri/" + e
+            info = None
+            if self.proc:
+                try:
+                    with open("%s/driver/nvidia/gpus/%s/information" % (self.proc, pci)) as f:
+                        info = f.read()
+                except OSError:
+                    info = None
+            if info:
+                for line in info.splitlines():
+                    if line.startswith("Device Minor:"):
+                        node["nvidia"] = "/dev/nvidia" + line.split(":")[1].strip()
+            return node
+        return None
+
+    def wiring(self):
+        d = self.dgpu()
+        for c in sorted(glob.glob(self.p("/sys/class/drm/card*-eDP-*"))):
+            try:
+                if open(c + "/status").read().strip() != "connected":
+                    continue
+            except OSError:
+                continue
+            return "dgpu" if d and d["pci"] in os.path.realpath(c) else "hybrid"
+        return None
+
+    def status(self):
+        profs = self.read("/sys/firmware/acpi/platform_profile_choices")
+        pol = self.policies()
+        first = pol[0] if pol else None
+        epps = self.read(first + "/energy_performance_available_preferences") if first else None
+        govs = self.read(first + "/scaling_available_governors") if first else None
+        ceil = self.firmware_caps()
+        zones = {z: {"pl1W": self.cap(z, 0), "pl2W": self.cap(z, 1)} for z in self.zones()}
+        zones = {z: (v if v["pl1W"] is not None and v["pl2W"] is not None else None) for z, v in zones.items()}
+        present = [v for v in zones.values() if v]
+        caps = {"pl1W": min(v["pl1W"] for v in present), "pl2W": min(v["pl2W"] for v in present), "zones": zones} if present else None
+        mux = self.read("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode")
+        minpct = self.read("/sys/devices/system/cpu/intel_pstate/min_perf_pct")
+        gov = self.uniform("scaling_governor")
+        nt = self.read("/sys/devices/system/cpu/intel_pstate/no_turbo")
+        bat = self.read_battery_path()
+        coretemp = None
+        for h in sorted(glob.glob(self.p("/sys/class/hwmon/hwmon*"))):
+            if self.read(h[len(self.root):] + "/name") == "coretemp":
+                coretemp = h
+        rc6 = None
+        for c in sorted(glob.glob(self.p("/sys/class/drm/card*/gt/gt0/rc6_residency_ms"))):
+            rc6 = c
+        features = {
+            "profile": profs is not None, "epp": epps is not None, "turbo": nt is not None, "governor": govs is not None,
+            "maxPerfPct": self.exists("/sys/devices/system/cpu/intel_pstate/max_perf_pct"),
+            "caps": caps is not None and ceil is not None, "chargeLimit": bat is not None and self.exists("/sys/class/power_supply/BAT0/charge_control_end_threshold"),
+            "mux": mux is not None,
+        }
+        rec = self.state_json("mux.json")
+        pre_ok, pre_why = self.mux_prechecks("dgpu")
+        cl = self.read("/sys/class/power_supply/BAT0/charge_control_end_threshold")
+        lists_epps = [e for e in epps.split() if e != "default"] if epps else []
+        return {
+            "features": features,
+            "values": {
+                "profile": self.read("/sys/firmware/acpi/platform_profile"),
+                "epp": self.uniform("energy_performance_preference"),
+                "turbo": None if nt is None else nt == "0",
+                "governor": gov,
+                "maxPerfPct": int(self.read("/sys/devices/system/cpu/intel_pstate/max_perf_pct")) if features["maxPerfPct"] else None,
+                "caps": caps,
+                "chargeLimit": int(cl) if cl and cl.lstrip("-").isdigit() else None,
+                "muxStored": None if mux is None else ("hybrid" if mux == "1" else "dgpu"),
+            },
+            "lists": {
+                "profiles": [x for x in profs.split() if x != "custom"] if profs else [],
+                "epps": lists_epps,
+                "governors": govs.split() if govs else [],
+            },
+            "limits": {
+                "capFloorW": CAP_FLOOR_W,
+                "capCeilW": ceil,
+                "maxPerfPct": {"min": int(minpct) if minpct and minpct.isdigit() else 1, "max": 100},
+                "eppLocked": gov == "performance",
+            },
+            "paths": {
+                "dgpu": self.dgpu(),
+                "battery": bat, "ac": self.p("/sys/class/power_supply/AC0") if self.exists("/sys/class/power_supply/AC0") else None,
+                "coretemp": coretemp, "rc6": rc6,
+                "cpufreq": self.p("/sys/devices/system/cpu/cpufreq") if self.exists("/sys/devices/system/cpu/cpufreq") else None,
+            },
+            "prechecks": {"mux": {"ok": pre_ok, "why": pre_why}},
+            "mux": {"stored": None if mux is None else ("hybrid" if mux == "1" else "dgpu"), "wiringNow": self.wiring(), "record": rec},
+            "boot": {"id": self.read_proc_boot_id(), "applied": True},
+        }
+
+    MUX_UNIT = "silicon-mux.service"
+
+    def mux_unit_check(self):
+        """Is the unit that writes a queued change at shutdown active? -> (ok, why). Fails open."""
+        if self.units is None:
+            return True, ""
+        if os.path.lexists(os.path.join(self.units, "invocation:" + self.MUX_UNIT)):
+            return True, ""
+        try:
+            names = os.listdir(self.units)
+        except OSError:
+            names = []
+        if not any(n.startswith("invocation:") for n in names):
+            return True, ""
+        return False, ("%s is not active, so a GPU mode change queued now would never be written at shutdown "
+                       "(sudo systemctl start %s)" % (self.MUX_UNIT, self.MUX_UNIT))
+
+    def mux_prechecks(self, want):
+        """What a request for `want` has to pass: the NVIDIA stack's checks for dGPU-only, and for both directions the
+        unit that would write it at shutdown being active -> (ok, what is wrong, "; "-joined)."""
+        wrong = []
+        if want == "dgpu":
+            ok, why = self.mux_precheck()
+            if not ok:
+                wrong.append(why)
+        ok, why = self.mux_unit_check()
+        if not ok:
+            wrong.append(why)
+        return not wrong, "; ".join(wrong)
+
+    def mux_precheck(self):
+        """nvidia loaded, and a DKMS-built nvidia module for EVERY installed kernel -> (ok, why)."""
+        try:
+            with open(self.proc + "/modules") as f:
+                loaded = any(line.split(" ")[0] == "nvidia" for line in f)
+        except (OSError, TypeError):
+            loaded = False
+        if not loaded:
+            return False, "the nvidia module is not loaded"
+        if self.modules is None:
+            return True, ""
+        missing = []
+        try:
+            kernels = sorted(d for d in os.listdir(self.modules) if os.path.exists(os.path.join(self.modules, d, "pkgbase")))
+        except OSError:
+            kernels = []
+        for k in kernels:
+            if not glob.glob(os.path.join(self.modules, k, "updates", "dkms", "nvidia.ko*")):
+                missing.append(k)
+        if missing:
+            return False, "no DKMS nvidia module for kernel " + ", ".join(missing)
+        return True, ""
+
+    def read_battery_path(self):
+        return self.p("/sys/class/power_supply/BAT0") if self.exists("/sys/class/power_supply/BAT0") else None
+
+    def read_proc_boot_id(self):
+        try:
+            with open(self.proc + "/sys/kernel/random/boot_id") as f:
+                return f.read().strip()
+        except (OSError, TypeError):
+            return "unknown"
+
+    # ---- validation (the whole call, before anything is written) ----------------------------
+    def validate(self, patch, st):
+        f, L, lim, v = st["features"], st["lists"], st["limits"], st["values"]
+        order = [k for k in APPLY_KNOBS if k in patch]
+        for k in order:
+            w = patch[k]
+            if k == "profile":
+                if not f["profile"]:
+                    raise Refused(k, "absent", "platform profiles are not available")
+                if w not in L["profiles"]:
+                    raise Refused(k, "refused", "not one of the kernel's profiles (%s)" % ", ".join(L["profiles"]))
+            elif k == "governor":
+                if not f["governor"]:
+                    raise Refused(k, "absent", "the governor cannot be set")
+                if w not in L["governors"]:
+                    raise Refused(k, "refused", "not one of the kernel's governors (%s)" % ", ".join(L["governors"]))
+            elif k == "epp":
+                if not f["epp"]:
+                    raise Refused(k, "absent", "the energy preference cannot be set")
+                if w not in L["epps"]:
+                    raise Refused(k, "refused", "not one of the kernel's preferences (%s)" % ", ".join(L["epps"]))
+                gov_after = patch.get("governor", v["governor"])
+                if gov_after == "performance":
+                    raise Refused(k, "locked", "fixed while the governor is performance")
+            elif k == "turbo":
+                if not f["turbo"]:
+                    raise Refused(k, "absent", "turbo cannot be switched")
+                if w not in (0, 1):
+                    raise Refused(k, "refused", "turbo is 0 or 1")
+            elif k == "maxPerfPct":
+                if not f["maxPerfPct"]:
+                    raise Refused(k, "absent", "the maximum performance cannot be set")
+                mp = lim["maxPerfPct"]
+                if not isinstance(w, int) or w < mp["min"] or w > mp["max"]:
+                    raise Refused(k, "refused", "outside %d to %d" % (mp["min"], mp["max"]))
+            elif k in ("pl1W", "pl2W"):
+                if not f["caps"] or lim["capCeilW"] is None:
+                    raise Refused(k, "absent", "power caps are not writable here")
+                ceil = lim["capCeilW"]["pl1" if k == "pl1W" else "pl2"]
+                if w == "firmware":
+                    continue
+                if w > ceil:
+                    raise Refused(k, "refused", "above the firmware's %g W" % ceil)
+                if w < lim["capFloorW"]:
+                    raise Refused(k, "refused", "below the %g W floor" % lim["capFloorW"])
+        if "pl1W" in patch or "pl2W" in patch:
+            cur = (v["caps"] or {})
+            ceil = lim["capCeilW"] or {}
+
+            def at(k, ck, cc):
+                if k in patch:
+                    return ceil.get(cc) if patch[k] == "firmware" else patch[k]
+                return cur.get(ck)
+            p1, p2 = at("pl1W", "pl1W", "pl1"), at("pl2W", "pl2W", "pl2")
+            if p1 is not None and p2 is not None and p1 > p2:
+                raise Refused("pl1W" if "pl1W" in patch else "pl2W", "refused", "PL1 cannot be above PL2")
+
+    # ---- writing one knob (+ faults), reading it back ---------------------------------------
+    def fault(self, knob):
+        return self.faults.get(knob)
+
+    def put_knob(self, knob, want, st):
+        """-> (got, code, why). Raises nothing: a failed write is a result."""
+        flt = self.fault(knob)
+        value = want
+        if flt and flt[0] == "clamp":
+            value = flt[1]
+        try:
+            if flt and flt[0] == "eio":
+                raise OSError(5, "Input/output error")
+            if flt and flt[0] == "ignore":
+                pass
+            else:
+                self.apply_knob(knob, value, st)
+        except OSError as e:
+            return self.got(knob, st), "io", "write failed: %s" % (e.strerror or e)
+        got = self.got(knob, st)
+        if not same(got, want):
+            return got, "mismatch", "written, but the kernel holds %s" % (got,)
+        return got, "ok", ""
+
+    def apply_knob(self, knob, w, st):
+        if knob == "profile":
+            self.write("/sys/firmware/acpi/platform_profile", w + "\n")
+            if self.exists("/sys/class/platform-profile/platform-profile-0/profile"):
+                self.write("/sys/class/platform-profile/platform-profile-0/profile", w + "\n")
+            if self.exists("/sys/devices/platform/asus-nb-wmi/throttle_thermal_policy"):
+                self.write("/sys/devices/platform/asus-nb-wmi/throttle_thermal_policy", THROTTLE.get(w, "0") + "\n")
+        elif knob in ("governor", "epp"):
+            name = "scaling_governor" if knob == "governor" else "energy_performance_preference"
+            for pol in self.policies():
+                self.write(pol + "/" + name, w + "\n")
+        elif knob == "turbo":
+            self.write("/sys/devices/system/cpu/intel_pstate/no_turbo", ("0" if w else "1") + "\n")
+        elif knob == "maxPerfPct":
+            self.write("/sys/devices/system/cpu/intel_pstate/max_perf_pct", "%d\n" % w)
+        elif knob in ("pl1W", "pl2W"):
+            ceil = st["limits"]["capCeilW"]["pl1" if knob == "pl1W" else "pl2"]
+            watts = ceil if w == "firmware" else w
+            for z, base in self.zones().items():
+                if self.exists(base + "/constraint_0_power_limit_uw"):
+                    self.write(base + "/constraint_%d_power_limit_uw" % (0 if knob == "pl1W" else 1), "%d\n" % round(watts * 1e6))
+        elif knob == "chargeLimit":
+            self.write("/sys/class/power_supply/BAT0/charge_control_end_threshold", "%d\n" % w)
+
+    def got(self, knob, st):
+        if knob == "profile":
+            return self.read("/sys/firmware/acpi/platform_profile")
+        if knob == "governor":
+            return self.uniform("scaling_governor")
+        if knob == "epp":
+            return self.uniform("energy_performance_preference")
+        if knob == "turbo":
+            return self.read("/sys/devices/system/cpu/intel_pstate/no_turbo") == "0"
+        if knob == "maxPerfPct":
+            return int(self.read("/sys/devices/system/cpu/intel_pstate/max_perf_pct"))
+        if knob in ("pl1W", "pl2W"):
+            idx = 0 if knob == "pl1W" else 1
+            vals = [self.cap(z, idx) for z in self.zones() if self.cap(z, idx) is not None]
+            return min(vals) if vals else None
+        if knob == "chargeLimit":
+            return int(self.read("/sys/class/power_supply/BAT0/charge_control_end_threshold"))
+        return None
+
+
+def same(a, b):
+    if a == b:
+        return True
+    if b == "firmware":
+        return True
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        return False
+
+
+def parse_faults(text):
+    out = {}
+    for item in [x for x in text.split(",") if x]:
+        parts = item.split(":")
+        if len(parts) >= 2:
+            if parts[1] == "clamp" and len(parts) == 3:
+                try:
+                    v = float(parts[2])
+                    v = int(v) if v == int(v) else v
+                except ValueError:
+                    v = parts[2]
+                out[parts[0]] = ("clamp", v)
+            else:
+                out[parts[0]] = (parts[1],)
+    return out
+
+
+def parse_args(argv):
+    """key=value pairs of an apply -> the patch (intent names), or raise Refused."""
+    patch = {}
+    for a in argv:
+        if "=" not in a:
+            raise Refused("", "refused", "argument %r is not key=value" % a)
+        k, v = a.split("=", 1)
+        if k not in ARG_KNOB:
+            raise Refused("", "refused", "unknown argument %s" % k)
+        knob = ARG_KNOB[k]
+        if knob == "turbo":
+            if v not in ("0", "1"):
+                raise Refused(knob, "refused", "turbo is 0 or 1")
+            patch[knob] = int(v)
+        elif knob == "maxPerfPct":
+            if not v.lstrip("-").isdigit():
+                raise Refused(knob, "refused", "max_perf_pct is a whole number")
+            patch[knob] = int(v)
+        elif knob in ("pl1W", "pl2W"):
+            if v == "firmware":
+                patch[knob] = "firmware"
+            else:
+                try:
+                    patch[knob] = float(v) if "." in v else int(v)
+                except ValueError:
+                    raise Refused(knob, "refused", "%s is a number of watts or 'firmware'" % k)
+        else:
+            patch[knob] = v
+    return patch
+
+
+def results_for_refusal(patch, bad):
+    out = []
+    for k in [x for x in APPLY_KNOBS if x in patch]:
+        if k == bad.knob:
+            out.append({"knob": k, "want": patch[k], "got": None, "ok": False, "code": bad.code, "why": bad.why})
+        else:
+            out.append({"knob": k, "want": patch[k], "got": None, "ok": False, "code": "refused", "why": "not applied: %s was refused" % bad.knob})
+    return out
+
+
+def log(argv):
+    d = os.environ.get("SILICON_STUB_LOG_DIR")
+    if d:
+        with open(os.path.join(d, "helper.log"), "a") as f:
+            f.write("%d %s\n" % (int(time.time() * 1000), " ".join(argv)))
+
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def main(argv):
+    log(argv)
+    opts = {"sysfs-root": None, "proc-root": None, "state-dir": None, "dev-root": None, "modules-root": None, "run-root": None}
+    args = list(argv)
+    while args and args[0].startswith("--"):
+        name = args.pop(0)[2:]
+        if name not in opts or not args:
+            emit({"ok": False, "why": "unknown option --%s" % name})
+            return 2
+        opts[name] = args.pop(0)
+    in_test = any(v is not None for v in opts.values()) or any(os.environ.get(k) for k in ("SILICON_TEST_FAULTS", "SILICON_TEST_REBOOT"))
+    if in_test and os.geteuid() == 0:
+        emit({"ok": False, "why": "test mode is not honoured as root"})
+        return 4
+    if opts["sysfs-root"] is None:
+        emit({"ok": False, "why": "this is the test stand-in: it works only on a fake tree (--sysfs-root)"})
+        return 3
+    if not args:
+        emit({"ok": False, "why": "no command"})
+        return 2
+    cmd, rest = args[0], args[1:]
+    h = H(opts, parse_faults(os.environ.get("SILICON_TEST_FAULTS", "")))
+    if os.environ.get("PKEXEC_UID") and cmd in ("boot-apply", "mux-apply", "mux-guard"):
+        emit({"ok": False, "results": [], "why": "%s is for systemd only" % cmd})
+        return 2
+    try:
+        st = h.status()
+    except OSError as e:
+        emit({"ok": False, "why": "status unreadable: %s" % e})
+        return 3
+    if cmd == "status":
+        emit({"ok": True, "proto": PROTO, "status": st})
+        return 0
+    if cmd in ("boot-apply", "mux-apply", "mux-guard"):
+        emit({"ok": False, "results": [], "status": st, "why": "the stand-in does not run %s" % cmd})
+        return 2
+    if cmd in ("apply", "set-boot"):
+        try:
+            patch = parse_args(rest)
+            h.validate(patch, st)
+        except Refused as bad:
+            emit({"ok": False, "results": results_for_refusal(patch if "patch" in dir() else {}, bad) if bad.knob else [{"knob": "", "want": None, "got": None, "ok": False, "code": bad.code, "why": bad.why}], "status": st})
+            return 2
+        if cmd == "set-boot":
+            h.put_state("boot.json", patch)
+            emit({"ok": True, "results": [{"knob": k, "want": patch[k], "got": patch[k], "ok": True, "code": "ok", "why": ""} for k in APPLY_KNOBS if k in patch], "status": st})
+            return 0
+        results, failed = [], False
+        for k in [x for x in APPLY_KNOBS if x in patch]:
+            got, code, why = h.put_knob(k, patch[k], st)
+            results.append({"knob": k, "want": patch[k], "got": got, "ok": code == "ok", "code": code, "why": why})
+            failed = failed or code != "ok"
+        emit({"ok": not failed, "results": results, "status": h.status()})
+        return 1 if failed else 0
+    if cmd == "set-charge-limit":
+        if len(rest) != 1 or rest[0] not in ("80", "100"):
+            emit({"ok": False, "results": [{"knob": "chargeLimit", "want": rest[0] if rest else None, "got": None, "ok": False, "code": "refused", "why": "the charge limit is 80 or 100"}], "status": st})
+            return 2
+        if not st["features"]["chargeLimit"]:
+            emit({"ok": False, "results": [{"knob": "chargeLimit", "want": int(rest[0]), "got": None, "ok": False, "code": "absent", "why": "the battery has no charge limit"}], "status": st})
+            return 2
+        got, code, why = h.put_knob("chargeLimit", int(rest[0]), st)
+        if code != "io":
+            h.put_state("charge_limit.json", {"pct": int(rest[0])})
+        emit({"ok": code == "ok", "results": [{"knob": "chargeLimit", "want": int(rest[0]), "got": got, "ok": code == "ok", "code": code, "why": why}], "status": h.status()})
+        return 0 if code == "ok" else 1
+    if cmd in ("mux-request", "mux-cancel", "mux-prompt-shown", "mux-confirm"):
+        return mux(h, st, cmd, rest)
+    emit({"ok": False, "why": "unknown command %s" % cmd})
+    return 2
+
+
+def mux(h, st, cmd, rest):
+    rec = st["mux"]["record"]
+    now = int(time.time() * 1000)
+
+    def done(ok, why, want=None, got=None, code=None):
+        emit({"ok": ok, "results": [{"knob": "mux", "want": want, "got": got, "ok": ok, "code": code or ("ok" if ok else "refused"), "why": why}], "status": h.status()})
+        return 0 if ok else 2
+    if not st["features"]["mux"]:
+        return done(False, "this machine has no MUX switch", None, None, "absent")
+    if cmd == "mux-request":
+        want = rest[0] if rest else ""
+        if want not in ("dgpu", "hybrid"):
+            return done(False, "the MUX is dgpu or hybrid", want)
+        # the real helper's order: a record that is waiting for the user or for its first boot refuses everything; a request
+        # for what the panel AND the firmware already are cancels a queued one instead; a repeat of the queued one is a
+        # no-op; and only a NEW record has to pass the pre-checks (cancelling needs no unit)
+        if rec and rec.get("state") == "awaiting-keep":
+            return done(False, "a GPU mode change is waiting for your confirmation", want)
+        if rec and rec.get("state") == "applied" and rec.get("bootId") != st["boot"]["id"]:
+            return done(False, "the last GPU mode change has not been checked since the reboot yet", want)
+        stored = st["mux"]["stored"]
+        current = st["mux"]["wiringNow"] or stored
+        if want == current and want == stored:
+            if rec and rec.get("state") in ("queued", "applied"):
+                h.put_state("mux.json", dict(rec, state="cancelled", why="withdrawn: the panel is already wired as " + want))
+            return done(True, "", want, want)
+        if rec and rec.get("state") == "queued" and rec.get("want") == want:
+            return done(True, "already queued", want, want)
+        ok, why = h.mux_prechecks(want)
+        if not ok:
+            return done(False, why or "the pre-check failed", want)
+        rec = {"want": want, "from": current, "state": "queued", "why": "", "requestedAtMs": now,
+               "bootId": st["boot"]["id"], "deadlineMs": None}
+        h.put_state("mux.json", rec)
+        return done(True, "", want, want)
+    if cmd == "mux-cancel":
+        if not rec or rec.get("state") != "queued":
+            return done(False, "no request is queued")
+        h.put_state("mux.json", dict(rec, state="cancelled"))
+        return done(True, "")
+    if cmd == "mux-prompt-shown":
+        if not rec or rec.get("state") != "awaiting-keep":
+            return done(False, "nothing awaits a keep")
+        dl = rec.get("deadlineMs")
+        h.put_state("mux.json", dict(rec, deadlineMs=min(dl, now + 120000) if isinstance(dl, int) else now + 120000))
+        return done(True, "")
+    if cmd == "mux-confirm":
+        if not rec or rec.get("state") != "awaiting-keep":
+            return done(False, "nothing awaits a keep")
+        h.put_state("mux.json", dict(rec, state="kept"))
+        return done(True, "")
+    return done(False, "unknown")
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)

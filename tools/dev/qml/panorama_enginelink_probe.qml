@@ -1,0 +1,210 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import "modules/panorama/data"
+
+// tools/dev/qml/panorama_enginelink_probe.qml -- EngineLink against a STUB hyprctl (it records its argv and answers `ok`, or `error: boom`
+// while EL_DIR/fail exists) and files in EL_DIR. tools/dev/panorama_enginelink_probe.sh runs it. Prints EL lines and "EL RESULT PASS|FAIL".
+Scope {
+    id: root
+    property string dir: Quickshell.env("EL_DIR")
+    // smoked bare (no runner, no stub hyprctl): build nothing that reaches out, quit at once
+    readonly property bool bare: !root.dir
+    property int fails: 0
+    property int checks: 0
+    property int changes: 0
+    property int step: 0
+    property int waited: 0
+    readonly property string sig: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
+
+    function check(name: string, ok: bool, detail: string): void {
+        root.checks++;
+        if (!ok)
+            root.fails++;
+        console.log("EL " + (ok ? "ok  " : "FAIL") + " " + name + (ok ? "" : "  [" + detail + "]"));
+    }
+
+    EngineLink {
+        id: link
+        live: !root.bare
+        hyprDir: root.dir + "/hypr"
+        runtimeDir: root.dir + "/rt/lares"
+        engineSource: Quickshell.env("EL_ENGINE")
+        hyprctl: root.dir + "/bin/hyprctl"
+        onStateChanged: root.changes++
+    }
+
+    // `then` runs when the command has EXITED: a step that flips a file the stub reads and then calls the link raced the stub
+    // (the call's hyprctl ran before `fail` existed: "step 13 reached its state" red about one run in three)
+    property var _then: null
+    function sh(cmd: string, then: var): void {
+        root._then = then || null;
+        runner.command = ["sh", "-c", cmd];
+        runner.running = true;
+    }
+    Process {
+        id: runner
+        onExited: {
+            const f = root._then;
+            root._then = null;
+            if (f)
+                f();
+        }
+        stdout: StdioCollector {
+            id: runOut
+        }
+    }
+    FileView {
+        id: logView
+        path: root.dir + "/hyprctl.log"
+        blockLoading: true
+        blockAllReads: true
+        printErrors: false
+    }
+    function hyprLog(): string {
+        logView.reload();
+        return logView.text();
+    }
+    FileView {
+        id: luaView
+        path: root.dir + "/hypr/config/panorama.lua"
+        blockLoading: true
+        blockAllReads: true
+        printErrors: false
+    }
+    function luaText(): string {
+        luaView.reload();
+        return luaView.text();
+    }
+    function putState(session: string, engine: int, serial: int): void {
+        root.sh("mkdir -p '" + root.dir + "/rt/lares' && printf '%s' '" + JSON.stringify({ v: 1, session: session, serial: serial || 1, engine: engine,
+                trial: { token: "t1", phase: "trying", verdict: "" }, bound: [], log: [] }) + "' > '" + root.dir + "/rt/lares/panorama.json.tmp' && mv '" + root.dir + "/rt/lares/panorama.json.tmp' '" + root.dir + "/rt/lares/panorama.json'");
+    }
+
+    // the version the tree's engine.lua says (the state of an engine that is current)
+    readonly property int engineNow: 6
+    readonly property var data: ({ v: 1, displays: { "a b": { label: "x", custom: false, internal: true, port: "eDP-1", placeholder: false } },
+                                   setups: {}, split: { "3": "a b" } })
+
+    // Each step: run() starts something, ready() says when to judge, judge() checks.
+    readonly property var steps: [
+        { run: () => {}, ready: () => link.stateName === "missing" && link.why !== "", judge: () => {
+            root.check("no config/panorama.lua: missing, with words", link.stateName === "missing" && link.why.indexOf("panorama-import") >= 0, link.why);
+        } },
+        // a fresh machine: the hypr config loads the file (a clone of the user's), the file is generated and git-ignored, so it is not there
+        { run: () => { root.sh("printf 'pcall(require, \"config/panorama\")\\n' > '" + root.dir + "/hypr/hyprland.lua'", () => link.refresh()); },
+          ready: () => { link.refresh(); return link.fresh; }, judge: () => {
+            root.check("the line is there and the file is not: fresh, and no step of the user's is asked for", link.fresh && link.stateName === "missing" && link.why.indexOf("panorama-import") < 0, link.stateName + " / " + link.why);
+        } },
+        { run: () => { root.sh("rm -f '" + root.dir + "/hypr/hyprland.lua'", () => link.refresh()); },
+          ready: () => { link.refresh(); return !link.fresh; }, judge: () => {
+            root.check("neither the line nor the file: not fresh, the import is the user's step", link.stateName === "missing" && link.why.indexOf("panorama-import") >= 0, link.why);
+        } },
+        { run: () => link.writeFile(root.data), ready: () => root.luaText() !== "", judge: () => {
+            const t = root.luaText();
+            root.check("writeFile: the header says generated", t.indexOf("-- Generated by Lares Panorama. Do not edit") === 0, t.slice(0, 80));
+            root.check("writeFile: the data is embedded compact", t.indexOf('local PANORAMA_DATA_JSON = [[{"displays":{"a b":') >= 0, t.slice(0, 300));
+            root.check("writeFile: the engine follows verbatim", t.indexOf("local ENGINE_VERSION = " + root.engineNow) > 0 && t.indexOf("panorama = panorama or {}") > 0);
+        } },
+        { run: () => {}, ready: () => link.stateName === "missing" && link.why.indexOf("does not load") >= 0, judge: () => {
+            root.check("the file exists but no require line: missing", link.stateName === "missing", link.stateName + " / " + link.why);
+        } },
+        { run: () => { root.sh("printf 'pcall(require, \"config/panorama\")\\n' > '" + root.dir + "/hypr/hyprland.lua'"); },
+          ready: () => { link.refresh(); return link.stateName === "error"; }, judge: () => {
+            root.check("required but no answer in this session: error", link.stateName === "error" && link.why.indexOf("not answered") >= 0, link.why);
+        } },
+        { run: () => link.evalLoad(), ready: () => root.hyprLog().indexOf("eval") >= 0, judge: () => {
+            root.check("evalLoad: hyprctl eval dofile(<the generated file>)", root.hyprLog().indexOf("eval dofile([[" + root.dir + "/hypr/config/panorama.lua]])") >= 0, root.hyprLog());
+        } },
+        { run: () => root.putState(root.sig, root.engineNow), ready: () => link.stateName === "active", judge: () => {
+            root.check("the state of this session, current engine: active", link.stateName === "active" && link.version === root.engineNow && link.state.engine === root.engineNow, link.stateName);
+            root.check("stateChanged fired", root.changes >= 1, "" + root.changes);
+        } },
+        { run: () => root.putState(root.sig, 0), ready: () => link.stateName === "stale", judge: () => {
+            root.check("an older engine answered: stale", link.stateName === "stale" && link.version === 0, link.stateName);
+        } },
+        { run: () => root.putState("another-session", root.engineNow), ready: () => link.stateName === "error", judge: () => {
+            root.check("another session's file is no answer: error, state null", link.state === null, JSON.stringify(link.state));
+        } },
+        { run: () => root.putState(root.sig, root.engineNow), ready: () => link.stateName === "active", judge: () => {
+            root.check("the file followed again: active", true, "");
+        } },
+        { run: () => { link.tryCandidate(root.data, "tok-1"); link.shown("tok-1", 32000); link.keep("tok-1"); link.revert("tok-1"); link.reloadData(root.data); },
+          ready: () => root.hyprLog().indexOf("reload_data") >= 0, judge: () => {
+            const l = root.hyprLog().split("\n").filter(x => x.indexOf("eval assert(panorama") === 0);
+            root.check("five calls in the order asked", l.length === 5 && l[0].indexOf("panorama.try(") >= 0 && l[1].indexOf("panorama.shown(") >= 0
+                       && l[2].indexOf("panorama.keep(") >= 0 && l[3].indexOf("panorama.revert(") >= 0 && l[4].indexOf("panorama.reload_data(") >= 0, root.hyprLog());
+            root.check("shown carries the guard's time as a Lua number (panorama.jsonc keepSeconds)", l[1].indexOf("panorama.shown([[tok-1]], 32000)") >= 0, l[1]);
+            root.check("the candidate and the token travel in long brackets", l[0].indexOf('[[{"v":1,"displays":{"a b"') >= 0 && l[0].indexOf("[[tok-1]]") >= 0, l[0]);
+        } },
+        // a list ends in "]": the empty one closed its own bracket early ("[[[]]]", a syntax error that held the link at `error` and kept casting
+        // off for good). The runner also compiles EVERY chunk the stub was handed.
+        { run: () => { link.castKeep([]); link.castKeep(["LARES-CAST-1"]); link.castOpen("cast:wfd:AA:BB"); link.castClose("LARES-CAST-1"); },
+          ready: () => root.hyprLog().indexOf("cast_close") >= 0, judge: () => {
+            const l = root.hyprLog();
+            root.check("cast_keep of no name: the list is inside its own brackets", l.indexOf("panorama.cast_keep([=[[]]=])") >= 0, l);
+            root.check("cast_keep of one name: likewise", l.indexOf('panorama.cast_keep([=[["LARES-CAST-1"]]=])') >= 0, l);
+        } },
+        { run: () => { root.sh("touch '" + root.dir + "/fail'", () => link.keep("tok-2")); },
+          ready: () => link.stateName === "error" && link.why.indexOf("boom") >= 0, judge: () => {
+            root.check("hyprctl says error: boom (exit 0): error with its words", link.why.indexOf("boom") >= 0, link.why);
+        } },
+        { run: () => { root.sh("rm -f '" + root.dir + "/fail'", () => link.keep("tok-3")); },
+          ready: () => link.stateName === "active", judge: () => {
+            root.check("the next ok clears the error", link.lastError === "", link.lastError);
+        } },
+        // a Lua WARNING (exit 0, `warning: ...`) is a call that ran: logged, never an error (round 2: a revert's warning latched `error` for ever)
+        { run: () => { root.sh("touch '" + root.dir + "/warn'", () => link.keep("tok-w")); },
+          ready: () => root.hyprLog().indexOf("tok-w") >= 0, judge: () => {
+            root.check("a Lua warning is no error: still active, nothing latched", link.stateName === "active" && link.lastError === "", link.stateName + " / " + link.lastError);
+        } },
+        { run: () => { root.sh("rm -f '" + root.dir + "/warn'; touch '" + root.dir + "/fail'", () => link.keep("tok-5")); },
+          ready: () => link.stateName === "error" && link.why.indexOf("boom") >= 0, judge: () => {
+            root.check("an error: boom again holds `error`", link.lastError.indexOf("boom") >= 0, link.lastError);
+        } },
+        { run: () => { root.sh("rm -f '" + root.dir + "/fail'"); root.putState(root.sig, root.engineNow, 2); },
+          ready: () => link.stateName === "active", judge: () => {
+            root.check("the engine speaks after a failure (a NEWER state): the failure is let go with no call of ours", link.lastError === "", link.lastError);
+        } },
+        { run: () => { link.hyprctl = root.dir + "/bin/missing"; link.keep("tok-4"); },
+          ready: () => link.stateName === "error" && link.why.indexOf("not found") >= 0, judge: () => {
+            root.check("a hyprctl that does not exist is an answer, not a hang", true, "");
+        } }
+    ]
+
+    Timer {
+        id: tick
+        interval: 50
+        repeat: true
+        running: true
+        onTriggered: {
+            if (root.bare) {
+                tick.stop();
+                Qt.quit();
+                return;
+            }
+            if (root.step >= root.steps.length) {
+                tick.stop();
+                console.log("EL RESULT " + (root.fails === 0 ? "PASS" : "FAIL") + " (" + (root.checks - root.fails) + "/" + root.checks + " checks)");
+                Qt.quit();
+                return;
+            }
+            const s = root.steps[root.step];
+            if (root.waited === 0) {
+                s.run();
+                root.waited = 1;
+                return;
+            }
+            root.waited++;
+            if (s.ready()) {
+                s.judge();
+                root.step++;
+                root.waited = 0;
+            } else if (root.waited > 160) {
+                root.check("step " + root.step + " reached its state", false, "stateName " + link.stateName + " why " + link.why + " log " + root.hyprLog());
+                root.step++;
+                root.waited = 0;
+            }
+        }
+    }
+}

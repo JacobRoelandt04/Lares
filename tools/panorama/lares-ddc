@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""lares-ddc -- brightness (VCP 10) over DDC/CI on ONE I2C bus, spoken directly.
+
+    lares-ddc get <bus>            prints `VCP 10 C <cur> <max>` (ddcutil's own --brief form), exit 0
+    lares-ddc set <bus> <value>    writes it, exit 0
+
+For the buses ddcutil refuses: evdi's "DisplayLink I2C Adapter" answers DDC/CI at 0x37 but returns no EDID at 0x50, and ddcutil
+3.0.2 gates every bus on that EDID read ("cannot be used for DDC/CI communication"; measured on the user's dock, 2026-11-23).
+Errors: one line on stderr, exit 1 (2: usage). The device node needs the user's access: tools/shell/root/61-lares-displaylink-ddc.rules.
+"""
+import fcntl
+import os
+import sys
+import time
+
+I2C_SLAVE = 0x0703
+ADDR = 0x37
+TRIES = 4
+
+
+def packet(payload):
+    body = [0x51, 0x80 | len(payload)] + payload
+    chk = 0x6E
+    for b in body:
+        chk ^= b
+    return bytes(body + [chk])
+
+
+def get(fd):
+    last = "no answer"
+    for _ in range(TRIES):
+        try:
+            os.write(fd, packet([0x01, 0x10]))
+            time.sleep(0.05)
+            r = os.read(fd, 12)
+        except OSError as e:
+            last = str(e)
+            time.sleep(0.1)
+            continue
+        # 6E, 0x88, 02 (reply), result, 10 (the code), type, max hi, max lo, cur hi, cur lo, checksum
+        if len(r) >= 11 and r[1] == 0x88 and r[2] == 0x02 and r[4] == 0x10:
+            chk = 0x50
+            for b in r[:10]:
+                chk ^= b
+            if chk == r[10] and r[3] == 0:
+                return (r[8] << 8) | r[9], (r[6] << 8) | r[7]
+            last = "unsupported" if r[3] != 0 else "bad checksum"
+        else:
+            last = "bad reply " + r.hex()
+        time.sleep(0.1)
+    raise RuntimeError(last)
+
+
+def put(fd, value):
+    last = "no answer"
+    for _ in range(TRIES):
+        try:
+            os.write(fd, packet([0x03, 0x10, (value >> 8) & 0xFF, value & 0xFF]))
+            time.sleep(0.05)
+            return
+        except OSError as e:
+            last = str(e)
+            time.sleep(0.1)
+    raise RuntimeError(last)
+
+
+def main(a):
+    if len(a) < 2 or a[0] not in ("get", "set") or not a[1].isdigit() or (a[0] == "set" and (len(a) < 3 or not a[2].isdigit())):
+        sys.stderr.write("usage: lares-ddc get <bus> | set <bus> <value>\n")
+        return 2
+    try:
+        fd = os.open("/dev/i2c-" + a[1], os.O_RDWR)
+    except OSError as e:
+        sys.stderr.write("cannot open /dev/i2c-%s: %s\n" % (a[1], e.strerror))
+        return 1
+    try:
+        fcntl.ioctl(fd, I2C_SLAVE, ADDR)
+        if a[0] == "get":
+            cur, mx = get(fd)
+            print("VCP 10 C %d %d" % (cur, mx))
+        else:
+            put(fd, int(a[2]))
+        return 0
+    except (OSError, RuntimeError) as e:
+        sys.stderr.write("ddc: %s\n" % e)
+        return 1
+    finally:
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

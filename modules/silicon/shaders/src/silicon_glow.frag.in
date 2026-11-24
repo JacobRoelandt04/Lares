@@ -1,0 +1,201 @@
+#version 440
+
+// =============================================================================
+// silicon_glow.frag -- the board's LIVE light, drawn every tick over the still board:
+// the cores by their load, the graphics tile by the iGPU's, the GPU die while the card is awake,
+// the cells filling, light running along the traces (pulses toward the CPU at the profile's tempo,
+// out of the slot while the dGPU works, into the pack while charging), the power-on sweep of the
+// entrance and the battery event's pulse, which runs along the traces while those trains fade out under it.
+//
+// One sample a pixel: everything here is soft (a glow has no hard edge to alias), and the cast
+// only has to say WHICH face the pixel sees -- the same boxes and move groups as the board, so a
+// core's light lifts and turns with the package and a dissolving card's light goes with it. Premultiplied, a
+// TINT over the board (CLAUDE.md: an additive glow blows a light ground out to white).
+// The look of the light per family is glow_materials.glsl's.
+// =============================================================================
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec4 view;      // as silicon_board.frag: x, y item px; z px per mm; w family
+    vec4 frame;     // x, y scene px of the board origin; z unused; w dark
+    vec4 motion;    // x the package's turn rad; y unused; z the package's lift mm; w unused
+    vec4 parts;     // x card lift mm; y card dissolve; z plug in; w lever
+    vec4 light;     // xyz toward the light; w shadow strength
+    vec4 quad;      // x, y this item's offset in the scene px; z unused; w render scale
+    vec4 coresA;    // the 16 cores' loads 0..1: P0-3
+    vec4 coresB;    //   P4-5, E0-1
+    vec4 coresC;    //   E2-5
+    vec4 coresD;    //   E6-7, LPE0-1
+    vec4 live;      // x iGPU busy 0..1; y dGPU awake 0..1; z battery fill 0..1; w flow W (> 0 charging, < 0 discharging)
+    vec4 phases;    // x CPU pulse phase (cycles); y GPU pulse phase; z flow travelled mm; w time s
+    vec4 power;     // x power-on 0..1; y event age s (< 0 none); z event kind (0 full, 1 low, 2 charge start, 3 charge stop); w unused
+    vec4 lockP;     // the charge limit's lock, the pieces of its ONE fraction (MotionScripts.lockPose): x the bar's slide 0 (out) .. 1 (home);
+                    //   y the shackle's lift mm; z how far the 4th cell is dimmed 0..1; w the lock's presence 0..1
+    vec4 colCpu;    // the CPU profile's colour
+    vec4 colGpu;    // the GPU mode's colour
+    vec4 colCharge; // the battery's colour now
+    vec4 colEvent;  // the event's colour
+    vec4 glowA;     // the family's glow tunables (glow_materials.glsl)
+    vec4 glowB;
+    vec4 figA;      // the 7-segment displays' figures: one vec4 of four cell codes per display, in SceneGeometry.SEG7's order (seg7.glsl
+    vec4 figB;      //   says what a code is): watts, time, since full, the RAM, and the CPU's three: clock, usage, temperature
+    vec4 figC;
+    vec4 figD;
+    vec4 figE;
+    vec4 figF;
+    vec4 figG;
+    vec4 palI;      // the board's second palette (board_materials.glsl names the slots); the glow reads the memory hue, palM
+    vec4 palJ;
+    vec4 palK;
+    vec4 palL;
+    vec4 palM;
+    vec4 palN;
+    vec4 palO;
+    vec4 palP;
+    vec2 memP;      // the memory and the display: x RAM used 0..1, y the display's source (0 the iGPU, 1 the dGPU)
+    vec4 r3s2A;     // the smoked glass over the displays' window: rgb what it lets through (the family's tint, SiliconStyle's slot 8)
+};
+
+const vec3 CAM_R = vec3(0.70710678, 0.0, -0.70710678);
+const vec3 CAM_U = vec3(-0.40824829, 0.81649658, -0.40824829);
+const vec3 CAM_C = vec3(0.57735027, 0.57735027, 0.57735027);
+const float EDGE_ACROSS = 0.70710678;
+
+// @@GEOM
+// @@INCLUDE seg7.glsl
+// @@SEGFIG
+
+float coreLoad(int i) {
+    if (i < 4) return coresA[i];
+    if (i < 8) return coresB[i - 4];
+    if (i < 12) return coresC[i - 8];
+    return coresD[i - 12];
+}
+
+struct Glow {
+    vec3 p;          // world point
+    vec3 pl;         // its part's own frame
+    vec3 nl;         // which face (part frame)
+    int mat;
+    int part;
+    int group;
+    vec3 bmin;
+    vec3 bmax;
+    float edgePx;
+    float pxPerMm;
+    vec2 scenePx;
+    int core;        // the core under this point (-1 none), coreKind 0 P 1 E 2 LPE
+    int coreKind;
+    vec4 coreRect;   // package frame
+    float load;      // its load 0..1
+    int cell;        // 0..3 on a cell's top, -1 elsewhere
+    float traceD;    // the nearest trace (board top only): signed mm
+    int traceId;
+    float traceArc;  // mm from its start
+    float traceFrom; // mm from the pack to its start
+    float traceHalf; // the trace's half width at this point, mm (the generator's)
+};
+
+// @@INCLUDE glow_materials.glsl
+
+void main() {
+    gPkgTurn = motion.x;
+    gPkgLift = motion.z;
+    gCardLift = parts.x;
+    gPlugOut = (1.0 - parts.z) * PLUG_TRAVEL;
+    gLeverX = parts.w * LEVER_TRAVEL;
+    gLockX = (1.0 - lockP.x) * LOCK_TRAVEL;
+    gShackleY = lockP.y;
+    gLockA = lockP.w;
+    gFlags = lockP.w < 0.003 ? FLAG_LOCK : 0.0;
+
+    vec2 px = quad.xy + qt_TexCoord0 * view.xy;
+    float s = view.z;
+    float sx = (px.x - frame.x) / s;
+    float sy = (frame.y - px.y) / s;
+    vec3 ro = sx * CAM_R + sy * CAM_U + CAM_C * 600.0;
+    vec3 rd = -CAM_C;
+    if (!slabHit(ro, 1.0 / rd, SCENE_MIN - vec3(1.0), SCENE_MAX + vec3(1.0))) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    // A card that has dissolved away carries no light; one dissolving dims (glow_materials sees parts.y). The lock bar is opaque
+    // paint over the cell under it and fades in as it slides: what is behind it keeps its light, by what the bar lets through. (A part cut to an
+    // outline is baked, the board's alone: the generator refuses a cut part the glow would cast.) ONE cast site, in a loop whose bound comes from a
+    // uniform (Mesa inlines every call: two copies of the cast are two copies of every part).
+    float carry = 1.0;
+    vec3 o; vec3 d;
+    int passes = view.z > 0.0 ? 4 : 1;
+    for (int pass = 0; pass < passes; pass++) {
+        scenePrimary(ro, rd);
+        bool again = false;
+        if (hPart >= 0) {
+            groupRay(hGroup, ro, rd, o, d);
+            if (hGroup == GRP_CARD && parts.y > 0.98) {
+                raise(FLAG_CARD);
+                again = true;
+            } else if (hGroup == GRP_LOCK || hGroup == GRP_SHACKLE) {
+                raise(FLAG_LOCK);
+                carry = 1.0 - lockP.w;
+                again = true;
+            }
+        }
+        if (!again)
+            break;
+    }
+    if (hPart < 0 || hGroup == GRP_PLUG) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    groupRay(hGroup, ro, rd, o, d);
+    Glow g;
+    g.p = ro + rd * hT;
+    g.pl = o + d * hT;
+    g.nl = hN;
+    g.mat = hMat;
+    g.part = hPart;
+    g.group = hGroup;
+    g.bmin = hMin;
+    g.bmax = hMax;
+    vec3 m = min(g.pl - hMin, hMax - g.pl) + abs(hN) * 1e6;
+    g.edgePx = min(min(m.x, m.y), m.z) * EDGE_ACROSS * s;
+    g.pxPerMm = s;
+    g.scenePx = px;
+    g.core = -1;
+    g.coreKind = -1;
+    g.coreRect = vec4(0.0);
+    g.load = 0.0;
+    g.cell = -1;
+    g.traceD = 1e9;
+    g.traceId = -1;
+    g.traceArc = 0.0;
+    g.traceFrom = 0.0;
+    g.traceHalf = 0.0;
+    if (hN.y > 0.5) {
+        if (hGroup == GRP_PKG) {
+            int c = coreAt(g.pl.xz - ZONE_C);
+            if (c >= 0) {
+                g.core = c;
+                g.coreKind = coreKindOf(c);
+                g.coreRect = coreRectOf(c);
+                g.load = coreLoad(c);
+            }
+        } else if (hMat == MAT_CELL) {
+            g.cell = hPart - PART_CELL0;
+        } else if (hPart == PART_BOARD) {
+            sceneTraces(g.p.xz);
+            g.traceD = tD;
+            g.traceId = tId;
+            if (tId >= 0) {
+                g.traceArc = tArc;
+                g.traceFrom = traceFromPack(tId);
+                g.traceHalf = tHalf;
+            }
+        }
+    }
+    fragColor = shadeGlow(g) * (qt_Opacity * carry);
+}

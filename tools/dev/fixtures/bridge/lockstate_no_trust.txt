@@ -1,0 +1,10 @@
+==trust
+==window
+  mCurrentFocus=null
+    mShowingDream=false mDreamingLockscreen=true
+    isKeyguardShowing=false
+==power
+  mWakefulness=Awake
+==idle
+  mScreenOn=true
+  mScreenLocked=false

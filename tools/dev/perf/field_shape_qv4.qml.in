@@ -1,0 +1,127 @@
+import QtQuick
+import "A.js" as GA
+import "B.js" as GB
+import "field_shape_lib.js" as L
+
+// field_shape_qv4.qml.in -- the field-shape differential in QV4, the shell's own engine. A TEMPLATE, not a .qml of the tree: its two
+// imports (A.js, B.js) exist only where the runner puts it, and the linter would call every use of them unresolved (field_shape_qv4.sh copies this file
+// beside the two GooeyGeometry.js it compares, as A.js and B.js, and runs it in /usr/lib/qt6/bin/qml offscreen).
+//
+//   arguments after `--`: <corpus.jsonl> <identity|bench> [passes] [class regex]
+//   identity   every call through A and B, chained per field, compared exactly (field_shape_lib.js identity)
+//   bench      `passes` passes of A and of B over each scenario class, interleaved: ms per call, median (min .. max)
+// Prints FSQV4 lines and `FIELD_SHAPE_QV4 RESULT PASS|FAIL`.
+Item {
+    id: root
+
+    function argv() {
+        const a = Qt.application.arguments;
+        const k = a.indexOf("--");
+        return k >= 0 ? a.slice(k + 1) : [];
+    }
+    function finish(ok, why) {
+        console.info("FIELD_SHAPE_QV4 RESULT " + (ok ? "PASS" : "FAIL") + " (" + why + ")");
+        quitTimer.start();
+    }
+    function run(text) {
+        const a = root.argv();
+        const mode = a[1] || "identity", passes = Number(a[2] || 5);
+        let lines = text.split("\n").filter(l => l.length > 0);
+        if (a[3]) {
+            const re = new RegExp(a[3]);
+            lines = lines.filter(l => re.test(l.slice(8, l.indexOf('"', 8))));
+        }
+        if (mode === "identity") {
+            const t0 = Date.now();
+            const r = L.identity(lines, GA.fieldShape, GB.fieldShape);
+            console.info("FSQV4 identity: " + r.calls + " calls, " + r.diffs + " differ (" + (Date.now() - t0) + " ms)");
+            if (r.first) {
+                const f = r.first;
+                console.info("FSQV4 first difference: line " + f.line + " (" + f.cls + ", field " + f.f + ", call " + f.q + ") in the "
+                             + f.what + ", at char " + f.diff.at);
+                console.info("  A: ..." + f.diff.a);
+                console.info("  B: ..." + f.diff.b);
+            }
+            root.finish(r.diffs === 0, r.calls + " calls, " + r.diffs + " differ");
+            return;
+        }
+        const recs = L.prepare(lines);
+        const byCls = {};
+        for (const x of recs)
+            (byCls[x.cls] = byCls[x.cls] || []).push(x);
+        const classes = Object.keys(byCls).sort();
+        // One warm pass of each first (the JIT, the first allocations).
+        for (const c of classes) {
+            L.bench(byCls[c], GA.fieldShape);
+            L.bench(byCls[c], GB.fieldShape);
+        }
+        let totA = 0, totB = 0, n = 0;
+        for (const c of classes) {
+            const set = byCls[c], ta = [], tb = [];
+            for (let p = 0; p < passes; p++) {
+                // A then B, B then A: neither always runs right after the other's garbage.
+                if (p % 2 === 0) {
+                    ta.push(L.bench(set, GA.fieldShape) / set.length);
+                    tb.push(L.bench(set, GB.fieldShape) / set.length);
+                } else {
+                    tb.push(L.bench(set, GB.fieldShape) / set.length);
+                    ta.push(L.bench(set, GA.fieldShape) / set.length);
+                }
+            }
+            const sa = L.stats(ta), sb = L.stats(tb);
+            totA += sa.median * set.length;
+            totB += sb.median * set.length;
+            n += set.length;
+            console.info("FSQV4 bench " + c + " (" + set.length + " calls): A " + sa.median.toFixed(4) + " ms (" + sa.min.toFixed(4) + " .. "
+                         + sa.max.toFixed(4) + ")  B " + sb.median.toFixed(4) + " ms (" + sb.min.toFixed(4) + " .. " + sb.max.toFixed(4)
+                         + ")  B/A " + (sb.median / sa.median).toFixed(3));
+        }
+        // An instrumented copy (field_shape_phases.js) says what its phases took, per call.
+        for (const [name, G] of [["A", GA], ["B", GB]]) {
+            if (typeof G.fsProbe !== "function")
+                continue;
+            const pr = G.fsProbe(), keys = Object.keys(pr.acc);
+            let sum = 0;
+            for (const k of keys)
+                sum += pr.acc[k];
+            console.info("FSQV4 phases " + name + " (" + pr.calls + " calls, " + (sum / pr.calls).toFixed(4) + " ms a call): "
+                         + keys.map(k => k + " " + (pr.acc[k] / pr.calls).toFixed(4)).join(", "));
+        }
+        console.info("FSQV4 bench all (" + n + " calls): A " + (totA / n).toFixed(4) + " ms  B " + (totB / n).toFixed(4) + " ms  B/A "
+                     + (totB / totA).toFixed(3));
+        root.finish(true, "bench, " + passes + " passes");
+    }
+
+    Timer {
+        id: quitTimer
+        interval: 0
+        onTriggered: Qt.quit()
+    }
+    Timer {
+        interval: 0
+        running: true
+        onTriggered: {
+            const a = root.argv();
+            if (a.length < 1) {
+                root.finish(false, "no corpus given");
+                return;
+            }
+            const x = new XMLHttpRequest();
+            x.onreadystatechange = () => {
+                if (x.readyState !== XMLHttpRequest.DONE)
+                    return;
+                if (!x.responseText) {
+                    root.finish(false, "cannot read " + a[0]);
+                    return;
+                }
+                try {
+                    root.run(x.responseText);
+                } catch (e) {
+                    root.finish(false, "threw: " + e);
+                }
+            };
+            x.open("GET", "file://" + a[0]);
+            x.send();
+        }
+    }
+}

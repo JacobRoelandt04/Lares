@@ -1,0 +1,341 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "stocks.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "currency": {
+   "enum": [
+    "EUR"
+   ],
+   "default": "EUR",
+   "x-wants": "\"EUR\"",
+   "description": "Totals are reported in this currency. Only \"EUR\" is supported; every stock is still SHOWN in the currency it trades in.\n\nTakes \"EUR\". Default: \"EUR\"."
+  },
+  "inflation": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "geo": {
+     "type": "string",
+     "pattern": "^[A-Z]{2}$",
+     "default": "BE",
+     "x-wants": "a text like BE",
+     "description": "Takes a text like BE. Default: \"BE\"."
+    }
+   },
+   "description": "Inflation: Eurostat's HICP for this country (a two-letter ISO code), monthly. Real figures are every cash flow re-expressed in\ntoday's euros with it."
+  },
+  "dividendWithholding": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 0.999,
+   "default": 0.3,
+   "x-wants": "a number 0 .. 0.999",
+   "description": "The share of every dividend kept back as tax, 0 up to (not including) 1 (0.30: the Belgian 30 % roerende voorheffing). Dividends are found\nautomatically.\n\nTakes a number 0 .. 0.999. Default: 0.3."
+  },
+  "indices": {
+   "type": "array",
+   "items": {
+    "anyOf": [
+     {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "symbol": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "alias": {
+        "type": "string",
+        "x-wants": "a text"
+       }
+      },
+      "required": [
+       "symbol"
+      ],
+      "x-wants": "an object"
+     }
+    ],
+    "x-wants": "a text, or an object"
+   },
+   "default": [
+    {
+     "symbol": "^BFX",
+     "alias": "BEL 20"
+    },
+    {
+     "symbol": "^AEX",
+     "alias": "AEX"
+    },
+    {
+     "symbol": "^STOXX50E",
+     "alias": "Euro Stoxx 50"
+    },
+    {
+     "symbol": "^GSPC",
+     "alias": "S&P 500"
+    },
+    {
+     "symbol": "^IXIC",
+     "alias": "Nasdaq"
+    },
+    {
+     "symbol": "EURUSD=X",
+     "alias": "EUR/USD"
+    }
+   ],
+   "x-wants": "a list of values (a text, or an object)",
+   "description": "The summary card's cycling index cells, in any order (hovering them shows the biggest movers): Yahoo symbols, each a string or\n{ \"symbol\": .., \"alias\": .. } (the alias is shown instead of the symbol).\n\nTakes a list of values (a text, or an object). Default: [{\"symbol\":\"^BFX\",\"alias\":\"BEL 20\"},{\"symbol\":\"^AEX\",\"alias\":\"AEX\"},{\"symbol\":\"^STOXX50E\",\"alias\":\"Euro Stoxx 50\"},{\"symbol\":\"^GSPC\",\"alias\":\"S&P 500\"},{\"symbol\":\"^IXIC\",\"alias\":\"Nasdaq\"},{\"symbol\":\"EURUSD=X\",\"alias\":\"EUR/USD\"}]."
+  },
+  "detailMemoryMin": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1440,
+   "default": 10,
+   "x-wants": "a number 0 .. 1440",
+   "description": "The stock's detail comes back with the popup when it was on screen less than this many minutes ago. 0: never. 0 .. 1440.\n\nTakes a number 0 .. 1440. Default: 10."
+  },
+  "refreshSec": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "open": {
+     "type": "number",
+     "minimum": 30,
+     "maximum": 3600,
+     "default": 60,
+     "x-wants": "a number 30 .. 3600",
+     "description": "Takes a number 30 .. 3600. Default: 60."
+    },
+    "closed": {
+     "type": "number",
+     "minimum": 60,
+     "maximum": 86400,
+     "default": 300,
+     "x-wants": "a number 60 .. 86400",
+     "description": "Takes a number 60 .. 86400. Default: 300."
+    }
+   },
+   "description": "How often the quotes are fetched while a market is open, seconds: with the popup open, and with it shut (30 .. 3600, 60 .. 86400;\nYahoo refuses a faster one). With every market closed they are fetched once after the close, then at the next open."
+  },
+  "extendedHours": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Prices before the opening and after the close are shown.\n\nTakes true or false. Default: true."
+  },
+  "quoteUrl": {
+   "type": "string",
+   "pattern": "^https?://.*\\{symbol\\}",
+   "default": "https://finance.yahoo.com/quote/{symbol}",
+   "x-wants": "a text like https://finance.yahoo.com/quote/{symbol}",
+   "description": "The page a stock's link opens; {symbol} is its Yahoo symbol.\n\nTakes a text like https://finance.yahoo.com/quote/{symbol}. Default: \"https://finance.yahoo.com/quote/{symbol}\"."
+  },
+  "look": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "secondarySide": {
+     "enum": [
+      "start",
+      "end",
+      "far"
+     ],
+     "default": "end",
+     "x-wants": "\"start\", \"end\" or \"far\"",
+     "description": "Takes \"start\", \"end\" or \"far\". Default: \"end\"."
+    }
+   },
+   "description": "Where the detail opens beside the popup: \"end\" (the right of a top bar's popup) | \"start\" (the left) | \"far\" (below it)."
+  },
+  "alertHysteresis": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1,
+   "default": 0.005,
+   "x-wants": "a number 0 .. 1",
+   "description": "Desktop notifications, once per crossing, re-armed when the price has moved back by alertHysteresis (a fraction, 0 .. 1).\n\nTakes a number 0 .. 1. Default: 0.005."
+  },
+  "alerts": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "symbol": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "above": {
+      "type": "number",
+      "minimum": 0,
+      "x-wants": "a number, 0 and up"
+     },
+     "below": {
+      "type": "number",
+      "minimum": 0,
+      "x-wants": "a number, 0 and up"
+     },
+     "dayMove": {
+      "type": "number",
+      "minimum": 0,
+      "x-wants": "a number, 0 and up"
+     }
+    },
+    "required": [
+     "symbol"
+    ]
+   },
+   "default": [],
+   "x-wants": "a list of objects",
+   "description": "Each alert: a \"symbol\" (\"*\" is every stock you hold or watch) and at least one of \"above\" (a price), \"below\" (a price),\n\"dayMove\" (|day %|), each a positive number. For example:\n  [ { \"symbol\": \"ASML.AS\", \"above\": 1600 }, { \"symbol\": \"AAPL\", \"below\": 300 }, { \"symbol\": \"*\", \"dayMove\": 5 } ]\n\nTakes a list of objects. Default: []."
+  },
+  "sudden": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "pct": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 100,
+     "default": 3,
+     "x-wants": "a number 0 .. 100",
+     "description": "Takes a number 0 .. 100. Default: 3."
+    },
+    "minutes": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 390,
+     "default": 30,
+     "x-wants": "a number 1 .. 390",
+     "description": "Takes a number 1 .. 390. Default: 30."
+    },
+    "bySymbol": {
+     "type": "object",
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "type": "boolean",
+        "x-wants": "true or false"
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "x-wants": "a number 0 .. 100"
+         },
+         "minutes": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 390,
+          "x-wants": "a number 1 .. 390"
+         }
+        },
+        "x-wants": "an object"
+       }
+      ],
+      "x-wants": "true or false, or an object"
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "Default: {}."
+    }
+   },
+   "description": "Sudden moves: a stock you hold or watch that moves at least `pct` % (0 .. 100) within `minutes` minutes (1 .. 390, a trading day),\nwhile its market is open -- once per direction per day. A symbol may have thresholds of its own in \"bySymbol\", or `false` for\nnone: { \"NVDA\": { \"pct\": 5, \"minutes\": 15 }, \"KBC.BR\": false }. (Which stocks, and whether it speaks at all: notifications.jsonc,\nsources.stocks.)"
+  },
+  "holdings": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "symbol": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "alias": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "image": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "isin": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "cnbc": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "actions": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "type": {
+         "enum": [
+          "buy",
+          "sell"
+         ],
+         "x-wants": "\"buy\" or \"sell\""
+        },
+        "date": {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+         "x-wants": "a text like 2025-05-28"
+        },
+        "shares": {
+         "type": "number",
+         "minimum": 0,
+         "x-wants": "a number, 0 and up"
+        },
+        "price": {
+         "type": "number",
+         "minimum": 0,
+         "x-wants": "a number, 0 and up"
+        },
+        "fees": {
+         "type": "number",
+         "minimum": 0,
+         "x-wants": "a number, 0 and up"
+        },
+        "comment": {
+         "type": "string",
+         "x-wants": "a text"
+        }
+       },
+       "required": [
+        "type",
+        "date",
+        "shares",
+        "price"
+       ]
+      },
+      "x-wants": "a list of objects"
+     }
+    },
+    "required": [
+     "symbol"
+    ]
+   },
+   "default": [],
+   "x-wants": "a list of objects",
+   "description": "What you hold, one entry per stock:\n  symbol   the Yahoo Finance symbol (search for it in the popup to find it: ASML.AS is Amsterdam, KBC.BR Brussels, VOD.L London,\n           AAPL NASDAQ)\n  alias    optional, shown instead of the symbol\n  image    optional, a local .svg / .png used instead of the fetched logo\n  isin     optional, lets the logo be found when the symbol is not\n  cnbc     optional, CNBC's symbol when the automatic one is wrong (the detail's market cap / P/E / EPS / yield / beta come from CNBC)\n  actions  every buy and sell, in any order:\n    type     \"buy\" | \"sell\"\n    date     \"YYYY-MM-DD\", the trade date\n    shares   as bought -- BEFORE any later split (splits are applied for you)\n    price    per share, in the currency the stock is QUOTED in. London quotes in PENCE (GBp): 93.30 means 93.30 p, not 93.30 pounds.\n    fees     optional, broker fee + stock-exchange tax, same unit as price\n    comment  optional, shown in the detail and on the chart marker\nFor example:\n  [ { \"symbol\": \"ASML.AS\", \"alias\": \"ASML\", \"actions\": [\n        { \"type\": \"buy\",  \"date\": \"2023-03-15\", \"shares\": 8, \"price\": 568.00, \"fees\": 7.50, \"comment\": \"first tranche\" },\n        { \"type\": \"sell\", \"date\": \"2025-06-02\", \"shares\": 2, \"price\": 646.20, \"fees\": 7.50 } ] },\n    { \"symbol\": \"IWDA.AS\", \"alias\": \"MSCI World\", \"isin\": \"IE00B4L5Y983\", \"actions\": [\n        { \"type\": \"buy\", \"date\": \"2021-06-07\", \"shares\": 20, \"price\": 67.47, \"fees\": 2.00 } ] } ]\n\nTakes a list of objects. Default: []."
+  }
+ }
+}

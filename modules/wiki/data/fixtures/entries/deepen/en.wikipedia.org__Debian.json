@@ -1,0 +1,81 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Debian",
+ "tab": "deepen",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Debian",
+  "url": "https://en.wikipedia.org/wiki/Debian",
+  "revid": 1377504059,
+  "license": "CC BY-SA 4.0",
+  "quality": "good"
+ },
+ "title": "Debian",
+ "category": {
+  "family": "wikipedia-cs",
+  "topic": "computing",
+  "via": "thompson",
+  "why": {
+   "p": 0.15,
+   "oneIn": 7,
+   "openRate": null
+  }
+ },
+ "intro": {
+  "text": "Debian is a free, general-purpose operating system developed by the Debian Project, a worldwide volunteer association founded by Ian Murdock on August 16, 1993. It is the second-oldest Linux distribution still being developed and forms the base of many others. It is deployed across servers, personal computers, and embedded devices. Among Linux distributions, it ranks second only to Ubuntu, with 16% of the overall market. Its emphasis on stability and long-term support over frequent package updates has made it prevalent in server and embedded deployments.",
+  "words": 85,
+  "provenance": "cleaned",
+  "stripped": [
+   "pronunciation",
+   "parentheticals"
+  ],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 129,
+    "e": 140,
+    "target": "Ian Murdock",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Ian_Murdock"
+   },
+   {
+    "s": 185,
+    "e": 203,
+    "target": "Linux distribution",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Linux_distribution"
+   },
+   {
+    "s": 385,
+    "e": 391,
+    "target": "Ubuntu",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Ubuntu"
+   }
+  ]
+ },
+ "images": [],
+ "installed": null,
+ "popularity": {
+  "views60d": 310000,
+  "band": 0.9
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-deepen",
+ "fetchedAt": 1790765861235
+}

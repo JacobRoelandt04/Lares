@@ -1,0 +1,266 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "llm.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "store": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*\\.json$",
+   "default": "conversations.json",
+   "x-wants": "a text like conversations.json",
+   "description": "The conversation store: a file name (a plain <name>.json, nothing else) in ~/.local/state/lares/llm/ (the mockup keeps its\nown, mockup_conversations.json). Read as the shell starts.\n\nTakes a text like conversations.json. Default: \"conversations.json\". Read as the shell starts."
+  },
+  "notePrompt": {
+   "type": "string",
+   "default": "",
+   "x-wants": "a text",
+   "description": "The text put in the chat's composer, SELECTED (one Backspace or any typing replaces it), when a note is sent to the chat from\nits right-click menu \"Send to LLM\". Any text; \"\" = none.\n\nTakes a text. Default: \"\"."
+  },
+  "systemPrompt": {
+   "type": "string",
+   "default": "",
+   "x-wants": "a text",
+   "description": "Told to the model at the start of every chat (the language to answer in, how long, what machine this is). \"\" = nothing. It takes room\nof the context.\n\nTakes a text. Default: \"\"."
+  },
+  "server": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "url": {
+     "type": "string",
+     "pattern": "^https?://",
+     "default": "http://localhost:11434",
+     "x-wants": "a text like http://localhost:11434",
+     "description": "Takes a text like http://localhost:11434. Default: \"http://localhost:11434\". Read as the shell starts."
+    },
+    "protocol": {
+     "enum": [
+      "ollama",
+      "openai"
+     ],
+     "default": "ollama",
+     "x-wants": "\"ollama\" or \"openai\"",
+     "description": "Takes \"ollama\" or \"openai\". Default: \"ollama\". Read as the shell starts."
+    }
+   },
+   "description": "THE SERVER the chat talks to: its address, and whether it speaks Ollama's own protocol or OpenAI's (\"ollama\" | \"openai\"). With an address\nthat is not this machine (the laptop using the desktop: \"http://desktop:11434\") nothing is done to this machine's GPU or CPU for the\nchat, and the GPU's memory is not shown. Read as the shell starts."
+  },
+  "unloadAfterMin": {
+   "type": "number",
+   "minimum": -1,
+   "maximum": 1440,
+   "default": 0,
+   "x-wants": "a number -1 .. 1440",
+   "description": "Minutes the model stays loaded after the chat is closed. 0: let go at once. -1: until you unload it. 0 .. 1440.\n\nTakes a number -1 .. 1440. Default: 0."
+  },
+  "think": {
+   "anyOf": [
+    {
+     "type": "boolean",
+     "x-wants": "true or false"
+    },
+    {
+     "type": "object",
+     "additionalProperties": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "x-wants": "an object"
+    }
+   ],
+   "default": true,
+   "x-wants": "true or false, or an object",
+   "description": "Whether a model that can think first does: true | false, or per model: { \"qwen3:8b\": false } (a model not named thinks).\n\nTakes true or false, or an object. Default: true."
+  },
+  "context": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "default": {
+     "anyOf": [
+      {
+       "enum": [
+        "auto"
+       ],
+       "x-wants": "\"auto\""
+      },
+      {
+       "type": "integer",
+       "minimum": 512,
+       "maximum": 1048576,
+       "x-wants": "a whole number 512 .. 1048576"
+      }
+     ],
+     "default": 4096,
+     "x-wants": "\"auto\", or a whole number 512 .. 1048576",
+     "description": "The context of a model you have not tuned in the model picker, in tokens, or \"auto\" (as large as the GPU's memory takes: it is\nmeasured when the model is first used).\n\nTakes \"auto\", or a whole number 512 .. 1048576. Default: 4096."
+    },
+    "autoMax": {
+     "type": "integer",
+     "minimum": 4096,
+     "maximum": 1048576,
+     "default": 32768,
+     "x-wants": "a whole number 4096 .. 1048576",
+     "description": "\"auto\" gives a small model (8 B parameters at most) never more than this many tokens (4096 at least), and leaves this much of the\nGPU's memory free (MiB, 768 at least). Changed, a model is measured again at its next use.\n\nTakes a whole number 4096 .. 1048576. Default: 32768."
+    },
+    "vramReserveMiB": {
+     "type": "integer",
+     "minimum": 768,
+     "maximum": 65536,
+     "default": 768,
+     "x-wants": "a whole number 768 .. 65536",
+     "description": "Takes a whole number 768 .. 65536. Default: 768."
+    }
+   }
+  },
+  "tools": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "on": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "The tools are on when the shell starts (the wrench in the composer).\n\nTakes true or false. Default: false."
+    },
+    "off": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Tools that are never offered, by name (\"web_search\", \"screenshot\", \"run_command\" ...: `ls llm_tools` in the shell's folder).\n\nTakes a list of texts. Default: []."
+    },
+    "ask": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Tools that ask first though they only read (\"web_search\", \"screenshot\", \"clipboard_read\", \"read_file\" ...). A tool that acts always asks.\n\nTakes a list of texts. Default: []."
+    },
+    "rounds": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 40,
+     "default": 12,
+     "x-wants": "a whole number 1 .. 40",
+     "description": "How many rounds of tool calls one answer may take, and how many calls one round. 1 .. 40, 1 .. 32.\n\nTakes a whole number 1 .. 40. Default: 12."
+    },
+    "callsPerRound": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 32,
+     "default": 8,
+     "x-wants": "a whole number 1 .. 32",
+     "description": "Takes a whole number 1 .. 32. Default: 8."
+    },
+    "searchUrl": {
+     "type": "string",
+     "pattern": "^https?://",
+     "default": "http://127.0.0.1:8888",
+     "x-wants": "a text like http://127.0.0.1:8888",
+     "description": "The SearXNG that web_search asks, and how many results it hands over. 1 .. 20.\n\nTakes a text like http://127.0.0.1:8888. Default: \"http://127.0.0.1:8888\"."
+    },
+    "searchResults": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 20,
+     "default": 8,
+     "x-wants": "a whole number 1 .. 20",
+     "description": "Takes a whole number 1 .. 20. Default: 8."
+    }
+   }
+  },
+  "history": {
+   "enum": [
+    "session",
+    "closed",
+    "open"
+   ],
+   "default": "session",
+   "x-wants": "\"session\", \"closed\" or \"open\"",
+   "description": "The list of conversations when the chat opens: \"session\" (shut at the shell's start, then as you left it) | \"closed\" | \"open\".\n\nTakes \"session\", \"closed\" or \"open\". Default: \"session\"."
+  },
+  "titles": {
+   "enum": [
+    "model",
+    "words"
+   ],
+   "default": "model",
+   "x-wants": "\"model\" or \"words\"",
+   "description": "A new conversation's title: \"model\" (the model is asked, once) | \"words\" (the first words of what you wrote).\n\nTakes \"model\" or \"words\". Default: \"model\"."
+  },
+  "maxConversations": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 10000,
+   "default": 200,
+   "x-wants": "a whole number 1 .. 10000",
+   "description": "The most conversations kept; past it the oldest that is not pinned goes. Read as the shell starts. A smaller number deletes the rest.\n\nTakes a whole number 1 .. 10000. Default: 200. Read as the shell starts."
+  },
+  "attachFrom": {
+   "type": "string",
+   "default": "~",
+   "x-wants": "a path",
+   "description": "The folder the attach button's file chooser starts in.\n\nTakes a path. Default: \"~\"."
+  },
+  "voice": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "model": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "description": "The model that answers it; \"\" = the chat's current one.\n\nTakes a text. Default: \"\"."
+    },
+    "copy": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "A short answer is put on the clipboard.\n\nTakes true or false. Default: true."
+    },
+    "autoRun": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The few commands that only read run without asking. false: every one asks.\n\nTakes true or false. Default: true."
+    },
+    "dropMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 240,
+     "default": 10,
+     "x-wants": "a number 1 .. 240",
+     "description": "A command nobody answered about is dropped after this many minutes. 1 .. 240.\n\nTakes a number 1 .. 240. Default: 10."
+    }
+   },
+   "description": "THE SPOKEN QUESTION (Alt+fn+F10)."
+  },
+  "machine": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "cpuFloor": {
+     "enum": [
+      "balanced",
+      "none"
+     ],
+     "default": "balanced",
+     "x-wants": "\"balanced\" or \"none\"",
+     "description": "Takes \"balanced\" or \"none\". Default: \"balanced\"."
+    }
+   },
+   "description": "While the model answers the CPU's power profile is held at least at \"balanced\" | \"none\" (nothing is held)."
+  }
+ }
+}

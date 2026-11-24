@@ -1,0 +1,76 @@
+{
+ "v": 1,
+ "id": "wiki.archlinux.org/Zsh#Tips_and_tricks",
+ "tab": "deepen",
+ "kind": "tips",
+ "source": {
+  "wiki": "arch",
+  "host": "wiki.archlinux.org",
+  "title": "Zsh#Tips and tricks",
+  "url": "https://wiki.archlinux.org/wiki/Zsh#Tips_and_tricks",
+  "revid": 882198,
+  "license": "GFDL 1.3 or later",
+  "quality": null
+ },
+ "title": "Zsh: keep the terminal usable",
+ "category": {
+  "family": "arch-tips",
+  "topic": "shell",
+  "via": "tips",
+  "why": {
+   "p": 0.15,
+   "oneIn": 7,
+   "openRate": null
+  }
+ },
+ "intro": {
+  "text": "Many programs change the terminal state, and often do not restore terminal settings on exiting abnormally, for example when crashing or encountering SIGINT. This can typically be solved by executing reset. The ttyctl command can be used to freeze and unfreeze the terminal: to freeze the interactive shell on launch, put ttyctl -f in your .zshrc, and the shell will restore its settings after every foreground command. Another approach is to reset the terminal with escape sequences from a precmd hook, so that every prompt starts from a known state.",
+  "words": 90,
+  "provenance": "original",
+  "stripped": [],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 210,
+    "e": 216,
+    "target": "Zsh#The ttyctl command",
+    "wiki": "arch",
+    "url": "https://wiki.archlinux.org/wiki/Zsh#The_ttyctl_command"
+   },
+   {
+    "s": 490,
+    "e": 501,
+    "target": "Zsh#precmd",
+    "wiki": "arch",
+    "url": "https://wiki.archlinux.org/wiki/Zsh#precmd"
+   }
+  ]
+ },
+ "images": [],
+ "installed": {
+  "flag": true,
+  "pkg": "zsh",
+  "unit": null,
+  "asOf": 1790762261235
+ },
+ "popularity": {
+  "views60d": 0,
+  "band": 0.5
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-deepen",
+ "fetchedAt": 1790765861235
+}

@@ -1,0 +1,7 @@
+// llm.jsonc -- only your changes: a key left out is its default. Every key, what it does, its default and its range:
+// .examples/llm.jsonc in the shell's folder.
+{
+// qs-shell deploy BEGIN llm: the shell's own conversation store
+"store": "conversations.json"
+// qs-shell deploy END llm
+}

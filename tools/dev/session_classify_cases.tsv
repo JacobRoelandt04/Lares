@@ -1,0 +1,101 @@
+# The run-or-type table of session restore (tools/session/sessionlib/classify.py; python3 tools/dev/session_cases.py).
+# expect <TAB> flags <TAB> kind <TAB> alias value <TAB> typed line <TAB> real argv (shell words; " ||| " between the tops of a pipeline)
+# flags: - none, root (a member runs as root), unclean (the last session did not end cleanly), claude=<id> (a Claude session id was found)
+# kind: the hook's `type -t` of the line's first word; "-" in the typed column = the hook wrote no mark (argv alone)
+# expect: run | type, optionally "=<command>" for the command that must be handed to the shell
+run	-	-	-	-	lazygit
+run	-	alias	lazygit	lg	lazygit
+run	-	file	-	nvim notes.md	nvim notes.md
+run	-	file	-	nvim +12 notes.md	nvim +12 notes.md
+type	-	file	-	nvim +"!rm x" a	nvim '+!rm x' a
+type	-	file	-	nvim -c q a	nvim -c q a
+run	-	file	-	btop	btop
+run	-	file	-	yazi	yazi
+run	-	file	-	man bash	man bash
+run	-	file	-	less /etc/hostname	less /etc/hostname
+run	-	file	-	tail -f x.log	tail -f x.log
+run	-	file	-	tail -n 50 -F x.log	tail -n 50 -F x.log
+type	-	file	-	tail x.log	tail x.log
+run	-	file	-	journalctl -fu sshd	journalctl -fu sshd
+type	-	file	-	journalctl --vacuum-time=1d -f	journalctl --vacuum-time=1d -f
+run	-	file	-	git log --oneline	git log --oneline
+type	-	file	-	git push	git push
+type	-	file	-	git commit -m x	git commit -m x
+run	-	file	-	python	python
+type	-	file	-	python x.py	python x.py
+type	-	file	-	bash build.sh	bash build.sh
+type	-	file	-	./dev.sh	bash ./dev.sh
+run	-	file	-	watch -n 2 ls	watch -n 2 ls
+type	-	file	-	watch -n 2 rm x	watch -n 2 rm x
+type	-	file	-	watch 'ls | wc'	watch 'ls | wc'
+# package managers, root, transfers, system: typed, with or without the hook
+type	-	file	-	yay -Syu	yay -Syu
+type	-	-	-	-	yay -Syu
+type	-	file	-	sudo pacman -Syu	sudo pacman -Syu
+type	root	file	-	sudo nvim /etc/fstab	nvim /etc/fstab
+type	-	file	-	curl -O http://x/y	curl -O http://x/y
+type	-	file	-	ssh host	ssh host
+type	-	file	-	systemctl restart x	systemctl restart x
+type	-	file	-	make -C build	make -C build
+type	-	file	-	docker compose up	docker compose up
+# unknown programs are typed (the user's choice, 2026-11-14: fail closed)
+type	-	file	-	frobnicate --now	frobnicate --now
+type	-	-	-	-	frobnicate --now
+# what the argv cannot say: a function, a compound line, an assignment, an alias for more than one command
+type	-	function	-	toggle_pms	nvim
+type	-	builtin	-	eval nvim	nvim
+type	-		-	FOO=1 nvim	nvim
+type	-	file	-	nvim a | cat	nvim a ||| cat
+type	-	file	-	nvim a; rm a	nvim a
+type	-	file	-	nvim $(cat list)	nvim a b
+type	-	alias	code x && exit	todo	code x
+type	-	alias	sudo pacman -Syu	up	pacman -Syu
+# the typed word and the running program must be the same thing
+type	-	file	-	nvim a	rm -rf a
+type	-	alias	lazygit	lg	rm -rf a
+# a pipeline read from /proc alone is typed, as a guess
+type=sleep 5 | cat	-	-	-	-	sleep 5 ||| cat
+# after an unclean end nothing runs by itself
+type	unclean	file	-	lazygit	lazygit
+type	unclean	alias	lazygit	lg	lazygit
+# Claude Code: a session with an id is resumed by it; a prompt or a permission flag is typed
+run=claude --resume abc-123	claude=abc-123	file	-	claude	claude
+run=claude --resume abc-123	claude=abc-123	file	-	claude -r	claude -r
+run	-	file	-	claude	claude
+type	-	file	-	claude fix it	claude 'fix it'
+type	-	file	-	claude --dangerously-skip-permissions	claude --dangerously-skip-permissions
+type	-	file	-	claude -p hello	claude -p hello
+type=claude --resume abc-123	unclean,claude=abc-123	file	-	claude	claude
+# CHAINS (the user's review, 2026-11-14: `cd repo; claude -r` and `cd repo; lg` came back as the whole line typed). The commands before
+# the running one are done (the shell stands where the cd put it): only the running one counts. flags `w=<word>:<kind>:<alias value>` are
+# the hook's triples for the line's command words.
+run=lg	w=cd:builtin:,w=lg:alias:lazygit	builtin	-	cd .config/quickshell/; lg	lazygit
+run=claude --resume abc-123	claude=abc-123,w=cd:builtin:,w=claude:file:	builtin	-	cd .config/quickshell/; claude -r	claude -r
+run=claude --resume abc-123	claude=abc-123,w=cd:builtin:,w=claude:file:	builtin	-	cd repo && claude -r	claude -r
+run=nvim notes.md	w=cd:builtin:,w=git:file:,w=nvim:file:	builtin	-	cd repo; git pull || true; nvim notes.md	nvim notes.md
+run=lg	w=cd:builtin:,w=lg:alias:lazygit	builtin	-	cd 'my; repo'; lg	lazygit
+# commands still follow the running one: it and they are typed, the finished ones are not
+type=claude --resume abc-123; exit	claude=abc-123,w=cd:builtin:,w=claude:file:,w=exit:builtin:	builtin	-	cd repo; claude -r; exit	claude -r
+type=lg && git push	w=cd:builtin:,w=lg:alias:lazygit,w=git:file:	builtin	-	cd repo; lg && git push	lazygit
+# the running command of a chain is itself compound, or not on the run list
+type=tail -f x | grep y	w=cd:builtin:,w=tail:file:,w=grep:file:	builtin	-	cd repo; tail -f x | grep y	tail -f x ||| grep y
+type=yay -Syu	w=cd:builtin:,w=yay:file:	builtin	-	cd repo; yay -Syu	yay -Syu
+# not told apart: the same program twice, a function that runs it, a terminal whose hook is older than the triples -- the REAL argv is typed
+type=lazygit	w=lg:alias:lazygit	alias	lazygit	lg; lg	lazygit
+type=nvim	w=cd:builtin:,w=work:function:	builtin	-	cd repo; work	nvim
+type=lazygit	-	builtin	-	cd repo; lg	lazygit
+type=claude --resume abc-123	claude=abc-123	builtin	-	cd repo; claude -r	claude -r
+# an unclean end types a chain's running command too
+type=lg	unclean,w=cd:builtin:,w=lg:alias:lazygit	builtin	-	cd repo; lg	lazygit
+# A PRESET LOAD (flag `fresh`): a Claude job the run list accepts comes back as a bare `claude` -- a new session in the same directory
+run=claude	fresh,claude=abc-123	file	-	claude -r	claude --resume abc-123
+run=claude	fresh,claude=abc-123	file	-	claude --continue	claude --continue
+run=claude	fresh,claude=abc-123	file	-	claude	claude
+run=claude	fresh	-	-	-	claude --resume abc-123
+type=claude; exit	fresh,claude=abc-123,w=cd:builtin:,w=claude:file:,w=exit:builtin:	builtin	-	cd repo; claude -r; exit	claude -r
+type=claude fix it	fresh	file	-	claude fix it	claude 'fix it'
+run	fresh	alias	lazygit	lg	lazygit
+# session.jsonc `claude` "type" (flag `typed`): the conversation's own command, typed and not run; nothing else changes
+type=claude --resume abc-123	typed,claude=abc-123	file	-	claude -r	claude --resume abc-123
+type=claude --resume abc-123; exit	typed,claude=abc-123,w=cd:builtin:,w=claude:file:,w=exit:builtin:	builtin	-	cd repo; claude -r; exit	claude -r
+run	typed	alias	lazygit	lg	lazygit

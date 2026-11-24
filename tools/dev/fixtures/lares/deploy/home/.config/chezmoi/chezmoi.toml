@@ -1,0 +1,17 @@
+[data]
+    isLaptop = true
+    cursorSize = 36
+    waybarHeight = 40
+    waybarTrayIconSize = 22
+    waybarTraySpacing = 7
+    # waybar CSS
+    fontSize = 20
+    modulesBorderRadius = 18
+    generalBorderRadius = 14
+    # mako
+    makoLowWidth = 130
+    makoLowHeight = 100
+    # wofi
+    wofiWidth = 800
+    wofiHeight = 500
+    wofiImageSize = 70

@@ -1,0 +1,21 @@
+// airplay.jsonc -- AirPlay (RAOP) speakers (modules/audio/data/AirplayWatch.qml). The template of ~/.config/quickshell/config/airplay.jsonc.
+// Every key is optional and every value below IS the default. The file is read hot. `//` and `/* */` comments are allowed.
+{
+    // While sound flows into an AirPlay speaker, turn the Wi-Fi radio's power save OFF (it sleeps between beacons, and the stream drops
+    // out) and put it back after. Needs the silicon helper's `wifi-powersave` verb and its polkit rule (`lares setup`, R3 and R4); without
+    // them nothing is changed and the log says so once. A power save that was already off when sound started is yours: never touched.
+    "powersave": true,
+
+    // Seconds after the last sound before power save is put back (a track change or a pause is not the end). 0 .. 3600.
+    "graceSec": 60,
+
+    // How long the SOUND lags what the player knows, in ms: the track card (OSD), the bar glyph's new-song flourish and the lyrics'
+    // active line wait this long, only while mpd plays into an AirPlay speaker.
+    //   "auto"  the speaker's own buffer, read from the PipeWire module that made it: raop.latency.ms + sess.latency.msec
+    //           (~/.config/pipewire/pipewire.conf.d/raop-discover.conf)
+    //   number  that many ms instead (0 .. 60000; 0 = never wait)
+    "delay": "auto",
+
+    // Added to either (can be negative; the total never goes below 0): the speaker's buffer is not always the whole of what you hear.
+    "delayExtraMs": 0
+}

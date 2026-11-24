@@ -1,0 +1,38 @@
+#!/bin/sh
+# The snapshot hook's wrapper (docs/contracts/snapshots.md section 7). pacman runs it as root, twice a transaction:
+#   hook pre    before the transaction, with the package names on stdin (00-lares-snapshot.hook, AbortOnFail)
+#   hook done   after it (zz-lares-snapshot-done.hook)
+# Its one law: a broken or missing TOOL never blocks pacman. Whenever the tool, python or restic cannot work, there is no repository,
+# this is a chroot, or /etc/lares/snapshot.off exists, it says `skip` and exits 0. Only the tool's own exit 1 (a snapshot that failed on
+# purpose: too little space, too big, too slow) stops the transaction; any other status of the tool means the tool is broken.
+# The paths are the first lines so the install probe can move them into a fake root.
+LIB=/usr/local/lib/lares/snapshot
+STATE=/.lares-snapshots
+OFF=/etc/lares/snapshot.off
+PY=/usr/bin/python3
+RESTIC=/usr/bin/restic
+DETECT=/usr/bin/systemd-detect-virt
+
+MODE=$1
+# pacman writes every package name into this pipe: read them all first, whatever comes next (a skip that left them unread would break the pipe)
+TARGETS=
+[ -t 0 ] || TARGETS=$(cat)
+skip() {
+    # `done` only fills in a record: where there is nothing to fill it says nothing
+    [ "$MODE" = done ] || echo "lares-snapshot: skip $1 $2"
+    exit 0
+}
+
+[ "$MODE" = pre ] || [ "$MODE" = done ] || skip tool "the hook was called with '$MODE'"
+[ -e "$OFF" ] && skip off "snapshots are switched off ($OFF exists)"
+"$DETECT" --chroot > /dev/null 2>&1 && skip chroot "this is a chroot"
+[ -x "$LIB/lares-snapshot-root" ] && [ -x "$PY" ] || skip tool "the snapshot tool or python is missing"
+[ -f "$STATE/repo/config" ] && [ -f "$STATE/key" ] || skip repo "there is no snapshot repository yet"
+"$RESTIC" version > /dev/null 2>&1 || skip tool "restic is missing or does not start"
+
+printf '%s\n' "$TARGETS" | "$PY" -I "$LIB/lares-snapshot-root" hook "$1"
+rc=$?
+case $rc in
+    0 | 1) exit "$rc" ;;
+    *) skip tool "the snapshot tool stopped with status $rc, so the update goes on without it" ;;
+esac

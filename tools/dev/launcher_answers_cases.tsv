@@ -1,0 +1,381 @@
+# Lares launcher answers: one case per line, TAB separated: query, kind (or "none"), value, copy.
+# "-" in value or copy = not checked. "\u202f" stands for the narrow no-break space of digit grouping.
+# Fixed world: now = 2026-11-19T12:00:00Z (Thursday), home zone Europe/Brussels, home currency EUR,
+# rates = tools/dev/fixtures/launcher_ecb_daily.xml (ECB 2026-11-19). Run: tools/dev/launcher_answers_probe.sh
+2+3*4	math	14	14
+(2+3)*4	math	20	20
+2*(3+4)	math	14	14
+2(3+4)	math	14	14
+10/4	math	2.5	2.5
+1/3	math	0.333333333333	0.333333333333
+2/3	math	0.666666666667	0.666666666667
+7/2	math	3.5	3.5
+1/0	none	-	-
+-5	none	-	-
+5	none	-	-
+pi	none	-	-
+2pi	math	6.28318530718	6.28318530718
+2 pi	math	6.28318530718	6.28318530718
+π*2	math	6.28318530718	6.28318530718
+e^2	math	7.38905609893	7.38905609893
+tau/2	math	3.14159265359	3.14159265359
+2^10	math	1024	1024
+2**10	math	1024	1024
+2^-2	math	0.25	0.25
+-2^2	math	-4	-4
+2^0.5	math	1.41421356237	1.41421356237
+2^100	math	1\u202f267\u202f650\u202f600\u202f228\u202f229\u202f401\u202f496\u202f703\u202f205\u202f376	1267650600228229401496703205376
+9^9^9	none	-	-
+100!	math	9.33262154439e157	9.33262154439e157
+5!	math	120	120
+0!	math	1	1
+sqrt(16)	math	4	4
+sqrt(2)	math	1.41421356237	1.41421356237
+sqrt 16	math	4	4
+cbrt(27)	math	3	3
+cbrt(-8)	math	-2	-2
+abs(-4.5)	math	4.5	4.5
+round(2.5)	math	3	3
+round(-2.5)	math	-3	-3
+floor(2.7)	math	2	2
+ceil(2.1)	math	3	3
+sin(30°)	math	0.5	0.5
+sin 30°	math	0.5	0.5
+sin(30 deg)	math	0.5	0.5
+cos(60°)	math	0.5	0.5
+tan(45°)	math	1	1
+asin(1)	math	1.57079632679	1.57079632679
+acos(0)	math	1.57079632679	1.57079632679
+atan(1)	math	0.785398163397	0.785398163397
+ln(e)	math	1	1
+ln(10)	math	2.30258509299	2.30258509299
+log(1000)	math	3	3
+log2(8)	math	3	3
+exp(1)	math	2.71828182846	2.71828182846
+10 mod 3	math	1	1
+10 % 3	math	1	1
+-7 mod 3	math	2	2
+7 ÷ 2	math	3.5	3.5
+6 x 7	math	42	42
+6×7	math	42	42
+1.2e3	none	-	-
+1.2e3 * 2	math	2400	2400
+2e3	none	-	-
+1,000 + 1	math	1001	1001
+1,234.5*2	math	2469	2469
+1,5 + 1	math	2.5	2.5
+12,345,678 * 2	math	24\u202f691\u202f356	24691356
+0.1+0.2	math	0.3	0.3
+1e20 * 10	math	1\u202f000\u202f000\u202f000\u202f000\u202f000\u202f000\u202f000	1000000000000000000000
+12345678901234567890 * 98765432109876543210	math	1\u202f219\u202f326\u202f311\u202f370\u202f217\u202f952\u202f237\u202f463\u202f801\u202f111\u202f263\u202f526\u202f900	1219326311370217952237463801111263526900
+1000000 * 1000000	math	1\u202f000\u202f000\u202f000\u202f000	1000000000000
+123456789 * 987654321	math	121\u202f932\u202f631\u202f112\u202f635\u202f269	121932631112635269
+10000 + 1	math	10\u202f001	10001
+0.00001234 * 1	math	0.00001234	0.00001234
+1/7	math	0.142857142857	0.142857142857
+22/7	math	3.14285714286	3.14285714286
+(1+2	none	-	-
+1+	none	-	-
++	none	-	-
+3 4	none	-	-
+2 3	none	-	-
+2+2=	math	4	4
+0xff + 1	base	256	256
+0b1010 + 0b0101	base	15	15
+0o17 * 2	base	30	30
+0xff	base	255	255
+0b1010	base	10	10
+0o17	base	15	15
+0xFF	base	255	255
+255 in hex	base	0xff	0xff
+255 to bin	base	0b11111111	0b11111111
+255 in oct	base	0o377	0o377
+255 in binary	base	0b11111111	0b11111111
+255 in hexadecimal	base	0xff	0xff
+0xff in dec	base	255	255
+0xff in decimal	base	255	255
+0b1010 to hex	base	0xa	0xa
+hex 255	base	0xff	0xff
+bin 42	base	0b101010	0b101010
+oct 8	base	0o10	0o10
+dec 0xff	base	255	255
+2^8 - 1 in hex	base	0xff	0xff
+-255 in hex	base	-0xff	-0xff
+255 in base 36	base	73	73
+255 to base 2	base	0b11111111	0b11111111
+3.5 in hex	none	-	-
+1000 to hex	base	0x3e8	0x3e8
+3h20m + 45m	time	4h 5m	4h 5m
+2:30 * 3	time	7h 30m	7h 30m
+17:45 - 9:15	time	8h 30m	8h 30m
+90 min in h	time	1.5 h	1.5
+1.5h in min	time	90 min	90
+45m * 4	time	3h	3h
+1h30m + 1h30m	time	3h	3h
+2h / 4	time	30m	30m
+10h - 90m	time	8h 30m	8h 30m
+1d12h in h	time	36 h	36
+90 min in h:mm	time	1:30	1:30
+3 hours in minutes	time	180 minutes	180
+2 weeks in days	time	14 days	14
+7200 s in h	time	2 h	2
+30m + 30m	time	1h	1h
+3:15 + 0:50	time	4h 5m	4h 5m
+8h * 5	time	40h	40h
+1:30:30 + 0:30:30	time	2h 1m	2h 1m
+5 ft in cm	unit	152.4 cm	152.4
+5'11" in cm	unit	180.34 cm	180.34
+5'11 in cm	unit	180.34 cm	180.34
+6ft 2in in cm	unit	187.96 cm	187.96
+3.2 GiB in MB	unit	3435.9738368 MB	3435.9738368
+70 f in c	unit	21.1111111111 °C	21.1111111111
+70 °f in °c	unit	21.1111111111 °C	21.1111111111
+-40 c in f	unit	-40 °F	-40
+0 k in c	unit	-273.15 °C	-273.15
+100 c in f	unit	212 °F	212
+300 k in f	unit	80.33 °F	80.33
+100 km/h in mph	unit	62.1371192237 mph	62.1371192237
+60 mph in km/h	unit	96.56064 km/h	96.56064
+100 mbps in MB/s	unit	12.5 MB/s	12.5
+1 GB in MB	unit	1000 MB	1000
+1 GiB in MiB	unit	1024 MiB	1024
+1 GB in GiB	unit	0.931322574615 GiB	0.931322574615
+8 Mb in MB	unit	1 MB	1
+1 TB in GB	unit	1000 GB	1000
+5 km in miles	unit	3.10685596119 miles	3.10685596119
+1 mile in km	unit	1.609344 km	1.609344
+10 kg in lb	unit	22.0462262185 lb	22.0462262185
+150 lb in kg	unit	68.0388555 kg	68.0388555
+1 oz in g	unit	28.349523125 g	28.349523125
+1 stone in kg	unit	6.35029318 kg	6.35029318
+2 l in gal	unit	0.528344104716 gal	0.528344104716
+1 gal in l	unit	3.785411784 l	3.785411784
+1 cup in ml	unit	236.5882365 ml	236.5882365
+500 ml in floz	unit	16.9070113509 floz	16.9070113509
+1 acre in m2	unit	4046.8564224 m²	4046.8564224
+1 ha in acre	unit	2.47105381467 acre	2.47105381467
+10 m2 in ft2	unit	107.639104167 ft²	107.639104167
+100 sqft in m2	unit	9.290304 m²	9.290304
+1 kWh in kJ	unit	3600 kJ	3600
+2000 kcal in kJ	unit	8368 kJ	8368
+100 W in hp	unit	0.13410220896 hp	0.13410220896
+1 hp in W	unit	745.699871582 W	745.699871582
+1 bar in psi	unit	14.503773773 psi	14.503773773
+14.7 psi in kPa	unit	101.35293221 kPa	101.35293221
+1 atm in mmHg	unit	760 mmHg	760
+1 inch in mm	unit	25.4 mm	25.4
+1 in in cm	unit	2.54 cm	2.54
+5 in in cm	unit	12.7 cm	12.7
+12 inches in ft	unit	1 ft	1
+1 light year in km	unit	9\u202f460\u202f730\u202f472\u202f580 km	9460730472580
+1 knot in km/h	unit	1.852 km/h	1.852
+30 mpg in l/100km	unit	7.84049 l/100km	7.84049
+8 l/100km in mpg	unit	29.4018 mpg	29.4018
+1 m in cm	unit	100 cm	100
+1 m in ft	unit	3.28083989501 ft	3.28083989501
+1000 m in km	unit	1 km	1
+1 yard in feet	unit	3 feet	3
+1 nmi in km	unit	1.852 km	1.852
+36 km/h in m/s	unit	10 m/s	10
+1 MB/s in Mbps	unit	8 Mbps	8
+10 ft in meters	unit	3.048 meters	3.048
+5 cm in mm	unit	50 mm	50
+5 foo in bar	none	-	-
+5 kg in m	none	-	-
+100 usd in eur	currency	90.98 EUR	90.98
+100 usd to eur	currency	90.98 EUR	90.98
+$100 in €	currency	90.98 EUR	90.98
+€20 in gbp	currency	16.72 GBP	16.72
+20 eur	currency	21.98 USD	21.98
+20 usd	currency	18.20 EUR	18.20
+usd to gbp	currency	0.76038 GBP	0.76038
+100 jpy to eur	currency	0.5687 EUR	0.5687
+1000 eur in jpy	currency	175\u202f840 JPY	175840
+£50 in $	currency	65.76 USD	65.76
+2k usd in eur	currency	1819.51 EUR	1819.51
+1,000 usd in eur	currency	909.75 EUR	909.75
+100 dollars in euros	currency	90.98 EUR	90.98
+100 usd in xyz	none	-	-
+100 eur in eur	none	-	-
+15% of 80	percent	12	12
+15 % of 80	percent	12	12
+15 percent of 80	percent	12	12
+what is 15% of 80	percent	12	12
+45 is what % of 60	percent	75 %	75
+what % is 45 of 60	percent	75 %	75
+45 is what percent of 60	percent	75 %	75
+80 + 21%	percent	96.8	96.8
+80 - 15%	percent	68	68
+80 * 15%	percent	12	12
+15% off 80	percent	68	68
+80 to 100 in %	percent	+25 %	25
+% change 80 to 100	percent	+25 %	25
+percent change from 100 to 80	percent	-20 %	-20
+12 is 15% of what	percent	80	80
+50%	none	-	-
+0% of 5	percent	0	0
+5 is what % of 0	none	-	-
+16:9 at 1440 wide	ratio	1440 × 810	1440x810
+16:9 1440 tall	ratio	2560 × 1440	2560x1440
+16:9 at 1920 wide	ratio	1920 × 1080	1920x1080
+21:9 of 3440	ratio	3440 × 1474	3440x1474
+4:3 of 1024	ratio	1024 × 768	1024x768
+aspect 1920x1080	ratio	16:9	16:9
+1920x1080 ratio	ratio	16:9	16:9
+aspect ratio of 2560x1440	ratio	16:9	16:9
+aspect 1366x768	ratio	≈ 16:9	16:9
+aspect 3440x1440	ratio	≈ 21:9	21:9
+16:9	resolution	1920 × 1080	1920x1080
+21:9	resolution	3440 × 1440	3440x1440
+16:10	resolution	1920 × 1200	1920x1200
+4:3	resolution	1600 × 1200	1600x1200
+2:30	none	-	-
+720p	resolution	1280 × 720	1280x720
+1080p	resolution	1920 × 1080	1920x1080
+1440p	resolution	2560 × 1440	2560x1440
+2160p	resolution	3840 × 2160	3840x2160
+4k	resolution	3840 × 2160	3840x2160
+5k	resolution	5120 × 2880	5120x2880
+8k	resolution	7680 × 4320	7680x4320
+hd	resolution	1280 × 720	1280x720
+fhd	resolution	1920 × 1080	1920x1080
+qhd	resolution	2560 × 1440	2560x1440
+wqhd	resolution	2560 × 1440	2560x1440
+uhd	resolution	3840 × 2160	3840x2160
+wuxga	resolution	1920 × 1200	1920x1200
+wqxga	resolution	2560 × 1600	2560x1600
+dci 4k	resolution	4096 × 2160	4096x2160
+2k	resolution	2560 × 1440	2560x1440
+1440p ultrawide	resolution	3440 × 1440	3440x1440
+1440p 21:9	resolution	3440 × 1440	3440x1440
+1080p 16:10	resolution	1728 × 1080	1728x1080
+1080p ultrawide	resolution	2560 × 1080	2560x1080
+2160p 21:9	resolution	5120 × 2160	5120x2160
+1080p 32:9	resolution	3840 × 1080	3840x1080
+900p	resolution	1600 × 900	1600x900
+1050p	resolution	1866 × 1050	1866x1050
+2560x1440	resolution	2560 × 1440	2560x1440
+3840x2160	resolution	3840 × 2160	3840x2160
+1920x1200	resolution	1920 × 1200	1920x1200
+1366x768	resolution	1366 × 768	1366x768
+3440x1440	resolution	3440 × 1440	3440x1440
+2560×1440	resolution	2560 × 1440	2560x1440
+27in 1440p	resolution	108.8 PPI	108.8
+27" 4k	resolution	163.2 PPI	163.2
+2560x1440 27in	resolution	108.8 PPI	108.8
+14 inch 2880x1800	resolution	242.6 PPI	242.6
+27 inch 1440p	resolution	108.8 PPI	108.8
+32in 4k	resolution	137.7 PPI	137.7
+24" 1080p	resolution	91.8 PPI	91.8
+13.3" 1920x1080	resolution	165.6 PPI	165.6
+#4480f4	colour	#4480f4	#4480f4
+#48f	colour	#4488ff	#4488ff
+#4480f480	colour	#4480f480	#4480f480
+#FFF	colour	#ffffff	#ffffff
+#abcd	colour	#aabbccdd	#aabbccdd
+#12345	none	-	-
+4480f4	none	-	-
+rgb(68,128,244)	colour	#4480f4	#4480f4
+rgb(68, 128, 244)	colour	#4480f4	#4480f4
+rgb 68 128 244	colour	#4480f4	#4480f4
+rgba(68,128,244,0.5)	colour	#4480f480	#4480f480
+rgb(300,0,0)	none	-	-
+hsl(220, 89%, 61%)	colour	#437ef4	#437ef4
+hsl 220 89 61	colour	#437ef4	#437ef4
+hsla(220, 89%, 61%, 0.5)	colour	#437ef480	#437ef480
+colour red	colour	#ff0000	#ff0000
+color rebeccapurple	colour	#663399	#663399
+colour nonsense	none	-	-
+red	none	-	-
+3pm tokyo in brussels	zone	07:00 CET	07:00
+15:00 tokyo	zone	07:00 CET	07:00
+15:00 tokyo in new york	zone	01:00 EST	01:00
+now in new york	zone	07:00 EST	07:00
+time in tokyo	zone	21:00 JST	21:00
+tokyo time	zone	21:00 JST	21:00
+9am pst in cet	zone	18:00 CET	18:00
+9am pst in cest	zone	18:00 CET	18:00
+3pm in tokyo	zone	23:00 JST	23:00
+noon utc in tokyo	zone	21:00 JST	21:00
+midnight tokyo in london	zone	15:00 GMT (yesterday)	15:00
+3pm san francisco in london	zone	23:00 GMT	23:00
+10:30 mumbai in berlin	zone	06:00 CET	06:00
+3pm utc+2 in tokyo	zone	22:00 JST	22:00
+2026-03-15 12:00 new york in brussels	zone	17:00 CET	17:00
+2026-01-15 12:00 new york in brussels	zone	18:00 CET	18:00
+2026-03-29 12:00 brussels in new york	zone	06:00 EDT	06:00
+2026-10-25 12:00 london in brussels	zone	13:00 CET	13:00
+2026-03-29 02:30 brussels in utc	zone	01:30 UTC	01:30
+9am ist in cet	zone	04:30 CET	04:30
+8pm tomorrow tokyo in brussels	zone	12:00 CET	12:00
+1pm sydney in brussels	zone	03:00 CET	03:00
+time in atlantis	none	-	-
+days until 24 dec	date	35 days	35
+days until christmas	date	36 days	36
+days since 1 jan	date	322 days	322
+days until 2027-01-01	date	43 days	43
+days since 2020-02-29	date	2455 days	2455
+days between 1 jan and 1 mar	date	59 days	59
++90 days	date	Wed 17 Feb 2027	2027-02-17
+today + 2 weeks	date	Thu 3 Dec 2026	2026-12-03
+today - 1 month	date	Mon 19 Oct 2026	2026-10-19
+now + 3 days	date	Sun 22 Nov 2026	2026-11-22
+90 days from now	date	Wed 17 Feb 2027	2027-02-17
+3 weeks ago	date	Thu 29 Oct 2026	2026-10-29
+2026-12-24 - today	date	35 days	35
+today - 2026-01-01	date	322 days	322
+2026-12-24 - 2026-11-19	date	35 days	35
+24 dec + 1 week	date	Thu 31 Dec 2026	2026-12-31
+2026-01-31 + 1 month	date	Sat 28 Feb 2026	2026-02-28
+2028-02-29 + 1 year	date	Wed 28 Feb 2029	2029-02-28
+week 47	date	16 Nov – 22 Nov 2026	2026-11-16
+week 53	date	28 Dec – 3 Jan 2027	2026-12-28
+week number	date	week 47	47
+week number of 24 dec	date	week 52	52
+unix 1700000000	date	2023-11-14 22:13:20 UTC	2023-11-14 22:13:20
+unix 1700000000000	date	2023-11-14 22:13:20 UTC	2023-11-14 22:13:20
+now in unix	date	1795089600	1795089600
+unix now	date	1795089600	1795089600
+what day is 24 dec 2026	date	Thursday	Thursday
+what day is 2000-01-01	date	Saturday	Saturday
+day of year	date	day 323	323
+days until 31 feb	none	-	-
+steam	none	-	-
+code	none	-	-
+htop	none	-	-
+btop	none	-	-
+7zip	none	-	-
+1password	none	-	-
+4k video downloader	none	-	-
+k3b	none	-	-
+x11	none	-	-
+2048	none	-	-
+visual studio code	none	-	-
+firefox	none	-	-
+tokyo	none	-	-
+usd	none	-	-
+hex	none	-	-
+week	none	-	-
+time	none	-	-
+now	none	-	-
+today	none	-	-
+log	none	-	-
+sin	none	-	-
+e	none	-	-
+pi	none	-	-
+colour	none	-	-
+hello world	none	-	-
+24	none	-	-
+(5)	none	-	-
+-5	none	-	-
+1.5	none	-	-
+1,000	none	-	-
+$100	currency	90.98 EUR	90.98
+€	none	-	-
+5 kg	none	-	-
+5 ft	none	-	-
+10 usdx	none	-	-
+a+b	none	-	-
+abc 123	none	-	-
+12:30	none	-	-
+192.168.1.1	none	-	-

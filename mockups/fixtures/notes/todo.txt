@@ -1,0 +1,3 @@
+call the landlord about the heating
+renew the passport before November
+backup the laptop (see Projects/backup.sh)

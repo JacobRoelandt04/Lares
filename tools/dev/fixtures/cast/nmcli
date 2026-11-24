@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Stub nmcli. $CAST_WORLD/nmcli.down = how many `device` status asks still answer "Wi-Fi disconnected"; nmcli.polls counts the DEVICE,STATE
+# asks (the wait for the link). Profiles: `bssid` holds the profile's 802-11-wireless.bssid ("" = not locked), `ownbssid` = the user's own lock,
+# `nm.refuse` = a modify is refused. Every change goes to nm.log with the group interfaces there were at that moment.
+w=$CAST_WORLD
+g=$(ls "$w/net" 2>/dev/null | grep '^p2p-' | grep -v '^p2p-dev' | tr '\n' ' ')
+note() { echo "$* [groups: ${g% }]" >> "$w/nm.log"; }
+case "$*" in
+  *"connection modify"*)
+    note "modify $*"
+    [ -e "$w/nm.refuse" ] && { echo "Error: Failed to modify connection: insufficient privileges"; exit 1; }
+    printf '%s' "${@: -1}" > "$w/bssid"; exit 0 ;;
+  *"connection up"*) note "up bssid=$(cat "$w/bssid" 2>/dev/null)"; exit 0 ;;
+  *"connection show"*) cat "$w/ownbssid" 2>/dev/null; echo; exit 0 ;;
+  *"wifi list"*) printf 'no:02\\:AE\\:00\\:00\\:0A\\:04\nyes:02\\:AE\\:00\\:00\\:0A\\:03\n'; exit 0 ;;
+esac
+p=$(cat "$w/nmcli.polls" 2>/dev/null || echo 0)
+case "$*" in *"DEVICE,STATE "*) p=$((p+1)); echo $p > "$w/nmcli.polls" ;; esac
+down=$(cat "$w/nmcli.down" 2>/dev/null || echo 0)
+st=connected; { [ "$p" -gt 0 ] && [ "$p" -le "$down" ]; } && st=disconnected
+case "$*" in
+  *DEVICE,TYPE,STATE,CON-UUID*) printf 'wlan0:wifi:%s:%s\np2p-dev-wlan0:wifi-p2p:disconnected:\nlo:loopback:connected (externally):x\n' "$st" "$([ $st = connected ] && echo U-1)" ;;
+  *DEVICE,TYPE,STATE*) printf 'wlan0:wifi:%s\np2p-dev-wlan0:wifi-p2p:disconnected\nlo:loopback:connected (externally)\n' "$st" ;;
+  *) printf 'wlan0:%s\np2p-dev-wlan0:disconnected\nlo:connected (externally)\n' "$st" ;;
+esac

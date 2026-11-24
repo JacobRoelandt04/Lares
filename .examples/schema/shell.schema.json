@@ -1,0 +1,2754 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "shell.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "topMode": {
+   "enum": [
+    "islands",
+    "continuous"
+   ],
+   "default": "islands",
+   "x-wants": "\"islands\" or \"continuous\"",
+   "description": "The top bar: \"islands\" (three 40 px islands on the top edge -- left, centre, right -- with the wallpaper between them) or\n\"continuous\" (one bar across the whole edge, the three zones laid out along it). The same modules stand in either; nothing is\nrebuilt by the switch.\n\nTakes \"islands\" or \"continuous\". Default: \"islands\"."
+  },
+  "font": {
+   "type": "string",
+   "default": "Audiowide",
+   "x-wants": "a text",
+   "description": "The face of the shell's own text (the placeholders' names, and what is handed to the modules that take one). Any installed family.\n\nTakes a text. Default: \"Audiowide\"."
+  },
+  "centre": {
+   "enum": [
+    "centred",
+    "equal"
+   ],
+   "default": "centred",
+   "x-wants": "\"centred\" or \"equal\"",
+   "description": "\"centred\": the centre island sits in the middle of the screen. \"equal\": it is placed so both voids are the same.\n\nTakes \"centred\" or \"equal\". Default: \"centred\"."
+  },
+  "zones": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "left": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "power",
+       "idle",
+       "theme",
+       "notes",
+       "llm",
+       "windowtray",
+       "weather",
+       "clock",
+       "stocks",
+       "player",
+       "volume",
+       "aerial",
+       "bridge",
+       "panorama",
+       "silicon",
+       "update",
+       "notifications",
+       "network"
+      ],
+      "x-wants": "\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\""
+     },
+     "default": [
+      "power",
+      "idle",
+      "theme",
+      "notes",
+      "llm",
+      "windowtray"
+     ],
+     "x-wants": "a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\")",
+     "description": "Takes a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\"). Default: [\"power\",\"idle\",\"theme\",\"notes\",\"llm\",\"windowtray\"]."
+    },
+    "centre": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "power",
+       "idle",
+       "theme",
+       "notes",
+       "llm",
+       "windowtray",
+       "weather",
+       "clock",
+       "stocks",
+       "player",
+       "volume",
+       "aerial",
+       "bridge",
+       "panorama",
+       "silicon",
+       "update",
+       "notifications",
+       "network"
+      ],
+      "x-wants": "\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\""
+     },
+     "default": [
+      "weather",
+      "clock",
+      "stocks"
+     ],
+     "x-wants": "a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\")",
+     "description": "Takes a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\"). Default: [\"weather\",\"clock\",\"stocks\"]."
+    },
+    "right": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "power",
+       "idle",
+       "theme",
+       "notes",
+       "llm",
+       "windowtray",
+       "weather",
+       "clock",
+       "stocks",
+       "player",
+       "volume",
+       "aerial",
+       "bridge",
+       "panorama",
+       "silicon",
+       "update",
+       "notifications",
+       "network"
+      ],
+      "x-wants": "\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\""
+     },
+     "default": [
+      "player",
+      "volume",
+      "aerial",
+      "bridge",
+      "panorama",
+      "silicon",
+      "update",
+      "notifications"
+     ],
+     "x-wants": "a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\")",
+     "description": "Takes a list of words (\"power\", \"idle\", \"theme\", \"notes\", \"llm\", \"windowtray\", \"weather\", \"clock\", \"stocks\", \"player\", \"volume\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\", \"notifications\" or \"network\"). Default: [\"player\",\"volume\",\"aerial\",\"bridge\",\"panorama\",\"silicon\",\"update\",\"notifications\"]."
+    }
+   },
+   "description": "The modules of each island, in order (left to right). Ids: power idle theme notes llm windowtray weather clock stocks player\nvolume aerial bridge panorama silicon update notifications (`network` is still read as aerial). Move an id to another zone to move the module; a module left out comes back in its\nown zone at the end; an unknown id or a second copy is ignored."
+  },
+  "islands": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "left": {
+      "type": "number",
+      "minimum": 1,
+      "x-wants": "a number, 1 and up"
+     },
+     "centre": {
+      "type": "number",
+      "minimum": 1,
+      "x-wants": "a number, 1 and up"
+     },
+     "right": {
+      "type": "number",
+      "minimum": 1,
+      "x-wants": "a number, 1 and up"
+     }
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "The island lengths in px, per output (by connector name: `hyprctl monitors`); \"default\" for any output not named. A length left\nout is what the modules need (the room at the ends, their widths, the gaps and the title's slot, which follows the title), so the\ndefaults fit 2880 px. A length given here (a whole number above 0) is FIXED: leave the left one out for the island to follow the\ntitle. Example:\n  \"islands\": { \"eDP-1\": { \"left\": 760, \"centre\": 640, \"right\": 480 }, \"default\": { \"left\": 800 } }\n\nDefault: {}."
+  },
+  "outlets": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "notes": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "bar": {
+       "enum": [
+        "left",
+        "right",
+        "bottom",
+        "top"
+       ],
+       "default": "left",
+       "x-wants": "\"left\", \"right\", \"bottom\" or \"top\"",
+       "description": "Takes \"left\", \"right\", \"bottom\" or \"top\". Default: \"left\"."
+      },
+      "along": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "default": 0,
+       "x-wants": "a number 0 .. 1",
+       "description": "Takes a number 0 .. 1. Default: 0."
+      }
+     }
+    },
+    "llm": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "bar": {
+       "enum": [
+        "left",
+        "right",
+        "bottom",
+        "top"
+       ],
+       "default": "left",
+       "x-wants": "\"left\", \"right\", \"bottom\" or \"top\"",
+       "description": "Takes \"left\", \"right\", \"bottom\" or \"top\". Default: \"left\"."
+      },
+      "along": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "default": 0,
+       "x-wants": "a number 0 .. 1",
+       "description": "Takes a number 0 .. 1. Default: 0."
+      }
+     }
+    }
+   },
+   "description": "Where notes and the LLM open: a slim bar (\"left\", \"right\" or \"bottom\") and where along it, 0 .. 1 from its start on the screen (0 is the top of a\nside bar, under the island: the popup rests flush in the corner), or \"top\": under its own button, as every other popup."
+  },
+  "scale": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "global": {
+     "type": "number",
+     "minimum": 0.5,
+     "maximum": 4,
+     "default": 1,
+     "x-wants": "a number 0.5 .. 4",
+     "description": "Takes a number 0.5 .. 4. Default: 1."
+    },
+    "bar": {
+     "type": "number",
+     "minimum": 0.5,
+     "maximum": 2,
+     "default": 1,
+     "x-wants": "a number 0.5 .. 2",
+     "description": "Takes a number 0.5 .. 2. Default: 1."
+    },
+    "popup": {
+     "type": "number",
+     "minimum": 0.5,
+     "maximum": 2,
+     "default": 1,
+     "x-wants": "a number 0.5 .. 2",
+     "description": "Takes a number 0.5 .. 2. Default: 1."
+    },
+    "popups": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "silicon": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "weather": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "clock": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "stocks": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "player": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "audio": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "aerial": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "network": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "bridge": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "panorama": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "update": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "notifications": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "notes": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "llm": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "clipboard": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "launcher": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "picker": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "theme": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "windowtray": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "silicon.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "weather.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "clock.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "stocks.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "player.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "audio.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "aerial.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "network.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "bridge.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "panorama.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "update.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "notifications.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "notes.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "llm.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "clipboard.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "launcher.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "picker.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "theme.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "windowtray.detail": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      }
+     },
+     "default": {
+      "silicon": 1.35,
+      "aerial": 1.35,
+      "llm": 1.1
+     },
+     "x-wants": "an object",
+     "description": "Default: {\"silicon\":1.35,\"aerial\":1.35,\"llm\":1.1}."
+    },
+    "pills": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "osd": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "toast": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      },
+      "popup": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 2,
+       "x-wants": "a number 0.5 .. 2",
+       "description": "Takes a number 0.5 .. 2."
+      }
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "Default: {}."
+    },
+    "outputs": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "global": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 4,
+        "x-wants": "a number 0.5 .. 4"
+       },
+       "bar": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "x-wants": "a number 0.5 .. 2"
+       },
+       "popup": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 2,
+        "x-wants": "a number 0.5 .. 2"
+       },
+       "popups": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "silicon": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "weather": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "clock": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "stocks": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "player": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "audio": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "aerial": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "network": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "bridge": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "panorama": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "update": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "notifications": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "notes": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "llm": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "clipboard": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "launcher": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "picker": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "theme": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "windowtray": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "silicon.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "weather.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "clock.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "stocks.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "player.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "audio.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "aerial.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "network.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "bridge.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "panorama.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "update.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "notifications.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "notes.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "llm.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "clipboard.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "launcher.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "picker.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "theme.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "windowtray.detail": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         }
+        },
+        "x-wants": "an object"
+       },
+       "pills": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "osd": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "toast": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         },
+         "popup": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2,
+          "x-wants": "a number 0.5 .. 2"
+         }
+        },
+        "x-wants": "an object"
+       }
+      }
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "Default: {}."
+    }
+   },
+   "description": "THE SCALE. \"global\" is DEVICE pixels per DESIGN pixel -- the one number to turn: 1.25 makes the whole shell 25 % bigger (the bar,\nthe popups, the pill windows and every texture, canvas and decoded image in them) on any output, whatever scale Hyprland itself\ngives that output: the two are independent, the shell divides Hyprland's own out. 1.0 is the size the modules were designed at.\n0.5 .. 4.\n\"bar\" and \"popup\" are RATIOS on it (0.5 .. 2) for when the proportions between the bar and the popups feel off: \"bar\" scales the\nmain bar -- its 40 px thickness (and the room the windows keep clear of it), the lengths of the islands and every module in them --\nand \"popup\" every popup's content, with the radius, the fillets and the snaps the surface is drawn with; a popup that continues\nits bar's cell (the reel strips, the tray's strip) follows \"bar\". The outlet bars stay the compositor's own 6 px gap.\n\"popups\" is one popup's OWN ratio, by its owner's id (silicon, weather, clock, stocks, player, aerial (`network` is read as aerial), bridge, panorama, update, notifications (the\nmanager), notes, llm, clipboard, launcher, windowtray), 0.5 .. 2: that popup's content is laid out in its own units and drawn this\nmuch larger INSTEAD of \"popup\" (an entry says what the popup's ratio is; it is not a factor on \"popup\"), with its radius, its\ntextures and the box it asks the engine for. Silicon's board is read at 1.35 (its text is small at the global scale) and the LLM's\nchat at 1.1 (a feature-rich popup, a little bigger); an entry of yours replaces that one, `\"popups\": { \"silicon\": 1.0 }` puts it back.\n\"<id>.detail\" is the ratio of a popup's DETAIL -- every card that opens beside it: its secondary, that card's own, and the tray's\nlabel and menus under the reel's strip -- by the same owner id: `\"popups\": { \"silicon.detail\": 1.2 }` draws silicon's tuning and GPU\ncards at 1.2 while the board stays at its own. A detail is independent of its main popup: with no \"<id>.detail\" entry it takes the\nplain \"popup\" ratio, never its main popup's (so silicon's cards are 1.0 at \"popup\": 1.0 although its board is 1.35). Same range, same\n\"outputs\" override as \"popups\".\n\"pills\" is the same for the floating pills -- the OSD's (\"osd\"), the toasts' (\"toast\") and the popups' that float over a fullscreen\nwindow (\"popup\"); a pill with no entry takes \"popup\".\n\"outputs\": an entry per output (connector names) wins over the block's own value, key by key (\"popups\" and \"pills\" too):\n  \"outputs\": { \"eDP-1\": { \"global\": 1.5 }, \"DP-3\": { \"global\": 1.0, \"popup\": 1.1, \"popups\": { \"silicon\": 1.2, \"silicon.detail\": 1.1 }, \"pills\": { \"osd\": 1.1 } } }\nAnything that is not a number is the default. Read when the shell starts (the shell runs with QS_DISABLE_FILE_WATCHER=1:\n`lares restart`); where the file watcher is on, a saved change applies at once."
+  },
+  "shadow": {
+   "anyOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "mode": {
+       "enum": [
+        "off",
+        "halo"
+       ],
+       "default": "off",
+       "x-wants": "\"off\" or \"halo\""
+      },
+      "color": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|[A-Za-z][A-Za-z0-9]*)$",
+       "default": null,
+       "x-wants": "a text like accent or #4480F4 or null"
+      },
+      "aura": {
+       "type": "boolean",
+       "default": false,
+       "x-wants": "true or false"
+      },
+      "auraEvents": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "llm": {
+         "anyOf": [
+          {
+           "type": "boolean",
+           "x-wants": "true or false"
+          },
+          {
+           "type": "number",
+           "minimum": 1,
+           "maximum": 3600,
+           "x-wants": "a number 1 .. 3600"
+          }
+         ],
+         "default": 60,
+         "x-wants": "true or false, or a number 1 .. 3600"
+        },
+        "update": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false"
+        },
+        "timer": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false"
+        },
+        "screencast": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false"
+        }
+       }
+      }
+     },
+     "x-wants": "an object"
+    },
+    {
+     "enum": [
+      "off",
+      "halo"
+     ],
+     "x-wants": "\"off\" or \"halo\""
+    },
+    {
+     "type": "boolean",
+     "x-wants": "true or false"
+    }
+   ],
+   "default": {
+    "mode": "off",
+    "color": null,
+    "aura": false,
+    "auraEvents": {
+     "llm": 60,
+     "update": true,
+     "timer": true,
+     "screencast": true
+    }
+   },
+   "x-wants": "an object, or \"off\" or \"halo\", or true or false",
+   "description": "THE SHELL'S EDGE. A shadow under everything the surface is (the bars, the popups while they open and travel, the launcher's\ncard, the droplets, the ripples, the toasts, the OSD) and a ring round it; the colours are the theme's, so dark mode has its own.\n\nTakes an object, or \"off\" or \"halo\", or true or false. Default: {\"mode\":\"off\",\"color\":null,\"aura\":false,\"auraEvents\":{\"llm\":60,\"update\":true,\"timer\":true,\"screencast\":true}}."
+  },
+  "border": {
+   "anyOf": [
+    {
+     "type": "boolean",
+     "x-wants": "true or false"
+    },
+    {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 12,
+     "x-wants": "a number 0 .. 12"
+    },
+    {
+     "enum": [
+      "on"
+     ],
+     "x-wants": "\"on\""
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "width": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 12,
+       "default": 3,
+       "x-wants": "a number 0 .. 12"
+      },
+      "color": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|[A-Za-z][A-Za-z0-9]*)$",
+       "default": null,
+       "x-wants": "a text like accent or #4480F4 or null"
+      }
+     },
+     "x-wants": "an object"
+    }
+   ],
+   "default": false,
+   "x-wants": "true or false, or a number 0 .. 12, or \"on\", or an object",
+   "description": "A ring just outside the surface: false | true (3 px) | a width in px, 0 .. 12 | { \"width\": 3, \"color\": null }, the\ncolour as the shadow's (null: Theme.shellBorder).\n\nTakes true or false, or a number 0 .. 12, or \"on\", or an object. Default: false."
+  },
+  "theme": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "apply": {
+     "enum": [
+      "shell",
+      "themectl"
+     ],
+     "default": "shell",
+     "x-wants": "\"shell\" or \"themectl\"",
+     "description": "\"shell\": the shell alone (Theme.toggleMode): kitty, btop, the window borders, GTK and the wallpaper keep their mode.\n\"themectl\": the whole desktop: tools/theme/themectl toggle / set <pair> <mode>, a child of the shell (its ok / FAIL lines go to\nthe shell's log, a failed run is one notification). The shell follows ~/.config/theme/state.json as ever. Before switching, run\n`tools/theme/themectl doctor` and add the include lines it asks for to the apps' own configs.\n\nTakes \"shell\" or \"themectl\". Default: \"shell\"."
+    },
+    "targets": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "vscode": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "wallpaper": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "yazi": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "hyprland": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "kitty": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "btop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "starship": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "libadwaita": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "gtk": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "nwg-look": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "gnome-accent": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "evince": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "gtk3-ini": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "gtk4-ini": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "fastfetch": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "hyprlock": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "windows-vm": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "THE PROGRAMS a switch by themectl touches: every one unless it is false here: vscode wallpaper yazi hyprland kitty btop starship libadwaita gtk\nnwg-look gnome-accent evince gtk3-ini gtk4-ini fastfetch hyprlock windows-vm. { \"evince\": false } leaves evince as it is.\n\nDefault: {}."
+    },
+    "pairs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "THE PAIRS that are offered and cycled through, in this order, by file name (\"eva\", \"catppuccin\" ...). [] = all of them, by name.\n\nTakes a list of texts. Default: []."
+    },
+    "curtain": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "THE CURTAIN (a prototype): a picture of every screen is shown over the desktop while the switch runs behind it, and a shader\ntakes the picture away when the desktop has settled, so the windows, the bars and the apps change together instead of one after\nthe other. The curtain takes NO input: clicks, keys and the wheel reach the windows under it. Whatever would make the picture a\nlie ends the run at once (a workspace switch, a window opening, closing, moving, going fullscreen or floating, an output plugged\nor unplugged, the session locking, another click on the button). It is never used while the session is locked. A key or a click\nINSIDE the focused window shows when the curtain goes, 1.2 s at most. true | false.\n\nTakes true or false. Default: false."
+    },
+    "curtainRepaint": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "With the curtain: the windows nobody is looking at (other workspaces, the special workspace, a group's hidden tabs) are\nshown for a few frames each UNDER the picture, so none comes back in the old colours later, and everything is put back\n(workspaces, tabs, focus, pointer). On unless exactly false.\n\nTakes true or false. Default: true."
+    },
+    "curtainRepaintFrames": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 60,
+     "default": 3,
+     "x-wants": "a whole number 1 .. 60",
+     "description": "The frames a window stays on show (1-60), counted on the slowest monitor: its class's entry below, else this. A step that\nshows several windows stays as long as the one that needs most. If a window still comes back in the old colours, give its\nclass more frames (the class as `hyprctl clients` says it, or as the debug run names it; any case, never a part of it).\n\nTakes a whole number 1 .. 60. Default: 3."
+    },
+    "curtainRepaintClassFrames": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60,
+      "x-wants": "a whole number 1 .. 60"
+     },
+     "x-wants": "an object"
+    },
+    "curtainRepaintDebug": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "To WATCH it: true runs a switch without the curtain and the repaint slowed to curtainRepaintDebugMs a step (200-5000),\neach step named in a notice at the top of the screen. Set it back to false afterwards.\n\nTakes true or false. Default: false."
+    },
+    "curtainRepaintDebugMs": {
+     "type": "integer",
+     "minimum": 200,
+     "maximum": 5000,
+     "default": 900,
+     "x-wants": "a whole number 200 .. 5000",
+     "description": "Takes a whole number 200 .. 5000. Default: 900."
+    },
+    "curtainStyle": {
+     "enum": [
+      "radial",
+      "peel",
+      "louvres",
+      "cycle"
+     ],
+     "default": "radial",
+     "x-wants": "\"radial\", \"peel\", \"louvres\" or \"cycle\"",
+     "description": "\"radial\" (opens from the pointer: the theme button) | \"peel\" (travels from it across the screen) | \"louvres\" | \"cycle\" (the\nnext one each time).\n\nTakes \"radial\", \"peel\", \"louvres\" or \"cycle\". Default: \"radial\"."
+    },
+    "curtainLive": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "A second prototype, and nothing without \"curtain\": the shell is NOT in the picture. It stays live through the switch (the\nvinyl and the board move, the theme OSD opens, a popup opens and closes) and changes palette by the same line as the windows,\nin the same frame. An output with a fullscreen window over the shell keeps the plain curtain. true | false.\n\nTakes true or false. Default: false."
+    },
+    "wallpapers": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "light": {
+        "anyOf": [
+         {
+          "type": "string",
+          "x-wants": "a path"
+         },
+         {
+          "type": "array",
+          "items": {
+           "type": "string",
+           "x-wants": "a path"
+          },
+          "x-wants": "a list of paths"
+         }
+        ],
+        "x-wants": "a path, or a list of paths"
+       },
+       "dark": {
+        "anyOf": [
+         {
+          "type": "string",
+          "x-wants": "a path"
+         },
+         {
+          "type": "array",
+          "items": {
+           "type": "string",
+           "x-wants": "a path"
+          },
+          "x-wants": "a list of paths"
+         }
+        ],
+        "x-wants": "a path, or a list of paths"
+       }
+      }
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "THE WALLPAPERS PER THEME (applied by tools/theme/themectl): for each theme -- a light/dark pair, by its file name -- the pictures\nof each mode, a path or a list of paths. Of a list, one is drawn on every switch to that theme or mode and at the first apply of\na session, from a shuffle bag (each picture once per round, never the same twice in a row; `themectl wallpaper list` shows it).\nthemectl writes ~/.config/hypr/hyprpaper.conf with the picture and tells a running hyprpaper. A theme and mode with no entry\nkeep the wallpaper that is up. A path takes ~ and must be absolute otherwise. yazi's \"Set as wallpaper\" adds a picture to the\ncurrent theme and mode's list and \"Remove from wallpapers\" takes one out (tools/theme/yazi/CHEATSHEET.md). Example:\n  \"wallpapers\": { \"eva\": { \"light\": [\"~/Pictures/wallpapers/light/dunes.jpeg\", \"~/Pictures/wallpapers/light/sky.png\"],\n                           \"dark\": \"~/Pictures/wallpapers/dark/amoled-flower.png\" } }\n\nDefault: {}."
+    },
+    "wallpaperFit": {
+     "enum": [
+      "cover",
+      "contain",
+      "tile",
+      "fill"
+     ],
+     "default": "cover",
+     "x-wants": "\"cover\", \"contain\", \"tile\" or \"fill\"",
+     "description": "How the picture fills the output: \"cover\" | \"contain\" | \"tile\" | \"fill\".\n\nTakes \"cover\", \"contain\", \"tile\" or \"fill\". Default: \"cover\"."
+    }
+   },
+   "description": "THE THEME BUTTON (left click: the theme popup, one card per pair and mode; right click: light <-> dark), the curtain and the\nwallpaper."
+  },
+  "icons": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "overrides": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "default": {},
+     "x-wants": "an object",
+     "description": "An app's own picture: the key is the window class, the desktop id (without .desktop) or the icon name, any case; the value a\npath (~ allowed) or a theme icon name. One that points at a missing file is ignored. It holds for the launcher, the window title\nand screentime alike. Example: { \"kitty\": \"~/.config/kitty/kitty.app.png\" }\n\nDefault: {}."
+    },
+    "fallback": {
+     "type": "string",
+     "default": "application-x-executable",
+     "x-wants": "a text",
+     "description": "The one icon shown when the theme has none for an app. The window title shows the Arch logo instead for a window with no icon.\n\nTakes a text. Default: \"application-x-executable\"."
+    }
+   },
+   "description": "APP ICONS are the icon theme the desktop uses -- what GTK reports (gsettings org.gnome.desktop.interface icon-theme: themectl writes\nPapirus-Light / Papirus-Dark by mode). Quickshell takes the theme once, at start, so a theme CHANGED under a running shell shows after\nits restart. A script in the launcher shows text-x-script unless its `# icon:` header names an icon the theme has."
+  },
+  "clicks": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "theme": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mode",
+          "next"
+         ],
+         "x-wants": "\"none\", \"popup\", \"mode\" or \"next\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"mode\" or \"next\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"mode\" or \"next\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mode",
+          "next"
+         ],
+         "x-wants": "\"none\", \"popup\", \"mode\" or \"next\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"mode\" or \"next\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"mode\" or \"next\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "notes": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "new"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"new\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "new"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"new\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "llm": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "new"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"new\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "new"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"new\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"new\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "windowtray": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup"
+         ],
+         "x-wants": "\"none\" or \"popup\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\" or \"popup\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\" or \"popup\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup"
+         ],
+         "x-wants": "\"none\" or \"popup\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\" or \"popup\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\" or \"popup\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "weather": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "refresh",
+          "nextPlace"
+         ],
+         "x-wants": "\"none\", \"popup\", \"refresh\" or \"nextPlace\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"refresh\" or \"nextPlace\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"refresh\" or \"nextPlace\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "refresh",
+          "nextPlace"
+         ],
+         "x-wants": "\"none\", \"popup\", \"refresh\" or \"nextPlace\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"refresh\" or \"nextPlace\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"refresh\" or \"nextPlace\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "clock": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "timer",
+          "timers",
+          "wiki"
+         ],
+         "x-wants": "\"none\", \"popup\", \"timer\", \"timers\" or \"wiki\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"timer\", \"timers\" or \"wiki\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"timer\", \"timers\" or \"wiki\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "timer",
+          "timers",
+          "wiki"
+         ],
+         "x-wants": "\"none\", \"popup\", \"timer\", \"timers\" or \"wiki\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"timer\", \"timers\" or \"wiki\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"timer\", \"timers\" or \"wiki\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "stocks": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "refresh"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"refresh\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"refresh\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"refresh\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "refresh"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"refresh\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"refresh\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"refresh\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "player": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "toggle",
+          "next",
+          "prev",
+          "stop"
+         ],
+         "x-wants": "\"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "toggle",
+          "next",
+          "prev",
+          "stop"
+         ],
+         "x-wants": "\"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"toggle\", \"next\", \"prev\" or \"stop\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "volume": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mute"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"mute\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"mute\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"mute\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mute"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"mute\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"mute\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"mute\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "aerial": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "vpn",
+          "airplane"
+         ],
+         "x-wants": "\"none\", \"popup\", \"vpn\" or \"airplane\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"vpn\" or \"airplane\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"vpn\" or \"airplane\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "vpn",
+          "airplane"
+         ],
+         "x-wants": "\"none\", \"popup\", \"vpn\" or \"airplane\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"vpn\" or \"airplane\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"vpn\" or \"airplane\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "bridge": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mirror",
+          "shot",
+          "clip"
+         ],
+         "x-wants": "\"none\", \"popup\", \"mirror\", \"shot\" or \"clip\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"mirror\", \"shot\" or \"clip\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"mirror\", \"shot\" or \"clip\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "mirror",
+          "shot",
+          "clip"
+         ],
+         "x-wants": "\"none\", \"popup\", \"mirror\", \"shot\" or \"clip\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"mirror\", \"shot\" or \"clip\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"mirror\", \"shot\" or \"clip\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "panorama": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "displays",
+          "presets"
+         ],
+         "x-wants": "\"none\", \"popup\", \"displays\" or \"presets\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"displays\" or \"presets\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"displays\" or \"presets\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "displays",
+          "presets"
+         ],
+         "x-wants": "\"none\", \"popup\", \"displays\" or \"presets\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"displays\" or \"presets\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"displays\" or \"presets\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "silicon": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "nextProfile"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"nextProfile\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"nextProfile\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"nextProfile\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "nextProfile"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"nextProfile\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"nextProfile\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"nextProfile\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "update": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "check"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"check\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"check\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"check\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "check"
+         ],
+         "x-wants": "\"none\", \"popup\" or \"check\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\" or \"check\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\" or \"check\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "notifications": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "dnd",
+          "clear"
+         ],
+         "x-wants": "\"none\", \"popup\", \"dnd\" or \"clear\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"dnd\" or \"clear\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"dnd\" or \"clear\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      },
+      "middle": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "popup",
+          "dnd",
+          "clear"
+         ],
+         "x-wants": "\"none\", \"popup\", \"dnd\" or \"clear\""
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "minItems": 1,
+         "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+        }
+       ],
+       "x-wants": "\"none\", \"popup\", \"dnd\" or \"clear\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "Takes \"none\", \"popup\", \"dnd\" or \"clear\", or a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+      }
+     },
+     "x-wants": "an object"
+    }
+   },
+   "description": "WHAT A RIGHT OR MIDDLE CLICK ON A BAR BUTTON DOES: { \"<button>\": { \"right\": ..., \"middle\": ... } }. A click not named here is as shipped: the\nright click of theme switches light / dark, of player plays / pauses, of volume mutes the half it is on, of notifications turns\ndo-not-disturb on or off; every other right or middle click does nothing. A click is \"none\", \"popup\" (open or close the button's\npopup), one of the button's own words, or a command as a list (it runs by itself). While the session is locked only what is as shipped works. The words:\n  \"theme\": \"mode\" (light / dark) \"next\" (the next pair)      \"notes\": \"new\"                     \"llm\": \"new\"\n  \"weather\": \"refresh\" \"nextPlace\"                            \"clock\": \"timer\" (pause / resume) \"timers\" \"wiki\"\n  \"stocks\": \"refresh\"                                         \"player\": \"toggle\" \"next\" \"prev\" \"stop\"\n  \"volume\": \"mute\"                                            \"aerial\": \"vpn\" \"airplane\"\n  \"bridge\": \"mirror\" \"shot\" \"clip\" (the phone's clipboard)   \"panorama\": \"displays\" \"presets\"\n  \"silicon\": \"nextProfile\"   \"update\": \"check\"               \"notifications\": \"dnd\" \"clear\"     \"windowtray\": (\"popup\" alone)\nExample: { \"clock\": { \"right\": [\"xdg-open\", \"https://calendar.proton.me\"], \"middle\": \"timer\" }, \"volume\": { \"middle\": [\"pavucontrol\"] } }"
+  },
+  "clickAway": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "theme",
+     "notes",
+     "llm",
+     "weather",
+     "clock",
+     "stocks",
+     "player",
+     "audio",
+     "aerial",
+     "bridge",
+     "panorama",
+     "silicon",
+     "update",
+     "notifications"
+    ],
+    "x-wants": "\"theme\", \"notes\", \"llm\", \"weather\", \"clock\", \"stocks\", \"player\", \"audio\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\" or \"notifications\""
+   },
+   "default": [],
+   "x-wants": "a list of words (\"theme\", \"notes\", \"llm\", \"weather\", \"clock\", \"stocks\", \"player\", \"audio\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\" or \"notifications\")",
+   "description": "POPUPS THAT A CLICK OUTSIDE CLOSES: any of \"theme\" \"notes\" \"llm\" \"weather\" \"clock\" \"stocks\" \"player\" \"audio\" (the sound popup) \"aerial\" \"bridge\" \"panorama\"\n\"silicon\" \"update\" \"notifications\". The click does nothing else, and while such a popup is open the pointer reaches nothing else on that\ndisplay (no scrolling, no drop); what you type goes where it went. [] = none: a popup is closed by its button or Escape.\n\nTakes a list of words (\"theme\", \"notes\", \"llm\", \"weather\", \"clock\", \"stocks\", \"player\", \"audio\", \"aerial\", \"bridge\", \"panorama\", \"silicon\", \"update\" or \"notifications\"). Default: []."
+  },
+  "bars": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "outputs": {
+     "anyOf": [
+      {
+       "enum": [
+        "all",
+        "internal"
+       ],
+       "x-wants": "\"all\" or \"internal\""
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "x-wants": "a list of texts"
+      }
+     ],
+     "default": "all",
+     "x-wants": "\"all\" or \"internal\", or a list of texts",
+     "description": "Takes \"all\" or \"internal\", or a list of texts. Default: \"all\"."
+    }
+   },
+   "description": "WHICH DISPLAYS GET THE BARS (and the popups that hang from them): \"all\" | \"internal\" (the laptop's own panel) | a list of connector\nnames, a \"!\" before one leaves it out: [\"DP-1\"], [\"!HDMI-A-1\"]. When that leaves none of the displays that are there, all of them get the bars."
+  },
+  "flourishes": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "hover": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "key": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "THE BAR GLYPHS' FLOURISHES: played by a hover, played by the key that opens a module's popup. (The OLED care's random ones are \"oled\" below.)"
+  },
+  "terminal": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "minItems": 1,
+   "default": [
+    "kitty",
+    "-e"
+   ],
+   "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+   "description": "The terminal the launcher runs a terminal app in, as a list; the app's own command is added at the end.\n\nTakes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]. Default: [\"kitty\",\"-e\"]."
+  },
+  "recorders": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [
+    "wf-recorder",
+    "wl-screenrec",
+    "wayvnc"
+   ],
+   "x-wants": "a list of texts",
+   "description": "Programs that count as a screen share while they run (the toasts are held, the idle mode raised), beside the portal's shares.\n\nTakes a list of texts. Default: [\"wf-recorder\",\"wl-screenrec\",\"wayvnc\"]."
+  },
+  "geoclueAgent": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "THE GEOCLUE AGENT (read by tools/shell/lares, not by the shell). The weather finds its place through geoclue (`where-am-i`), and\ngeoclue refuses every client until an agent has registered for the user. true makes `lares start` (the login) start geoclue's\ndemo agent (/usr/lib/geoclue-2.0/demos/agent) as the compositor's child, unless an agent runs already. The demo agent ASKS -- a\nYes / No notification, closing it is No -- for\neach client geoclue.conf has no section for, at every start; until it is answered the weather keeps its saved places. true | false.\n\nTakes true or false. Default: false. Read as the shell starts."
+  },
+  "dictation": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: false."
+    },
+    "model": {
+     "type": "string",
+     "default": "auto",
+     "x-wants": "a text",
+     "description": "\"auto\" is the bench's pick: Parakeet hears every take and writes English; Canary writes the Dutch sentences -- every one\nwhen the take runs on the NVIDIA card, only in a Shift+fn+F10 take on the iGPU (there it costs ~2-3 s a sentence). Or\n\"parakeet-tdt-0.6b-v3\" alone (fast) | \"canary-1b-v2\" alone | \"parakeet-tdt-0.6b-v3+canary-1b-v2\" (Canary for every final).\n\nTakes a text. Default: \"auto\"."
+    },
+    "device": {
+     "enum": [
+      "auto",
+      "cuda",
+      "gpu",
+      "cpu"
+     ],
+     "default": "auto",
+     "x-wants": "\"auto\", \"cuda\", \"gpu\" or \"cpu\"",
+     "description": "Where a take runs, chosen at each take: \"auto\" the NVIDIA card when the GPU mode puts it on the bus (Hybrid, Smart -- there\nallow \"lares-stt\" in silicon's list), on AC and on battery, else the Arc iGPU | \"cuda\" the same | \"gpu\" the iGPU always | \"cpu\".\n\nTakes \"auto\", \"cuda\", \"gpu\" or \"cpu\". Default: \"auto\"."
+    },
+    "tidy": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "The tidy pass: each sentence's false starts, repeats and stutters removed before it is written (\"I want to, I want to go\"\n-> \"I want to go\"; \"on Thursday, sorry, Friday\" -> \"on Friday\"). A small local model proposes, a fixed rule check decides:\nit can only remove words, and a removal it cannot name leaves the sentence as heard. ~0.7 s more per sentence when it\nruns on the CPU (Integrated mode), far less on the NVIDIA card. Fillers (\"uh\", \"um\") are never written, tidy or not.\n\nTakes true or false. Default: false."
+    },
+    "endSilenceMs": {
+     "type": "number",
+     "minimum": 100,
+     "maximum": 10000,
+     "default": 700,
+     "x-wants": "a number 100 .. 10000",
+     "description": "The pause, ms, that ends a sentence (it is then written for good), and how often, ms, the sentence being spoken is heard again.\n\nTakes a number 100 .. 10000. Default: 700."
+    },
+    "hopMs": {
+     "type": "number",
+     "minimum": 100,
+     "maximum": 10000,
+     "default": 700,
+     "x-wants": "a number 100 .. 10000",
+     "description": "Takes a number 100 .. 10000. Default: 700."
+    },
+    "thinkSilenceMs": {
+     "type": "number",
+     "minimum": 100,
+     "maximum": 60000,
+     "default": 3000,
+     "x-wants": "a number 100 .. 60000",
+     "description": "The pause, ms, a sentence waits instead when the last word before it was a filler (\"uh\", \"um\"): you are thinking.\n\nTakes a number 100 .. 60000. Default: 3000."
+    },
+    "keepWarmMin": {
+     "type": "number",
+     "minimum": 1,
+     "default": 10,
+     "x-wants": "a number, 1 and up",
+     "description": "Minutes the model (about 1-2 GB) stays loaded after the last take; the helper then runs light again (no model, ~15 MB). 1 and up.\n\nTakes a number, 1 and up. Default: 10."
+    },
+    "preload": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "true: the model stays loaded after the first take (the first take of a session still loads it) -- but for a take on the NVIDIA card,\nwhich is let go as below.\n\nTakes true or false. Default: false."
+    },
+    "dgpuKeepMin": {
+     "type": "number",
+     "minimum": 0.25,
+     "default": 2,
+     "x-wants": "a number, 0.25 and up",
+     "description": "Minutes instead when the take ran on the NVIDIA card: the helper holds the card awake for as long as it lives. 0.25 and up.\n\nTakes a number, 0.25 and up. Default: 2."
+    },
+    "typeInto": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Window classes with no text input (Xwayland apps) that get the final text typed instead, e.g. [\"steam\"].\n\nTakes a list of texts. Default: []."
+    },
+    "micVolume": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1.5,
+     "default": -1,
+     "x-wants": "a number -1 .. 1.5",
+     "description": "The volume a muted mic at 0 % is raised to for a take (0 .. 1.5); -1 is the last volume it had.\n\nTakes a number -1 .. 1.5. Default: -1."
+    },
+    "logTakes": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Each take's text (never its audio, never a password field's) in ~/.local/state/lares/dictation/takes.jsonl, the last \"logKeep\":\nthe window, the mode, the device, the timings from the press, the routes, per sentence what was heard and what was written\nand why it was cut, and how the take ended: the helper's own reason, its exit code and last error line, a stall, a GPU\nthat failed and the CPU that took over.\n\nTakes true or false. Default: true."
+    },
+    "askEndMs": {
+     "type": "number",
+     "minimum": 0,
+     "default": 2500,
+     "x-wants": "a number, 0 and up",
+     "description": "A voice ask (Alt+fn+F10: say a question, the local model answers it) ends by itself this long, ms, after its last sentence\nwas written and nobody speaks (8 s when nothing was said at all); 0: only the key ends it. Ctrl+fn+F10 transcribes the\nsound of the focused window instead (a video, a call) and puts the transcript on the clipboard when you press it again.\n\nTakes a number, 0 and up. Default: 2500."
+    },
+    "key": {
+     "enum": [
+      "toggle",
+      "hold"
+     ],
+     "default": "toggle",
+     "x-wants": "\"toggle\" or \"hold\"",
+     "description": "The key: \"toggle\" (a press starts a take, the next ends it) | \"hold\" (the take lasts while the key is held). The question and the window\ntake are always toggles.\n\nTakes \"toggle\" or \"hold\". Default: \"toggle\"."
+    },
+    "endAfterMin": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 60,
+     "default": 0,
+     "x-wants": "a number 0 .. 60",
+     "description": "A take in which nothing was said for this many minutes ends by itself. 0 = never. 0 .. 60.\n\nTakes a number 0 .. 60. Default: 0."
+    },
+    "unmute": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "A muted microphone is unmuted for the take. false: a take on a muted microphone says so and does not start.\n\nTakes true or false. Default: true."
+    },
+    "aura": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The aura comes with a take (it needs \"shadow\": { \"aura\": true }).\n\nTakes true or false. Default: true."
+    },
+    "copy": {
+     "enum": [
+      "fallback",
+      "always"
+     ],
+     "default": "fallback",
+     "x-wants": "\"fallback\" or \"always\"",
+     "description": "The text is on the clipboard: \"fallback\" (when no field took it) | \"always\".\n\nTakes \"fallback\" or \"always\". Default: \"fallback\"."
+    },
+    "language": {
+     "enum": [
+      "auto",
+      "en",
+      "nl"
+     ],
+     "default": "auto",
+     "x-wants": "\"auto\", \"en\" or \"nl\"",
+     "description": "The language of the key (\"auto\": English unless the model knows better) and of Shift+key. \"auto\" | \"en\" | \"nl\"; \"en\" | \"nl\".\n\nTakes \"auto\", \"en\" or \"nl\". Default: \"auto\"."
+    },
+    "altLanguage": {
+     "enum": [
+      "en",
+      "nl"
+     ],
+     "default": "nl",
+     "x-wants": "\"en\" or \"nl\"",
+     "description": "Takes \"en\" or \"nl\". Default: \"nl\"."
+    },
+    "logKeep": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 10000,
+     "default": 100,
+     "x-wants": "a whole number 1 .. 10000",
+     "description": "How many takes the log keeps. 1 .. 10000.\n\nTakes a whole number 1 .. 10000. Default: 100."
+    },
+    "text": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "symbols": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "fkeys": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        },
+        "signs": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        },
+        "leadingQuote": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        },
+        "codes": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        }
+       },
+       "description": "\"F ten\" / \"F one zero\" / \"F one O\" -> F10 (F1-F24); \"<name> sign\" -> the symbol (\"greater than sign\" -> >, \"at sign\" -> @,\n\"hash sign\" -> #); a take that begins \"greater than\" begins with \">\" (a note header: \"> After review\"). \"codes\": letters,\ndigits and \"underscore\" / \"dash\" / \"hyphen\" / \"dot\" spelled one by one are ONE code, letters in capitals (\"X nine five Z B\nthree oh nine underscore QR ST\" -> X95ZB309_QRST; \"oh\" is a zero beside a digit; three pieces that mix letters and digits,\nor a connector word with two; plain numbers and a lone \"A\" or \"B\" in a sentence stay words)."
+      },
+      "words": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "default": {
+        "Hyperland": "Hyprland"
+       },
+       "x-wants": "an object",
+       "description": "Words the model gets wrong that are never right as heard: whole words, any case, written as given. Not for real words.\n\nDefault: {\"Hyperland\":\"Hyprland\"}."
+      },
+      "fillers": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "default": [],
+       "x-wants": "a list of texts",
+       "description": "Words that are dropped wherever they stand, beside the built in \"uh\", \"um\" ...: single words, any case. A pause after one is\nthinking, as after an \"uh\".\n\nTakes a list of texts. Default: []."
+      },
+      "repeats": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "\"X uh X\" -> \"X\": a repeat across a filler or a thinking pause is written once (a repeat with nothing between is kept).\n\nTakes true or false. Default: true."
+      },
+      "unfinished": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "A pause after a sentence that has not ended (no full stop, or \"the\", \"and\", \"to\" ...) waits thinkSilenceMs like a filler's;\na sentence that continues one written unfinished begins in lower case.\n\nTakes true or false. Default: true."
+      }
+     },
+     "description": "The final text's rules (tools/stt/sttlib/textrules.py); a missing key is its default."
+    }
+   },
+   "description": "DICTATION (a prototype, off unless \"enabled\" is true; docs/dictation.md). fn+F10 (XF86Launch5) starts and stops a take,\nShift+fn+F10 one in Dutch; the binds are lines of your keybinds.lua (`lares binds` prints them). The microphone listens from the press, and the aura's smaller\nhalf (the centre island) comes at once; the whole aura comes when the words can appear (the model loaded: ~5 s after a start or\na rest, at once otherwise) -- nothing said meanwhile is lost. A muted mic is unmuted for the take and muted again after. The words appear underlined in the focused text field (an app's, or the shell's LLM input and\nnotes editor) and correct themselves while you speak; a pause writes the sentence for good. With no text field focused, the\ntext is on the clipboard at the stop. The speech model runs locally: tools/stt/setup.sh sets it up once (a private Python under\n~/.local/share/lares/stt, the model in ~/.cache/lares-stt). Hot, like the rest of the file."
+  },
+  "oled": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The one switch for all of it (the pixel shift and the random flourishes). true | false; false puts the bars back at the\ncentre and plays nothing. The step the shift stood at is kept.\n\nTakes true or false. Default: true."
+    },
+    "shift": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The pixel shift, and the seconds between two steps. The flourishes below go on without it. 30 .. 86400.\n\nTakes true or false. Default: true."
+    },
+    "shiftEveryS": {
+     "type": "number",
+     "minimum": 30,
+     "maximum": 86400,
+     "default": 240,
+     "x-wants": "a number 30 .. 86400",
+     "description": "Takes a number 30 .. 86400. Default: 240."
+    },
+    "flourishes": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "idle": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "while nobody has touched the machine for a minute | while someone works. true | false.\n\nTakes true or false. Default: true."
+      },
+      "active": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "idleEveryS": {
+       "anyOf": [
+        {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 86400,
+          "x-wants": "a number 10 .. 86400"
+         },
+         "minItems": 2,
+         "maxItems": 2,
+         "x-wants": "a list of numbers"
+        },
+        {
+         "type": "number",
+         "minimum": 10,
+         "maximum": 86400,
+         "x-wants": "a number 10 .. 86400"
+        }
+       ],
+       "default": [
+        120,
+        240
+       ],
+       "x-wants": "a list of numbers, or a number 10 .. 86400",
+       "description": "the wait between two, seconds: [min, max], drawn evenly each time (10 .. 86400; one number is [n, n]).\n\nTakes a list of numbers, or a number 10 .. 86400. Default: [120,240]."
+      },
+      "activeEveryS": {
+       "anyOf": [
+        {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 86400,
+          "x-wants": "a number 10 .. 86400"
+         },
+         "minItems": 2,
+         "maxItems": 2,
+         "x-wants": "a list of numbers"
+        },
+        {
+         "type": "number",
+         "minimum": 10,
+         "maximum": 86400,
+         "x-wants": "a number 10 .. 86400"
+        }
+       ],
+       "default": [
+        600,
+        1200
+       ],
+       "x-wants": "a list of numbers, or a number 10 .. 86400",
+       "description": "Takes a list of numbers, or a number 10 .. 86400. Default: [600,1200]."
+      },
+      "glyphs": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "boolean",
+        "x-wants": "true or false"
+       },
+       "default": {},
+       "x-wants": "an object",
+       "description": "which glyphs take part: a group, or one glyph of a reel (\"group.glyph\", which wins over its group). A glyph named nowhere takes\nits default: in for the decorative ones (the reels' items, the system update's archive, the weather icon, the audio and network pills'\nhalves, the notes glyph, the chat star, the theme button's swatch, the bridge's phone, the panorama's panes, the stocks line), out for the ones that say something\nhappened (the bell: a notification, the player's disc: a new song, silicon: a profile change, the GPU's mode). A reel plays only the item it\nis turned to. Groups and glyphs: \"power\" (.sleep .poweroff .reboot .hibernate .logout .lock), \"idleReel\" (.zzz .sunset .mug\n.infinity), \"update\", \"weather\", \"audio\" (.speaker .mic), \"aerial\" (.wifi: whatever the network half shows, .bluetooth),\n\"notes\", \"llm\", \"theme\", \"bridge\", \"panorama\", \"stocks\", \"bell\", \"player\", \"silicon\" (.gpu: the GPU mode's glyph; \"silicon\" alone is both of its glyphs).\nExample: { \"power.hibernate\": false, \"audio.mic\": false, \"bell\": true }\n\nDefault: {}."
+      }
+     },
+     "description": "The random flourishes:"
+    }
+   },
+   "description": "THE OLED CARE (docs/oledcare.md): the bars' content steps a device pixel every 240 s, and now and then one of the bar's glyphs plays\nits flourish by itself (the motion a hover plays), so nothing stands still for hours. Read hot."
+  },
+  "escape": {
+   "enum": [
+    "all",
+    "detail"
+   ],
+   "default": "all",
+   "x-wants": "\"all\" or \"detail\"",
+   "description": "ESCAPE WITH A POPUP'S DETAIL OPEN (the side popup beside weather, stocks, silicon, the network, the displays, the wiki). \"all\": one\npress closes the popup and its detail together. \"detail\": the first press puts the detail away, the next closes the popup. Whatever\nyou are in the middle of goes first either way: an open menu, a rename, a confirm, a typed search. Hot. \"all\" | \"detail\".\n\nTakes \"all\" or \"detail\". Default: \"all\"."
+  },
+  "hoverCursor": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "THE POINTER OVER THE SHELL. false: the plain arrow everywhere, in every window of the shell. true: it shows what it is over -- a hand\non what can be clicked, the beam on text, the resize arrows on a grip. The bridge's free look hides it either way. Hot. true | false.\n\nTakes true or false. Default: false."
+  },
+  "modules": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "power": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the power reel (with it off, log out and shut down from a terminal)\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "idle": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the idle reel and everything that holds or dims the screen\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "theme": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the theme button and popup (themectl itself works on)\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "notes": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    },
+    "llm": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the chat (Ollama)\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "weather": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    },
+    "stocks": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    },
+    "player": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "mpd\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "volume": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the sound popup (the volume keys and their OSD work on)\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "aerial": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the network popup\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "bridge": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the phone\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "panorama": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the displays (with it off the brightness keys reach no external display either)\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "silicon": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "battery, CPU profiles, GPU modes, fans: an ASUS laptop's\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "update": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the system update\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "clipboard": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    },
+    "picker": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "emoji, alt codes, Nerd Fonts\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "wiki": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    },
+    "screentime": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true. Read as the shell starts."
+    }
+   },
+   "description": "THE MODULES. false: the module is not loaded at all -- no service, no button on the bar, no popup, no key, no process of its own. For a\nmachine that has no use for one (a desktop: \"silicon\", the battery and the laptop's CPU / GPU control). Read once, as the shell starts:\n`lares restart` after a change. Only the ones you switch off need a line. \"clipboard\": false takes the picker along (it pastes\nthrough the clipboard). The clock, the window title with the tray, the notifications and the launcher are always there.\ntrue | false."
+  },
+  "input": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "sideButtons": {
+     "enum": [
+      "both",
+      "back",
+      "forward",
+      "off"
+     ],
+     "default": "both",
+     "x-wants": "\"both\", \"back\", \"forward\" or \"off\"",
+     "description": "which side buttons: \"both\" | \"back\" | \"forward\" | \"off\"\n\nTakes \"both\", \"back\", \"forward\" or \"off\". Default: \"both\"."
+    },
+    "sideClick": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "a click of one goes back / on. true | false\n\nTakes true or false. Default: true."
+    },
+    "sideGain": {
+     "type": "number",
+     "minimum": 0.2,
+     "maximum": 5,
+     "default": 1,
+     "x-wants": "a number 0.2 .. 5",
+     "description": "how far a swipe goes per px of the mouse. 0.2 .. 5\n\nTakes a number 0.2 .. 5. Default: 1."
+    },
+    "sidePointer": {
+     "enum": [
+      "hold",
+      "free"
+     ],
+     "default": "hold",
+     "x-wants": "\"hold\" or \"free\"",
+     "description": "the pointer during a swipe: \"hold\" hides it and keeps it where it was, as a touchpad does; \"free\" lets it go with the mouse\n\nTakes \"hold\" or \"free\". Default: \"hold\"."
+    },
+    "notchPx": {
+     "type": "number",
+     "minimum": 20,
+     "maximum": 600,
+     "default": 120,
+     "x-wants": "a number 20 .. 600",
+     "description": "how far a list scrolls per wheel notch (px, 20 .. 600) and how long it takes to ease out (ms, 0 .. 600; 0 = at once)\n\nTakes a number 20 .. 600. Default: 120."
+    },
+    "notchMs": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 600,
+     "default": 140,
+     "x-wants": "a number 0 .. 600",
+     "description": "Takes a number 0 .. 600. Default: 140."
+    }
+   },
+   "description": "THE MOUSE. A side button held while the mouse moves is a two-finger swipe (a mouse has no second axis): every gesture a touchpad makes\nin the shell follows it. Held while the wheel turns: one step sideways a notch (the next tab, view, day, page). A click of one: one step\nback (the Back button) or on (Forward). Hot."
+  },
+  "workarounds": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "fileRoot": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "QT'S QML DISK CACHE TAKES ONLY LOCAL FILES, and Quickshell serves every file of a config on its own `qs:` URL scheme, so the\nwhole shell (~1000 files and scripts) was read, parsed and compiled at every start (5-7 s before the first QML line). With this\non, shell.qml (a stub) creates the shell's body (modules/shell/ShellMain.qml) from a `file:` URL, which Qt caches (lares's\nsupervisor keeps the cache in ~/.cache/lares/qmlcache): a start reads the compiled units instead. Off loads the body on `qs:` as\nbefore (the day Quickshell or Qt caches it, or if a start misbehaves). lares's supervisor reads it each time it starts the shell\n(it passes LARES_FILE_ROOT=0 for false: a shell started by hand says it the same way). The log says `LARES root file|qs`.\nA change acts at the next start of the shell. true | false.\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "gcAtScreenBuild": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "QT'S COLLECTOR LOSES LIVE OBJECTS when one of its cycles starts while a screen's window is built (Qt 6.12: the bar came up with\nthe idle reel stuck open and blank flourishes, 2026-11-14). With this on the shell collects once as each screen's window is\nbuilt, which closes that gap: one collection per screen at the shell's start (and when an output is plugged in), before the\nwindow's first frame, and nothing after it. `tools/dev/qt_gc_attach_probe.sh` says when a Qt no longer has the fault; turn it\noff then. The log says `LARES gc at build <output>: on|off`. Read as each window is built: a change acts at the next start\nof the shell. true | false.\n\nTakes true or false. Default: true. Read as the shell starts."
+    },
+    "visibleInk": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "THE BAR WINDOW IS ONE TRANSPARENT SURFACE OVER THE WHOLE SCREEN, and Hyprland blends all of it under every frame the shell\ndraws (a title's motion: ~25 full-screen blends). With this on, each bar window tells Hyprland where it can have ink -- the\nbars' edges, the popups, toasts and the OSD that are out, with their shadow, ring and joints -- and Hyprland blends only that.\nWhatever draws elsewhere (the theme's switch, the lock, a glyph's flourish) gives the whole window back while it does. Ink the\nregion missed would be cut, so it is off until it has been seen on your own screen. Hot. true | false.\n\nTakes true or false. Default: false."
+    },
+    "mpdResumeSeek": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "MPD 0.24 SKIPS A PIECE OF THE SONG WHEN IT GOES ON AFTER A PAUSE: the player seeks back to where it stopped. Off when a later mpd does not.\nHot. true | false.\n\nTakes true or false. Default: true."
+    }
+   },
+   "description": "WORKAROUNDS for faults of the platform: each is a switch to turn off the day the fault is gone."
+  },
+  "debug": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "frameJournal": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "THE FRAME JOURNAL. Every window of the shell watches its own frames; a frame it MISSES while it was drawing continuously -- a\nstutter -- is written down with what was going on, to ~/.local/state/lares/perf/frame-journal.jsonl (about a day is kept).\nAt rest it costs nothing; while something moves, ~0.03-0.05 ms of CPU a frame. Read when the shell starts and hot with the file.\ntrue | false.\n\nTakes true or false. Default: true."
+    }
+   }
+  }
+ }
+}

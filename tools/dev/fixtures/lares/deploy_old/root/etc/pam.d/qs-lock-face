@@ -1,0 +1,4 @@
+#%PAM-1.0
+# Quickshell lockscreen (the old name): the face.
+auth       [success=done default=die]   pam_howdy.so
+auth       required   pam_deny.so

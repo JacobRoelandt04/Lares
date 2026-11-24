@@ -1,0 +1,178 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "launcher.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "columns": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 8,
+   "default": 2,
+   "x-wants": "a whole number 1 .. 8",
+   "description": "columns of the multi-column layout. Default 2; a whole number, 1 .. 8\n\nTakes a whole number 1 .. 8. Default: 2."
+  },
+  "rows": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 40,
+   "default": 9,
+   "x-wants": "a whole number 1 .. 40",
+   "description": "rows shown before the list scrolls. Default 9; a whole number, 1 .. 40\n\nTakes a whole number 1 .. 40. Default: 9."
+  },
+  "scriptsRoot": {
+   "type": "string",
+   "default": "",
+   "x-wants": "a path",
+   "description": "the scripts folder. Default \"\" = ~/.config/quickshell/launcher; \"~/...\" and absolute\npaths as written, anything else relative to ~/.config/quickshell\n\nTakes a path. Default: \"\"."
+  },
+  "flourish": {
+   "enum": [
+    "",
+    "honey",
+    "syrup",
+    "dew",
+    "classic",
+    "off"
+   ],
+   "default": "",
+   "x-wants": "\"\", \"honey\", \"syrup\", \"dew\", \"classic\" or \"off\"",
+   "description": "The confirm flourish -- the row that lifts out of the launcher on a launch, the strand it is pulled from, its\nsnap, and the throw: the card shoots up, slows to nothing at its apex high on the screen, hangs there and falls, speeding up\nall the way, into the bar, which it goes into at speed and which splashes. Every preset is such a throw on one real gravity\n(9.81 m/s^2 on a window 3 to 4 m tall: the bigger world, the longer the card hangs).\n  \"honey\"    thick and slow: the strand thins to a hair and snaps, the two ends recoil while the launcher stays up\n             (it closes only once the recoil is over; nothing it does touches the card), two heavy beads go\n             up from the splash. (about 1.8 s from Enter to the contact on a tall launcher, the apex 500 px above it.)\n  \"syrup\"    the same movements a little quicker. Two beads. (about 1.65 s)\n  \"dew\"      thin and quick: a short neck, a fast snap, three small beads. (about 1.5 s)\n  \"classic\"  a longer pull and a shorter coast, the launcher let go early, three beads. (about 1.8 s)\n  \"off\"      none: the launcher closes and the app starts.\nDefault \"\" = \"honey\"; \"honey\" | \"syrup\" | \"dew\" | \"classic\" | \"off\" (any other name plays honey, with one log line).\nChanged while the shell runs, it applies to the next launch.\n\nTakes \"\", \"honey\", \"syrup\", \"dew\", \"classic\" or \"off\". Default: \"\"."
+  },
+  "answers": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "false: none, and no process for them.\n\nTakes true or false. Default: true."
+    },
+    "kinds": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "colour",
+       "resolution",
+       "percent",
+       "currency",
+       "base",
+       "zone",
+       "date",
+       "timearith",
+       "unit",
+       "math"
+      ],
+      "x-wants": "\"colour\", \"resolution\", \"percent\", \"currency\", \"base\", \"zone\", \"date\", \"timearith\", \"unit\" or \"math\""
+     },
+     "default": [
+      "colour",
+      "resolution",
+      "percent",
+      "currency",
+      "base",
+      "zone",
+      "date",
+      "timearith",
+      "unit",
+      "math"
+     ],
+     "x-wants": "a list of words (\"colour\", \"resolution\", \"percent\", \"currency\", \"base\", \"zone\", \"date\", \"timearith\", \"unit\" or \"math\")",
+     "description": "Which kinds: \"colour\" \"resolution\" \"percent\" \"currency\" \"base\" \"zone\" \"date\" \"timearith\" \"unit\" \"math\". One left out never answers.\n\nTakes a list of words (\"colour\", \"resolution\", \"percent\", \"currency\", \"base\", \"zone\", \"date\", \"timearith\", \"unit\" or \"math\"). Default: [\"colour\",\"resolution\",\"percent\",\"currency\",\"base\",\"zone\",\"date\",\"timearith\",\"unit\",\"math\"]."
+    },
+    "takesEnter": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The answer is what Enter takes (it is copied). false: it is shown, and Enter takes the first app.\n\nTakes true or false. Default: true."
+    },
+    "homeCurrency": {
+     "type": "string",
+     "pattern": "^[A-Z]{3}$",
+     "default": "EUR",
+     "x-wants": "a text like EUR",
+     "description": "The currency an amount is turned into when you name none, and the ones shown beside it (ISO codes).\n\nTakes a text like EUR. Default: \"EUR\"."
+    },
+    "currencies": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "x-wants": "a text like USD"
+     },
+     "default": [
+      "USD",
+      "EUR",
+      "GBP",
+      "JPY",
+      "CHF"
+     ],
+     "x-wants": "a list of texts",
+     "description": "Takes a list of texts. Default: [\"USD\",\"EUR\",\"GBP\",\"JPY\",\"CHF\"]."
+    },
+    "history": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 200,
+     "default": 20,
+     "x-wants": "a whole number 0 .. 200",
+     "description": "How many answers are remembered. 0 .. 200.\n\nTakes a whole number 0 .. 200. Default: 20."
+    }
+   },
+   "description": "THE QUICK ANSWERS (a sum, a unit, a currency ... typed into the search)."
+  },
+  "keysFree": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "class": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "title": {
+      "type": "string",
+      "x-wants": "a text"
+     }
+    }
+   },
+   "default": [
+    {
+     "class": "kitty",
+     "title": "yazi"
+    }
+   ],
+   "x-wants": "a list of objects",
+   "description": "While the launcher is open and one of these windows is the active one, the keys are that window's (a file picker opened from the launcher, yazi's drop).\nEach a window class (the whole of it) and / or words its title holds, whatever the case; [] = never.\n\nTakes a list of objects. Default: [{\"class\":\"kitty\",\"title\":\"yazi\"}]."
+  },
+  "clickOutsideCloses": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "A click outside the launcher closes it. true | false.\n\nTakes true or false. Default: false."
+  },
+  "keepQuerySec": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 3600,
+   "default": 0,
+   "x-wants": "a number 0 .. 3600",
+   "description": "Opened again within this many seconds, the launcher still has the query you left (0 = it always opens empty; a launch leaves none). 0 .. 3600.\n\nTakes a number 0 .. 3600. Default: 0."
+  },
+  "hidden": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "desktop ids the launcher does not list. Default []; a list of desktop ids (the file name without \".desktop\": \"firefox\")\n\nTakes a list of texts. Default: []."
+  }
+ }
+}

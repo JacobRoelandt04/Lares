@@ -1,0 +1,3 @@
+# hostapd's EAP users for "rig-eap": phase 1 accepts PEAP and TTLS for anyone (any anonymous identity), phase 2 the one user.
+*                 PEAP,TTLS
+"rig-user"        MSCHAPV2,TTLS-MSCHAPV2    "rig-pass-eap"    [2]

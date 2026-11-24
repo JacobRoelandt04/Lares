@@ -1,0 +1,886 @@
+#!/usr/bin/env python3
+"""lares-cast -- the phone's screen as an FLV stream on a local port (a client of scrcpy's phone-side server, v5.0.1).
+
+  lares-cast <serial> [--max-size N] [--bit-rate R] [--max-fps F] [--audio] [--port P] [--new-display WxH[/DPI] [--flex]] [--record PATH]
+
+Pushes the server jar, forwards a local port to its abstract socket, starts it with app_process, connects the video (audio) and
+control sockets and serves ONE listener on 127.0.0.1 that QtMultimedia opens as tcp://127.0.0.1:<port>. Each client gets a fresh FLV
+stream that starts on a key frame (RESET_VIDEO is sent when one connects). stdout: one JSON event per line (ready, size, client, record,
+flow, ended, error). `--new-display` shows a NEW virtual display on the phone instead of the main one (scrcpy server 5.0.1:
+new_display=WxH/dpi, vd_destroy_content=false so its apps move to the phone's screen when the cast ends; no max_size: the display's own
+size is the stream's); without a DPI it is worked out from the phone's own `wm size` / `wm density` so it lays out like that screen.
+`flow` {"on": bool}: video frames are arriving from the phone / none for FLOW_GAP_S (the phone's display gives no picture: asleep, off,
+locked dark; scrcpy repeats the last frame ~10x/s on a live one). Every event is also written to the bridge trace (kind "cast", in
+~/.cache/lares/bridge/trace.jsonl). `lock` {"keyguard": bool, "awake": bool}: once after `ready` (the phone's own answer, when it gives one) and then at every change of the pair, from the
+phone's event log (a follower child of `adb logcat -b events`, restarted with backoff when an adbd restart ends it). `--flex` (with --new-display)
+starts the virtual display resizable (scrcpy's flex_display=true) so the `resize` command works.
+`--record PATH` (PATH ends in .mp4; a name already taken becomes `<stem>-2.mp4`, `-3`, ...) also writes the stream to a file, fed like a
+player but with the phone's own times, from the first key frame: streamable FLV into `PATH.part.flv` as it comes (a killed cast leaves a
+playable part), remuxed into PATH at the end (`ffmpeg -c copy`, the part deleted). At the end, after `ended`: `record` {"path": PATH} |
+{"error": why, "kept": the part} | {"error": why} (the file could not be opened: the cast goes on without it) | {"empty": true} (no
+picture came: nothing is kept); `dropped` (frames skipped while the disk could not keep up) when there were any.
+stdin: one JSON command per line (touch, scroll, key, text, screen, keyframe, wake, resize, quit); EOF ends it. `wake` presses KEYCODE_WAKEUP;
+`{"resize": {"w": W, "h": H}}` resizes the virtual display (ignored without --flex). Contract: docs/contracts/bridge.md.
+"""
+import argparse
+import ctypes
+import json
+import os
+import queue
+import random
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import threading
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from castlib import flv, lock, proto, wm  # noqa: E402
+from bridgelib import state as bstate, trace  # noqa: E402
+
+JAR = os.environ.get("LARES_CAST_JAR") or "/usr/share/scrcpy/scrcpy-server"
+VERSION = "5.0.1"
+REMOTE_JAR = "/data/local/tmp/scrcpy-server.jar"
+CLIENT_QUEUE = 600
+RECORD_QUEUE = 3000             # ~100 s of picture the disk may fall behind before the recorder skips to a key frame
+PART = ".part.flv"
+REMUX_TIMEOUT_S = 600
+FLOW_GAP_S = 1.5
+LOCK_BACKOFF_S = (1, 2, 4)      # the lock follower's restarts (an adbd restart ends it); the last holds
+LOCK_LIVED_S = 10               # a follower that ran this long starts the backoff over
+
+_out_lock = threading.Lock()
+_serial = ""
+
+
+def emit(**ev):
+    """One event on stdout, and the same in the bridge trace so the next real failure leaves evidence (never raises)."""
+    try:
+        trace.write(None, "cast", serial=_serial, **ev)
+    except Exception:  # noqa: BLE001 -- a trace that cannot be written is skipped
+        pass
+    if not _out_lock.acquire(timeout=2):    # a stdout nobody reads holds it (a thread blocked in write): the event is lost, the cast goes on
+        return
+    try:
+        sys.stdout.write(json.dumps(ev, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (OSError, ValueError):
+        pass
+    finally:
+        _out_lock.release()
+
+
+def leave(code):
+    """THE END IS NOT THE INTERPRETER'S: daemon threads still emitting while it shuts down made "Fatal Python error: could not acquire lock for
+    <_io.BufferedWriter name='<stdout>'> at interpreter shutdown" (exit -6 on the real phone). Take the lock no emitter can hold while we go
+    (a stdout nobody reads would hold it for ever: wait 2 s at most), flush, and leave without the interpreter's own shutdown."""
+    got = _out_lock.acquire(timeout=2)
+    if got:
+        try:
+            sys.stdout.flush()
+        except (OSError, ValueError):
+            pass
+    os._exit(code)
+
+
+# libc is loaded ONCE, here, while the process has one thread: pdeathsig also runs in a forked child (preexec_fn) of a process whose
+# video / control / flow threads run, and a dlopen there could wait for good on a loader lock another thread held at the fork.
+try:
+    _LIBC = ctypes.CDLL("libc.so.6", use_errno=True)
+except OSError:
+    _LIBC = None
+
+
+def pdeathsig(sig=signal.SIGTERM):
+    if _LIBC is not None:
+        _LIBC.prctl(1, int(sig), 0, 0, 0)
+
+
+def rate_of(s):
+    s = str(s).strip().upper()
+    mul = {"K": 1000, "M": 1000000}.get(s[-1:], 1)
+    return int(float(s[:-1] if mul != 1 else s) * mul)
+
+
+class Done(Exception):
+    pass
+
+
+def recv_exact(sock, n):
+    b = bytearray()
+    while len(b) < n:
+        c = sock.recv(n - len(b))
+        if not c:
+            raise Done("the phone closed the stream")
+        b += c
+    return bytes(b)
+
+
+class Sink:
+    """What a player and the file share: a queue Cast.broadcast fills ("seq" / "asc" / "v" / "a" items), drained by a thread of its own into
+    FLV that starts on a key frame. A subclass says where the bytes go (`write`), what a full queue does (`full`) and how a tag is timed."""
+    QUEUE = CLIENT_QUEUE
+
+    def __init__(self, cast):
+        self.cast = cast
+        self.q = queue.Queue(self.QUEUE)
+        self.started = False
+        self.base = None
+        self.dead = False
+
+    def put(self, item):
+        if self.dead:
+            return
+        try:
+            self.q.put_nowait(item)
+        except queue.Full:
+            self.full(item)
+
+    # THE TIMESTAMPS ARE THE LATENCY. Qt's player schedules every frame by its timestamp on a clock that starts after its first
+    # buffering, and holds it until then: with the phone's own times the picture ran ~460 ms behind the phone (measured on the
+    # fake phone); with every tag at 0 there is nothing to wait for and each frame shows as it is decoded, ~25 ms -- what scrcpy's
+    # own window does. Sound needs the real times to stay in step with the picture (and an all-zero stream with sound stalls
+    # ffmpeg's reader), so with --audio the phone's times are kept. LARES_CAST_TS overrides it for a measurement: "zero", "pts",
+    # "arrival" (the wall clock at sending; no better than pts: ~450 ms). The file is never a player's: Recorder keeps "pts".
+    def ts_mode(self):
+        return os.environ.get("LARES_CAST_TS") or ("pts" if self.cast.audio else "zero")
+
+    def ts(self, pts):
+        mode = self.ts_mode()
+        if mode == "zero":
+            return 0
+        if mode == "arrival":
+            if not hasattr(self, "_t0"):
+                self._t0 = time.monotonic()
+            return int((time.monotonic() - self._t0) * 1000)
+        return max(0, (pts - self.base) // 1000)
+
+    def sequence(self, record):
+        return flv.avc_sequence(0, record)
+
+    def audio_config(self, asc):
+        return flv.aac_sequence(0, asc)
+
+    def video(self, pts, key, avcc):
+        return flv.avc_frame(self.ts(pts), key, avcc)
+
+    def audio(self, pts, raw):
+        return flv.aac_frame(self.ts(pts), raw)
+
+    def pump(self, record, asc, w, h):
+        """The header, the sequence headers known so far, then the queue until its None."""
+        c = self.cast
+        self.write(flv.header(True, c.audio) + flv.metadata(w, h))
+        if record:
+            self.write(self.sequence(record))
+        if c.audio and asc:
+            self.write(self.audio_config(asc))
+        while True:
+            it = self.q.get()
+            if it is None:
+                break
+            k = it[0]
+            if k == "seq":
+                self.write(self.sequence(it[1]))
+            elif k == "asc":
+                self.write(self.audio_config(it[1]))
+            elif k == "v":
+                _, pts, key, avcc = it
+                if not self.started:
+                    if not key:
+                        continue
+                    self.started, self.base = True, pts
+                self.write(self.video(pts, key, avcc))
+            elif k == "a":
+                if not self.started:
+                    continue
+                b = self.audio(it[1], it[2])
+                if b:
+                    self.write(b)
+
+
+class Client(Sink):
+    """A player on the local port: a full queue (a player that stopped reading) drops it."""
+
+    def __init__(self, cast, sock):
+        super().__init__(cast)
+        self.sock = sock
+
+    def full(self, item):
+        self.drop()
+
+    def drop(self):
+        self.dead = True
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self.q.put_nowait(None)
+        except queue.Full:
+            pass
+
+    def write(self, b):
+        self.sock.sendall(b)
+
+    def run(self, record, asc, w, h):
+        c = self.cast
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.pump(record, asc, w, h)
+        except OSError:
+            pass
+        finally:
+            self.dead = True
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            c.client_gone(self)
+
+
+def free_path(path):
+    """PATH, or `<stem>-2<ext>`, `-3`, ... when it (or its part) is taken: a restarted cast never writes over the file before it."""
+    stem, ext = os.path.splitext(path)
+    p, n = path, 1
+    while os.path.exists(p) or os.path.exists(p + PART):
+        n += 1
+        p = "%s-%d%s" % (stem, n, ext)
+    return p
+
+
+class Recorder(Sink):
+    """THE FILE (--record PATH): fed by Cast.broadcast like a player, but with the phone's own times (a file is played later: the live
+    player's all-zero times would make it one instant long), from the first key frame, into PATH + PART as it comes (streamable FLV, one
+    unbuffered write a tag: a killed cast leaves a part ffprobe reads). A sequence header the phone sends again (a desktop resized, a
+    rotation) is written again, and its SPS / PPS also go in-band in front of the next key frame (an MP4 keeps one avcC per track, so a
+    decoder of the remuxed file finds the new size in the stream itself). At the end (finish) the part is remuxed into PATH.
+
+    A FULL QUEUE never touches the live player (each sink has its own) and never truncates the file in silence: the disk fell RECORD_QUEUE
+    items behind, so what comes is skipped until a key frame with room (the file stays decodable; a sequence header that came meanwhile is
+    kept) and counted (`dropped` in the `record` event)."""
+    QUEUE = RECORD_QUEUE
+
+    def __init__(self, cast, path):
+        super().__init__(cast)
+        self.path = path
+        self.part = path + PART
+        self.fh = open(self.part, "wb", buffering=0)
+        self.frames = 0
+        self.dropped = 0
+        self.skipping = False
+        self.pending = {}           # a "seq" / "asc" that came while skipping
+        self.put_lock = threading.Lock()
+        self.last = 0               # the last tag's time: a sequence header mid-file goes there
+        self.seqs = 0
+        self.inband = None
+        self.error = ""
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def ts_mode(self):
+        return "pts"
+
+    def put(self, item):
+        with self.put_lock:
+            if self.dead:
+                return
+            if self.skipping:
+                if item[0] in ("seq", "asc"):
+                    self.pending[item[0]] = item
+                    return
+                if item[0] != "v" or not item[2] or self.q.qsize() >= self.QUEUE // 2:
+                    self.dropped += 1
+                    return
+                self.skipping = False
+                for p in self.pending.values():
+                    self.q.put_nowait(p)
+                self.pending = {}
+            try:
+                self.q.put_nowait(item)
+            except queue.Full:
+                self.full(item)
+
+    def full(self, item):
+        self.skipping = True
+        if item[0] in ("seq", "asc"):
+            self.pending[item[0]] = item
+        else:
+            self.dropped += 1
+
+    def write(self, b):
+        self.fh.write(b)
+
+    def sequence(self, record):
+        self.seqs += 1
+        if self.seqs > 1:
+            self.inband = proto.avcc_params(record)
+        return flv.avc_sequence(self.last, record)
+
+    def audio_config(self, asc):
+        return flv.aac_sequence(self.last, asc)
+
+    def video(self, pts, key, avcc):
+        t = self.ts(pts)
+        self.last = t
+        self.frames += 1
+        if key and self.inband:
+            avcc, self.inband = self.inband + avcc, None
+        return flv.avc_frame(t, key, avcc)
+
+    def audio(self, pts, raw):
+        if pts < self.base:         # sound from before the first picture: the file starts with the picture
+            return None
+        return flv.aac_frame(self.ts(pts), raw)
+
+    def run(self):
+        c = self.cast
+        try:
+            with c.lock:
+                snap = (c.record, c.asc, c.vw, c.vh)
+            self.pump(*snap)
+        except (OSError, ValueError) as e:
+            self.error = "the recording could not be written: %s" % e
+            self.dead = True
+
+    def finish(self):
+        """The end: the queue drained into the part, the part remuxed into PATH. -> the `record` event's fields."""
+        try:
+            self.q.put(None, timeout=10)
+        except queue.Full:
+            pass
+        self.thread.join(30)
+        try:
+            self.fh.close()
+        except OSError:
+            pass
+        more = {"dropped": self.dropped} if self.dropped else {}
+        if self.frames == 0:
+            try:
+                os.unlink(self.part)
+            except OSError:
+                pass
+            return dict(empty=True, **more) if not self.error else dict(error=self.error, **more)
+        if self.error:
+            return dict(error=self.error, kept=self.part, **more)
+        tmp = self.path + ".tmp"
+        why = ""
+        try:
+            r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", self.part, "-c", "copy", "-f", "mp4", tmp], stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=REMUX_TIMEOUT_S, preexec_fn=lambda: pdeathsig(signal.SIGKILL))
+            ok = r.returncode == 0 and os.path.getsize(tmp) > 0
+            if not ok:
+                why = (r.stderr.strip().splitlines() or ["ffmpeg exited %d" % r.returncode])[-1]
+        except (OSError, subprocess.TimeoutExpired) as e:
+            ok, why = False, str(e)
+        if ok:
+            try:
+                os.replace(tmp, self.path)
+                os.unlink(self.part)
+                return dict(path=self.path, **more)
+            except OSError as e:
+                why = str(e)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return dict(error="the recording could not be finished: " + why[-200:], kept=self.part, **more)
+
+
+class Cast:
+    def __init__(self, a):
+        self.a = a
+        self.audio = a.audio
+        self.scid = random.getrandbits(31)
+        self.stop = threading.Event()
+        self.clients = []
+        self.lock = threading.Lock()
+        self.ctl = None
+        self.ctl_lock = threading.Lock()
+        self.vw = self.vh = 0
+        self.record = None
+        self.asc = None
+        self.child = None
+        self.fport = None
+        self.socks = []
+        self.listener = None
+        self.ended = None
+        self.ready = False
+        self.wd = None
+        self.last_frame = 0.0           # monotonic time of the last video frame (the flow thread's input)
+        self.frames = 0
+        self.follower = None            # the `adb logcat` child of the lock thread
+        self.lock_last = None           # the (keyguard, awake) pair last emitted
+        self.recorder = None            # --record: the file (Recorder), fed beside the players
+
+    # ---- adb ----
+    def adb(self, *args, **kw):
+        return subprocess.run(["adb", "-s", self.a.serial] + list(args), capture_output=True, text=True, **kw)
+
+    def setup(self):
+        if not os.path.exists(JAR):
+            raise Done("the scrcpy server jar is missing: " + JAR)
+        r = self.adb("push", JAR, REMOTE_JAR, timeout=60)
+        if r.returncode != 0:
+            raise Done("adb push failed: " + (r.stderr or r.stdout).strip()[-200:])
+        sock_name = "scrcpy_%08x" % self.scid
+        r = self.adb("forward", "tcp:0", "localabstract:" + sock_name, timeout=15)
+        try:
+            self.fport = int(r.stdout.strip().split()[-1])
+        except (ValueError, IndexError):
+            raise Done("adb forward failed: " + (r.stderr or r.stdout).strip()[-200:])
+        self.watchdog()
+        a = self.a
+        vd = self.virtual_display()
+        args = ["CLASSPATH=" + REMOTE_JAR, "app_process", "/", "com.genymobile.scrcpy.Server", VERSION,
+                "scid=%08x" % self.scid, "log_level=info", "tunnel_forward=true", "video_codec=h264",
+                "audio=" + ("true" if a.audio else "false")]
+        if a.audio:
+            args.append("audio_codec=aac")
+        args.append("control=true")
+        if vd:
+            args += ["new_display=" + vd, "vd_destroy_content=false"]
+            if a.flex:
+                args.append("flex_display=true")
+        elif a.max_size:
+            args.append("max_size=%d" % a.max_size)
+        if a.bit_rate:
+            args.append("video_bit_rate=%d" % rate_of(a.bit_rate))
+        if a.max_fps:
+            args.append("max_fps=%d" % a.max_fps)
+        # no `stay_awake`: scrcpy's puts back what it read at ITS start from a cleanup process on the phone, which dies with adbd, and a
+        # reconnect then read the forced value as the phone's own (the user's phone stayed on whenever it charged). The shell's hold is
+        # `lares-bridge castprep --hold` / `castend`, recorded on this computer.
+        args += ["cleanup=true"]
+        self.child = subprocess.Popen(["adb", "-s", a.serial, "shell"] + args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, preexec_fn=lambda: pdeathsig(signal.SIGKILL))
+        self.child_out = []
+        threading.Thread(target=self._drain_child, daemon=True).start()
+
+    def virtual_display(self):
+        """The new_display value (`WxH/dpi`, or `WxH` when the phone would not say its density), or "" for the main display."""
+        if not self.a.new_display:
+            return ""
+        w, h, dpi = wm.parse_new_display(self.a.new_display)
+        if dpi is None:
+            try:
+                out = self.adb("shell", "wm size; wm density", timeout=10).stdout
+            except (subprocess.TimeoutExpired, OSError):
+                out = ""
+            sw, _sh, dens = wm.parse_wm(out)
+            dpi = wm.dpi_for(w, sw, dens)
+            trace.write(None, "cast", serial=self.a.serial, event="dpi", screenWidth=sw, density=dens, dpi=dpi)
+        return "%dx%d" % (w, h) + ("/%d" % dpi if dpi else "")
+
+    def watchdog(self):
+        """A forward left in adb's server is a leaked port: whatever ends this process (a SIGKILL included) a helper in its own session
+        takes it away when the pipe it holds the read end of closes without a word of ours."""
+        r, w = os.pipe()
+        if os.fork() == 0:
+            try:
+                os.close(w)
+                os.setsid()
+                for fd in (0, 1, 2):
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                if os.read(r, 1) != b"x":
+                    self.adb("forward", "--remove", "tcp:%d" % self.fport, timeout=10)
+            finally:
+                os._exit(0)
+        os.close(r)
+        self.wd = w
+
+    def _drain_child(self):
+        for line in self.child.stdout:
+            self.child_out.append(line.decode("utf-8", "replace").rstrip())
+            del self.child_out[:-20]
+
+    def connect_all(self):
+        s = None
+        for _ in range(100):
+            if self.stop.is_set():
+                raise Done("stopped")
+            if self.child.poll() is not None:
+                break
+            try:
+                s = socket.create_connection(("127.0.0.1", self.fport), timeout=2)
+                s.settimeout(2)
+                if s.recv(1):
+                    s.settimeout(None)
+                    break
+            except OSError:
+                pass
+            if s:
+                s.close()
+                s = None
+            time.sleep(0.1)
+        if s is None:
+            tail = " | ".join(self.child_out[-3:])
+            raise Done("could not reach the scrcpy server" + (": " + tail if tail else ""))
+        self.socks.append(s)
+        self.vsock = s
+        self.asock = None
+        if self.audio:
+            self.asock = self._plain()
+        self.ctl = self._plain()
+        self.ctl.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    def _plain(self):
+        for _ in range(100):
+            try:
+                s = socket.create_connection(("127.0.0.1", self.fport), timeout=2)
+                s.settimeout(None)
+                self.socks.append(s)
+                return s
+            except OSError:
+                time.sleep(0.1)
+        raise Done("could not open all sockets of the scrcpy server")
+
+    # ---- streams ----
+    def handshake(self):
+        self.name = recv_exact(self.vsock, 64).split(b"\0", 1)[0].decode("utf-8", "replace")
+        codec = struct.unpack(">I", recv_exact(self.vsock, 4))[0]
+        if codec != proto.CODEC_H264:
+            raise Done("unexpected video codec 0x%08x" % codec)
+        self.vw, self.vh, _ = proto.parse_session(recv_exact(self.vsock, 12))
+        if self.audio:
+            ac = struct.unpack(">I", recv_exact(self.asock, 4))[0]
+            if ac != proto.CODEC_AAC:
+                raise Done("unexpected audio codec 0x%08x" % ac)
+
+    def broadcast(self, item):
+        with self.lock:
+            cs = list(self.clients)
+        for c in cs:
+            c.put(item)
+        if self.recorder:
+            self.recorder.put(item)
+
+    def start_recorder(self, path):
+        """--record: the file, started before the first packet is read (it takes the first config packet from the queue). A file that
+        cannot be opened is told (`record` with an error) and the cast goes on without it."""
+        try:
+            path = free_path(os.path.abspath(os.path.expanduser(path)))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            self.recorder = Recorder(self, path)
+        except OSError as e:
+            emit(event="record", error="the recording could not be opened: %s" % e)
+            return
+        self.recorder.thread.start()
+
+    def video_loop(self):
+        try:
+            s = self.vsock
+            while not self.stop.is_set():
+                h = recv_exact(s, 12)
+                if proto.is_session(h[0]):
+                    w, hh, _ = proto.parse_session(h)
+                    if (w, hh) != (self.vw, self.vh):
+                        self.vw, self.vh = w, hh
+                        emit(event="size", width=w, height=hh)
+                    continue
+                config, key, pts, size = proto.parse_media_header(h)
+                if size == 0:
+                    raise Done("the phone ended the stream")
+                data = recv_exact(s, size)
+                if config:
+                    rec = proto.avc_config(data)
+                    if rec != self.record:
+                        self.record = rec
+                        self.broadcast(("seq", rec))
+                else:
+                    self.frames += 1
+                    self.last_frame = time.monotonic()
+                    self.broadcast(("v", pts, key, proto.annexb_to_avcc(data)))
+        except Done as e:
+            self.finish(str(e))
+        except OSError as e:
+            self.finish("the video connection broke: %s" % e)
+
+    def flow_loop(self):
+        """`flow` events: on at the first frame (and after a gap), off after FLOW_GAP_S with none. Only this thread emits them."""
+        t0 = time.monotonic()
+        state, seen = None, 0
+        while not self.stop.wait(0.1):
+            now = time.monotonic()
+            if self.frames != seen:
+                seen = self.frames
+                if state is not True:
+                    state = True
+                    emit(event="flow", on=True)
+            elif state is not False and now - max(self.last_frame, t0) >= FLOW_GAP_S:
+                state = False
+                emit(event="flow", on=False)
+
+    def audio_loop(self):
+        try:
+            s = self.asock
+            while not self.stop.is_set():
+                config, key, pts, size = proto.parse_media_header(recv_exact(s, 12))
+                if size == 0:
+                    return
+                data = recv_exact(s, size)
+                if config:
+                    self.asc = data
+                    self.broadcast(("asc", data))
+                else:
+                    self.broadcast(("a", pts, data))
+        except (Done, OSError):
+            return
+
+    def control_loop(self):
+        buf = b""
+        try:
+            while not self.stop.is_set():
+                c = self.ctl.recv(4096)
+                if not c:
+                    return
+                buf += c
+                while buf:
+                    n = proto.device_msg_need(buf)
+                    if n is None or (n >= 0 and len(buf) < n):
+                        break
+                    buf = b"" if n < 0 else buf[n:]     # unknown type: cannot resync, throw it all away
+        except OSError:
+            return
+
+    # ---- the phone's lock ----
+    def read_lock(self):
+        """One `adb shell` round trip: the phone's clock, its epoch and its lock (lock.READ_SCRIPT) -> lock.parse_read, or None."""
+        try:
+            r = self.adb("shell", lock.READ_SCRIPT, timeout=10)
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+        return lock.parse_read(r.stdout) if r.returncode == 0 and r.stdout.strip() else None
+
+    def lock_loop(self):
+        """`lock` events: read the phone's lock once, follow its event log from that instant, and when the follower ends (adbd restarted:
+        every adb connection dropped) wait 1, 2, 4 s and start over -- the read again, so a change made meanwhile is still told."""
+        n = 0
+        while not self.stop.is_set():
+            t0 = time.monotonic()
+            rd = self.read_lock()
+            if rd and not self.stop.is_set():
+                self.follow_lock(rd)
+            if self.stop.is_set():
+                return
+            if time.monotonic() - t0 >= LOCK_LIVED_S:
+                n = 0
+            self.stop.wait(LOCK_BACKOFF_S[min(n, len(LOCK_BACKOFF_S) - 1)])
+            n += 1
+
+    def tell_lock(self, pair):
+        if pair != self.lock_last:
+            self.lock_last = pair
+            emit(event="lock", keyguard=pair[0], awake=pair[1])
+
+    def follow_lock(self, rd):
+        tr = lock.Tracker(rd["keyguard"], rd["awake"], rd["epoch"])
+        self.tell_lock(tr.pair())
+        if not rd["now"]:
+            return              # no clock to follow from: a log with no start would replay the whole buffer
+        try:
+            p = subprocess.Popen(["adb", "-s", self.a.serial, "logcat", "-b", "events", "-v", "epoch", "-T", rd["now"], "-s"] + list(lock.TAGS),
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 preexec_fn=lambda: pdeathsig(signal.SIGKILL))
+        except OSError:
+            return
+        self.follower = p
+        if self.stop.is_set():
+            p.kill()
+        for raw in p.stdout:
+            pair = tr.feed(raw.decode("utf-8", "replace"))
+            if pair:
+                self.tell_lock(pair)
+        try:
+            p.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            p.kill()
+
+    def send(self, b):
+        if not self.ctl:
+            return
+        with self.ctl_lock:
+            try:
+                self.ctl.sendall(b)
+            except OSError:
+                pass
+
+    # ---- clients ----
+    def serve(self):
+        self.listener = socket.socket()
+        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listener.bind(("127.0.0.1", self.a.port))
+        self.listener.listen(4)
+        self.port = self.listener.getsockname()[1]
+        threading.Thread(target=self.accept_loop, daemon=True).start()
+
+    def accept_loop(self):
+        while not self.stop.is_set():
+            try:
+                s, _ = self.listener.accept()
+            except OSError:
+                return
+            c = Client(self, s)
+            with self.lock:
+                self.clients.append(c)
+                snap = (self.record, self.asc, self.vw, self.vh)
+            emit(event="client", connected=True)
+            self.send(proto.reset_video())
+            threading.Thread(target=c.run, args=snap, daemon=True).start()
+
+    def client_gone(self, c):
+        with self.lock:
+            if c in self.clients:
+                self.clients.remove(c)
+        emit(event="client", connected=False)
+
+    # ---- commands ----
+    def command(self, m):
+        if "touch" in m:
+            self.send(proto.touch(m["touch"], m["x"], m["y"], self.vw, self.vh))
+        elif "scroll" in m:
+            s = m["scroll"]
+            self.send(proto.scroll(s["x"], s["y"], self.vw, self.vh, s.get("h", 0), s.get("v", 0)))
+        elif "key" in m:
+            code = proto.KEYCODES.get(m["key"])
+            if code:
+                self.send(proto.keycode(0, code) + proto.keycode(1, code))
+        elif "text" in m:
+            for b in proto.text(str(m["text"])):
+                self.send(b)
+        elif m.get("wake"):
+            self.send(proto.keycode(0, proto.KEYCODES["wakeup"]) + proto.keycode(1, proto.KEYCODES["wakeup"]))
+        elif "resize" in m:
+            r = m["resize"]
+            if self.a.flex and self.a.new_display and isinstance(r, dict):
+                w, h = int(r["w"]), int(r["h"])
+                if 1 <= w <= 65535 and 1 <= h <= 65535:
+                    self.send(proto.resize_display(w, h))
+        elif m.get("keyframe"):
+            self.send(proto.reset_video())
+        elif "screen" in m:
+            self.send(proto.display_power(m["screen"] == "on"))
+        elif m.get("quit"):
+            self.stop.set()
+
+    def stdin_loop(self):
+        try:
+            for line in sys.stdin.buffer:
+                try:
+                    m = json.loads(line)
+                    if isinstance(m, dict):
+                        self.command(m)
+                except (ValueError, KeyError, TypeError, ArithmeticError):     # a resize of 1e999: int(inf) is an OverflowError
+                    pass
+        except (OSError, ValueError):
+            pass
+        self.stop.set()
+
+    def finish(self, reason):
+        if self.ended is None:
+            self.ended = reason
+        self.stop.set()
+
+    def cleanup(self):
+        self.stop.set()
+        if self.listener:
+            try:
+                self.listener.close()
+            except OSError:
+                pass
+        with self.lock:
+            cs = list(self.clients)
+        for c in cs:
+            c.drop()
+        for s in self.socks:
+            try:
+                s.close()
+            except OSError:
+                pass
+        if self.follower and self.follower.poll() is None:
+            self.follower.kill()
+            try:
+                self.follower.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+        if self.child and self.child.poll() is None:
+            self.child.kill()
+            try:
+                self.child.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+        if self.fport:
+            try:
+                self.adb("forward", "--remove", "tcp:%d" % self.fport, timeout=10)
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+        if self.wd is not None:
+            try:
+                os.write(self.wd, b"x")     # done: the watchdog has nothing to remove
+                os.close(self.wd)
+            except OSError:
+                pass
+        # last: the phone is let go first (nothing more is broadcast), then the file is finished, however long its remux takes
+        if self.recorder:
+            rec, self.recorder = self.recorder, None
+            emit(event="record", **rec.finish())
+
+
+def main():
+    p = argparse.ArgumentParser(prog="lares-cast")
+    p.add_argument("serial")
+    p.add_argument("--max-size", type=int, default=0)
+    p.add_argument("--bit-rate", default="")
+    p.add_argument("--max-fps", type=int, default=0)
+    p.add_argument("--audio", action="store_true")
+    p.add_argument("--port", type=int, default=0)
+    p.add_argument("--new-display", default="")
+    p.add_argument("--flex", action="store_true")
+    p.add_argument("--record", default="")
+    a = p.parse_args()
+    global _serial
+    _serial = a.serial
+    trace.DEFAULT = bstate.Paths()
+    pdeathsig()
+    cast = Cast(a)
+    signal.signal(signal.SIGTERM, lambda *_: cast.stop.set())
+    signal.signal(signal.SIGINT, lambda *_: cast.stop.set())
+    code = 0
+    try:
+        if a.new_display:
+            try:
+                wm.parse_new_display(a.new_display)
+            except ValueError as e:
+                raise Done(str(e))
+        cast.setup()
+        cast.connect_all()
+        cast.handshake()
+        cast.serve()
+        if a.record:
+            cast.start_recorder(a.record)
+        for t in (cast.video_loop, cast.control_loop, cast.stdin_loop, cast.flow_loop) + ((cast.audio_loop,) if a.audio else ()):
+            threading.Thread(target=t, daemon=True).start()
+        emit(event="ready", url="tcp://127.0.0.1:%d" % cast.port, width=cast.vw, height=cast.vh, name=cast.name)
+        threading.Thread(target=cast.lock_loop, daemon=True).start()
+        cast.stop.wait()
+        if cast.ended:
+            emit(event="ended", reason=cast.ended)
+        else:
+            emit(event="ended", reason="stopped")
+    except Done as e:
+        emit(event="error", reason=str(e))
+        code = 1
+    except Exception as e:  # noqa: BLE001 -- the tool never dies without a word
+        emit(event="error", reason="%s: %s" % (type(e).__name__, e))
+        code = 1
+    finally:
+        cast.cleanup()
+    leave(code)
+
+
+if __name__ == "__main__":
+    main()

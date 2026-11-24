@@ -1,0 +1,145 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "system_update.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "icon": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "accentAt": {
+     "type": "integer",
+     "minimum": 1,
+     "default": 1,
+     "x-wants": "a whole number, 1 and up",
+     "description": "Default 1 (any update colours the icon); a whole number, 1 and up.\n\nTakes a whole number, 1 and up. Default: 1."
+    },
+    "warnAt": {
+     "type": "integer",
+     "minimum": 1,
+     "default": 30,
+     "x-wants": "a whole number, 1 and up",
+     "description": "Default 30; a whole number, not below \"accentAt\".\n\nTakes a whole number, 1 and up. Default: 30."
+    },
+    "errorAt": {
+     "type": "integer",
+     "minimum": 1,
+     "default": 150,
+     "x-wants": "a whole number, 1 and up",
+     "description": "Default 150; a whole number, not below \"warnAt\". Out of order, all three take their defaults.\n\nTakes a whole number, 1 and up. Default: 150."
+    }
+   },
+   "description": "The icon's colour when updates are waiting: the muted ink below \"accentAt\" updates, the accent\nfrom \"accentAt\", the warn colour from \"warnAt\", the error colour from \"errorAt\" on. The count is the\nstatus count: a package group (three or more packages of one repo sharing a prefix, qemu-* for one)\ncounts as ONE update here, and every other package as one. The popup and the lockscreen show the\nreal number of packages."
+  },
+  "check": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "everyMin": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1440,
+     "default": 15,
+     "x-wants": "a number 0 .. 1440",
+     "description": "Minutes between two checks for updates; 0: only when you ask. Default 15; 0 .. 1440.\n\nTakes a number 0 .. 1440. Default: 15."
+    },
+    "staleMin": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1440,
+     "default": 5,
+     "x-wants": "a number 0 .. 1440",
+     "description": "Opening the popup checks again when the last check is at least this many minutes old. Default 5; 0 .. 1440.\n\nTakes a number 0 .. 1440. Default: 5."
+    },
+    "official": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "What is asked: the official repositories, the AUR, flatpak. One that is false is never asked and never listed.\n\nTakes true or false. Default: true."
+    },
+    "aur": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "flatpak": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   }
+  },
+  "view": {
+   "enum": [
+    "quiet",
+    "normal",
+    "verbose",
+    "last"
+   ],
+   "default": "quiet",
+   "x-wants": "\"quiet\", \"normal\", \"verbose\" or \"last\"",
+   "description": "The view the popup opens on when no update runs: \"quiet\" | \"normal\" | \"verbose\", or \"last\" (the one you left). While an update runs, and until\nits end has been seen, it is the run's own.\n\nTakes \"quiet\", \"normal\", \"verbose\" or \"last\". Default: \"quiet\"."
+  },
+  "list": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "groupMin": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 0,
+       "x-wants": "a whole number 0 .. 0"
+      },
+      {
+       "type": "integer",
+       "minimum": 2,
+       "maximum": 20,
+       "x-wants": "a whole number 2 .. 20"
+      }
+     ],
+     "default": 3,
+     "x-wants": "a whole number 0 .. 0, or a whole number 2 .. 20",
+     "description": "This many packages of one repository with a common prefix become one group (qemu-*). 0: no groups. Default 3; 0, 2 .. 20.\n\nTakes a whole number 0 .. 0, or a whole number 2 .. 20. Default: 3."
+    },
+    "open": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "The categories whose lists are open when the popup opens: \"core\", \"extra\", \"multilib\", \"aur\", \"flatpak\" ..., or \"all\".\n\nTakes a list of texts. Default: []."
+    }
+   }
+  },
+  "run": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "flags": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^--?[A-Za-z][A-Za-z0-9-]*(=[A-Za-z0-9_.,-]+)?$",
+      "x-wants": "a text like --devel"
+     },
+     "default": [
+      "--sudoloop"
+     ],
+     "x-wants": "a list of texts",
+     "description": "Takes a list of texts. Default: [\"--sudoloop\"]."
+    }
+   },
+   "description": "Options handed to yay after -Syu, each a flag of its own (\"--devel\", \"--answerdiff=None\"). Default [\"--sudoloop\"] (the password is asked once)."
+  }
+ }
+}

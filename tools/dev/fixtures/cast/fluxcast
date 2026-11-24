@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+# Stub fluxcast 0.3.0 for tools/dev/cast_tool_probe.sh. Its output copies the real program's lines (/opt/fluxcast: wfd/p2p/nm.py,
+# peers.py, rtsp/handler.py, media/wlroots.py), and like the real one it block-buffers stdout on a pipe unless PYTHONUNBUFFERED is set.
+# World ($CAST_WORLD): version, script ("ok,timeout,..." one word per call), scan.txt, doctor.json, flags (ignoreint, realff: a real ffmpeg pair in
+# wf-recorder's and the sender's place), tv (the address the stream goes to, 127.0.0.1), calls.log, pids.
+import os, shutil, signal, subprocess, sys, time
+
+W = os.environ["CAST_WORLD"]
+def rd(name, default=""):
+    try:
+        return open(os.path.join(W, name)).read().strip()
+    except OSError:
+        return default
+version = rd("version", "0.3.0")
+args = sys.argv[1:]
+if "--version" in args:
+    print("FluxCast " + version); sys.exit(0)
+if "--doctor-json" in args:
+    print(rd("doctor.json", "{}")); sys.exit(0)
+if "--wfd-scan" in args:
+    if rd("scan.fail"):
+        print("[FluxCast WFD] ERROR: " + rd("scan.fail")); sys.exit(1)
+    sys.stdout.write(rd("scan.txt") + "\n"); sys.exit(0)
+
+n = len(open(os.path.join(W, "calls.log")).read().splitlines()) if os.path.exists(os.path.join(W, "calls.log")) else 0
+polls = rd("nmcli.polls", "0")
+with open(os.path.join(W, "calls.log"), "a") as f:
+    f.write("call %d polls=%s argv=%s\n" % (n + 1, polls, " ".join(args)))
+words = rd("script", "ok").split(",")
+mode = words[min(n, len(words) - 1)]
+
+def out(s):
+    sys.stdout.write(s); 
+    if os.environ.get("PYTHONUNBUFFERED"):
+        sys.stdout.flush()
+
+if "ignoreint" in rd("flags"):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+else:
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+signal.signal(signal.SIGTERM, signal.default_int_handler)
+child = subprocess.Popen(["sleep", "300"])
+with open(os.path.join(W, "pids"), "a") as f:
+    f.write("%d %d\n" % (os.getpid(), child.pid))
+try:
+    out("[FluxCast WFD] Starting NetworkManager Wi-Fi Direct scan on wlan0 for 8s...\n")
+    out("[FluxCast WFD] Connecting to Living Room OLED 65 via NetworkManager...\n")
+    out("[FluxCast WFD] NetworkManager activation started: (objectpath '/org/freedesktop/NetworkManager/ActiveConnection/42',)\n")
+    out("[FluxCast WFD] Waiting for NetworkManager P2P activation...\n")
+    if mode == "hang":
+        time.sleep(300)
+    if mode == "timeout":
+        time.sleep(0.2)
+        print("[FluxCast WFD] ERROR: Timed out waiting for NetworkManager Wi-Fi Direct activation. Last status: unknown", flush=True)
+        sys.exit(1)
+    G = os.path.join(W, "net", "p2p-wlan0-0")
+    os.makedirs(G + "/statistics", exist_ok=True)               # the group's netdev: it goes with the link, not with this program's own end
+    open(G + "/statistics/tx_bytes", "w").write("500000\n")
+    out("[FluxCast WFD] NM active connection: activated; p2p-wlan0-0\n")
+    out("[FluxCast WFD] P2P link is activated; waiting for RTSP session...\n")
+    out("[FluxCast WFD] Waiting for TV RTSP/WFD session. Press Ctrl+C to stop.\n")
+    out("[FluxCast WFD RTSP] TV RTP port: 19000; source port: 19002; audio=AAC\n")
+    out("[FluxCast WFD RTSP] Negotiated media mode: 1920x1080p30\n")
+    out("[FluxCast WFD RTSP] Selected video format: H.264\n")
+    time.sleep(0.3)
+    # media/wlroots.py's own argv (no audio): the recorder's pipe in, RTP out
+    tv = rd("tv", "127.0.0.1")
+    cmd = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "warning", "-fflags", "+genpts", "-thread_queue_size", "1024", "-f", "nut", "-i", "pipe:0",
+           "-map", "0:v:0", "-vf", "format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-threads", "4",
+           "-profile:v", "baseline", "-level:v", "4.0", "-pix_fmt", "yuv420p", "-r", "30", "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", "-bf", "0",
+           "-b:v", "8M", "-maxrate", "8M", "-bufsize", "4M", "-x264-params", "repeat-headers=1:aud=1", "-muxdelay", "0", "-muxpreload", "0",
+           "-flush_packets", "1", "-mpegts_pmt_start_pid", "4096", "-mpegts_start_pid", "4113", "-streamid", "0:4113",
+           "-mpegts_flags", "resend_headers+pat_pmt_at_frames", "-pat_period", "0.1", "-pcr_period", "20", "-f", "rtp_mpegts",
+           "rtp://%s:19000?localaddr=127.0.0.1&local_rtpport=19002&local_rtcpport=19003&pkt_size=1328" % tv]
+    if tuple(int(x) for x in version.split(".")) > (0, 3, 0):
+        del cmd[7:9]
+    with open(os.path.join(W, "sender.argv"), "w") as f:
+        f.write("".join(x + "\n" for x in cmd))
+    out("[FluxCast WFD Media] Capturing screen : LARES-CAST-1 (1920x1080)\n")
+    out("[FluxCast WFD Media] RTP target      : %s:19000 from local port 19002\n" % tv)
+    src = subprocess.DEVNULL
+    if "realff" in rd("flags"):
+        rec = subprocess.Popen(["/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30",
+                                "-c", "rawvideo", "-pix_fmt", "yuv420p", "-f", "nut", "pipe:1"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+        src = rec.stdout
+    sender = subprocess.Popen(cmd, stdin=src, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    with open(os.path.join(W, "pids"), "a") as f:
+        f.write("%d\n" % sender.pid)
+    time.sleep(0.4)
+    if sender.poll() is not None:
+        print("[FluxCast WFD] ERROR: wf-recorder exited immediately during WFD streaming.", flush=True)
+        sys.exit(1)
+    out("[FluxCast WFD Media] Latency probe: first RTP bytes after PLAY in 701.0 ms\n")
+    tx = 120
+    if mode in ("linkdies", "stalls", "teardown"):
+        # the real program's behaviour: the link (or the TV) goes, the sender stops, and it sleeps for ever
+        out("[FluxCast WFD Media] Sender health: pid=%d:running; tx+%d KiB on p2p-wlan0-0\n" % (os.getpid(), tx))
+        time.sleep(0.6)
+        if mode == "linkdies":
+            shutil.rmtree(G)
+        if mode == "teardown":
+            out("[FluxCast WFD Media] Stopping RTP stream...\n")
+        while True:
+            time.sleep(1)
+    while True:
+        out("[FluxCast WFD Media] Sender health: pid=%d:running, pid=%d:running; tx+%d KiB on wlan0%s" % (os.getpid(), child.pid, tx, "\r" if tx % 2 else "\n"))
+        tx += 211
+        time.sleep(0.25)
+except KeyboardInterrupt:
+    print("\n[FluxCast WFD] Stopping WFD session...", flush=True)
+    shutil.rmtree(os.path.join(W, "net", "p2p-wlan0-0"), ignore_errors=True)
+    sys.exit(0)

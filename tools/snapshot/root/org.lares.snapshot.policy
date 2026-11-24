@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Installed by tools/snapshot/root/install.sh. Three actions, one per verb of lares-snapshot-root the user may ask for: pkexec picks the
+     action whose exec.path AND exec.argv1 both match (`pkexec <tool> create`), and `lares-snapshot` asks `pkcheck` for the same ids first, so
+     a missing rule says so instead of opening a password dialog. 50-lares-snapshot.rules makes create and keep free for the user;
+     any other verb of the tool falls to pkexec's own action and asks an administrator. -->
+<policyconfig>
+  <vendor>Lares snapshots</vendor>
+  <action id="org.lares.snapshot.create">
+    <description>Make a system snapshot</description>
+    <message>Authentication is required to make a system snapshot</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/lares/snapshot/lares-snapshot-root</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">create</annotate>
+  </action>
+  <action id="org.lares.snapshot.keep">
+    <description>Keep or release a system snapshot</description>
+    <message>Authentication is required to change which snapshots are kept</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/lares/snapshot/lares-snapshot-root</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">keep</annotate>
+  </action>
+  <action id="org.lares.snapshot.delete">
+    <description>Delete a system snapshot</description>
+    <message>Authentication is required to delete a system snapshot</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/lares/snapshot/lares-snapshot-root</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">delete</annotate>
+  </action>
+</policyconfig>

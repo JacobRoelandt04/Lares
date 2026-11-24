@@ -1,0 +1,71 @@
+// Session restore (docs/session.md). Copy what you change to ~/.config/quickshell/config/session.jsonc; every key is optional.
+// The shell reads `enabled` hot; the tool (tools/session/lares-session) reads the file at each call.
+{
+  // The switch. Off: no picture is kept, the power reel's items run as they always did, nothing is decided at login.
+  // `lares session save | show | restore` work by hand either way.
+  "enabled": false,
+
+  // After a LOG-OUT (the reel's item), at the next login of the same boot:
+  //   "ask"           a toast with Restore / Discard, normal urgency, that stays until you answer it
+  //   "ask-critical"  the same toast, critical
+  //   "auto"          restored by itself (under the boot lock: the windows stand ready at the unlock)
+  //   "off"           nothing
+  "afterLogout": "ask",
+
+  // After a REBOOT or POWER-OFF (the reel's items, or a shutdown from a terminal), and after a log-out followed by a
+  // new boot: the same four words.
+  "afterReboot": "ask",
+
+  // After a session that did NOT end (a Hyprland crash, a kill, a power loss): "ask" (a critical, sticky toast; a restore
+  // then runs no command by itself) or "off". Never restored by itself: what was open may be why it crashed.
+  "afterCrash": "ask",
+
+  // A saved session older than this is not offered.
+  "maxAgeHours": 168,
+
+  // A terminal's running program is RUN again by itself only when it is on the run list (tools/session/rules.json:
+  // lazygit, nvim, btop, yazi, less, man, tail -f, journalctl -f, git log, claude --resume ... ) -- everything else is only
+  // TYPED at the prompt and waits for Enter. Add programs you trust (any arguments), or force one to be typed:
+  "run": [],        // e.g. ["k9s", "lazydocker", "cava"]
+  "type": [],       // e.g. ["nvim"]
+  // `lares session classify -- <command>` says what a command would get and why.
+
+  // Per window class (as `hyprctl clients` names it):
+  //   "launch"       the command that starts the app, instead of the one found (its .desktop entry, else its command line)
+  //   "selfRestore"  true: the app reopens its own windows (a browser, an editor) -- it is started ONCE and its windows
+  //                  are put back by their titles
+  //   "slow"         true: its window may come minutes later (the Windows VM's viewer, built in: its launcher connects at
+  //                  once to a VM that runs and boots one that does not). Never held back: it opens on its own
+  //                  workspace whenever it comes
+  //   "skip"         true: never started by a restore
+  //   ("launch" is a list: ["code", "--new-window"]. "why" and "folders" are notes the tool itself reads.)
+  "apps": {
+    // "org.gnome.Loupe": { "skip": true },
+    // "com.freerdp.client.sdl3": { "skip": true }      // leave the Windows VM's window out of a restore
+  },
+
+  // Classes never saved (added to the built-in ones: the shell's own windows, portal dialogs).
+  "skipClasses": [],
+
+  // A Claude Code terminal in a restored session: "resume" (its conversation goes on) | "fresh" (a new one in the same folder) | "type" (the command is
+  // typed and waits for Enter).
+  "claude": "resume",
+
+  // Desktop presets: the same for the terminals of a preset ("fresh" | "resume"), and whether a load that closes other windows asks first.
+  "presets": { "claude": "fresh", "confirmReplace": true },
+
+  // How many saved sessions are kept. 1 to 100.
+  "keep": 5,
+
+  // The toast that closes a restore: "always" | "needs" (only when something needs you) | "off".
+  "resultToast": "always",
+
+  // How long a restore waits for a terminal's window, and for an app's windows, before it reports them missing.
+  "windowTimeoutMs": 10000,
+  "appTimeoutMs": 30000,
+
+  // Presets (`lares session preset ...`, work whether "enabled" is true or not): loading one with --replace first closes the
+  // windows the preset has no place for and waits this long for each to go. A window that asks first (unsaved changes)
+  // stays open and is reported.
+  "closeTimeoutMs": 8000
+}

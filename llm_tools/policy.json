@@ -1,0 +1,18 @@
+{ "format": "llm-tool-policy/1",
+  "alwaysAsk": [
+    "(^|[;&|(])\\s*(sudo|doas|pkexec|su)\\b",
+    "(^|[;&|(])\\s*(rm|rmdir|shred|wipefs|mkfs(\\.[a-z0-9]+)?|dd|chattr|chmod|chown|mount|umount)\\b",
+    "(^|[;&|(])\\s*(reboot|shutdown|poweroff|halt|kexec)\\b",
+    "(^|[;&|(])\\s*systemctl(\\s+-[A-Za-z-]+(=\\S+)?)*\\s+(stop|disable|mask|poweroff|reboot|halt|suspend|hibernate|kexec|kill)\\b",
+    "(^|[;&|(])\\s*(kill|pkill|killall)\\b",
+    "(^|[;&|(])\\s*git(\\s+-[A-Za-z-]+(=\\S+)?|\\s+-[cC]\\s+\\S+)*\\s+(push|reset|clean|rebase)\\b",
+    "(^|[;&|(])\\s*(pacman|yay|paru)(\\s+\\S+)*?\\s+(-[A-Za-z]*[SRU]|--(sync|remove|upgrade|sysupgrade|refresh|noconfirm))",
+    "(^|[;&|(])\\s*(sh|bash|zsh|dash|fish|ksh|python[0-9.]*|perl|node|ruby|lua|php|eval|exec|source|xargs|nohup|setsid|nice|ionice|timeout|watch|env|command|builtin|time|chrt|taskset|stdbuf|unbuffer|script|systemd-run|busybox)\\b",
+    "(^|[;&|(])\\s*(curl|wget|ssh|scp|rsync|nc|ncat|socat)\\b",
+    "(^|[;&|(])\\s*find\\b(?=.*\\s-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)\\b)",
+    "(^|[;&|(])\\s*sed\\b(?=.*\\s-i)" ],
+  "neverRun": [ ":\\(\\)\\s*\\{", "\\bmkfs(\\.[a-z0-9]+)?\\s+(-\\S+\\s+)*/dev/" ],
+  "neverGrantWrite": [ "~/.ssh", "~/.gnupg", "~/.password-store", "~/.config/quickshell/llm_tools", "~/.local/state/lares" ],
+  "grantWriteRoots": [ "~", "/tmp" ],
+  "neverGrantHosts": [ "localhost", "0.0.0.0/8", "127.0.0.0/8", "::1", "10.0.0.0/8", "100.64.0.0/10", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fe80::/10", "fc00::/7" ],
+  "cwd": "~" }

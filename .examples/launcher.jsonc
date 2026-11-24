@@ -1,0 +1,51 @@
+// launcher.jsonc -- the application launcher (modules/launcher). The template of ~/.config/quickshell/config/launcher.jsonc.
+// Every key is optional: the value written here IS the default, and a missing key (or one out of range) takes it.
+// Keep only what you change; comments are allowed. The launcher rewrites only "hidden" (Hide / Unhide in a row's menu),
+// in place, keeping every other byte; every other member is yours.
+{
+    "columns": 2,          // columns of the multi-column layout. Default 2; a whole number, 1 .. 8
+    "rows": 9,             // rows shown before the list scrolls. Default 9; a whole number, 1 .. 40
+    "scriptsRoot": "",     // the scripts folder. Default "" = ~/.config/quickshell/launcher; "~/..." and absolute
+                           // paths as written, anything else relative to ~/.config/quickshell
+    // Icons are the icon theme the desktop uses (what GTK reports: themectl writes it; lares-supervise hands it to the shell at start).
+    // There is no icon-theme key here. To show a different picture for one app, shell.jsonc "icons": { "overrides": { "kitty": "~/path.png" } }.
+
+    // The confirm flourish -- the row that lifts out of the launcher on a launch, the strand it is pulled from, its
+    // snap, and the throw: the card shoots up, slows to nothing at its apex high on the screen, hangs there and falls, speeding up
+    // all the way, into the bar, which it goes into at speed and which splashes. Every preset is such a throw on one real gravity
+    // (9.81 m/s^2 on a window 3 to 4 m tall: the bigger world, the longer the card hangs).
+    //   "honey"    thick and slow: the strand thins to a hair and snaps, the two ends recoil while the launcher stays up
+    //              (it closes only once the recoil is over; nothing it does touches the card), two heavy beads go
+    //              up from the splash. (about 1.8 s from Enter to the contact on a tall launcher, the apex 500 px above it.)
+    //   "syrup"    the same movements a little quicker. Two beads. (about 1.65 s)
+    //   "dew"      thin and quick: a short neck, a fast snap, three small beads. (about 1.5 s)
+    //   "classic"  a longer pull and a shorter coast, the launcher let go early, three beads. (about 1.8 s)
+    //   "off"      none: the launcher closes and the app starts.
+    // Default "" = "honey"; "honey" | "syrup" | "dew" | "classic" | "off" (any other name plays honey, with one log line).
+    // Changed while the shell runs, it applies to the next launch.
+    "flourish": "",
+
+    // THE QUICK ANSWERS (a sum, a unit, a currency ... typed into the search).
+    "answers": {
+        // false: none, and no process for them.
+        "enabled": true,
+        // Which kinds: "colour" "resolution" "percent" "currency" "base" "zone" "date" "timearith" "unit" "math". One left out never answers.
+        "kinds": ["colour", "resolution", "percent", "currency", "base", "zone", "date", "timearith", "unit", "math"],
+        // The answer is what Enter takes (it is copied). false: it is shown, and Enter takes the first app.
+        "takesEnter": true,
+        // The currency an amount is turned into when you name none, and the ones shown beside it (ISO codes).
+        "homeCurrency": "EUR",
+        "currencies": ["USD", "EUR", "GBP", "JPY", "CHF"],
+        // How many answers are remembered. 0 .. 200.
+        "history": 20
+    },
+    // While the launcher is open and one of these windows is the active one, the keys are that window's (a file picker opened from the launcher, yazi's drop).
+    // Each a window class (the whole of it) and / or words its title holds, whatever the case; [] = never.
+    "keysFree": [{ "class": "kitty", "title": "yazi" }],
+    // A click outside the launcher closes it. true | false.
+    "clickOutsideCloses": false,
+    // Opened again within this many seconds, the launcher still has the query you left (0 = it always opens empty; a launch leaves none). 0 .. 3600.
+    "keepQuerySec": 0,
+
+    "hidden": []           // desktop ids the launcher does not list. Default []; a list of desktop ids (the file name without ".desktop": "firefox")
+}

@@ -1,0 +1,99 @@
+// The phone bridge (docs/bridge.md). Copy what you change to ~/.config/quickshell/config/bridge.jsonc; every key is optional.
+// The popup reads it hot; the tool (tools/bridge/lares-bridge) reads it at each call. A bad value falls back to the default shown.
+{
+  "files": {
+    // Where the phone is mounted over the cable (aft-mtp-mount). The folder must exist and be yours:
+    //   sudo mkdir -p /mnt/android && sudo chown $USER /mnt/android
+    "usbMount": "/mnt/android",
+
+    // What opens a mounted phone. `{path}` is the mount point; with no `{path}` in the list it is added at the end.
+    "open": ["kitty", "-o", "background_opacity=0.75", "--title", "yazi", "yazi", "{path}"],
+
+    // Where on the phone "Send" puts what you pick (adb push).
+    "sendDir": "/sdcard/Download",
+
+    // The folder "Send" starts its file chooser in.
+    "pickDir": "~"
+  },
+
+  "mirror": {
+    // scrcpy over the cable: the phone's own resolution, scrcpy's own bit rate and frame rate. 0 / "" leave scrcpy's default.
+    "usb":  { "maxSize": 0, "bitRate": "", "maxFps": 0 },
+
+    // scrcpy over Wi-Fi: lighter, so it stays smooth. maxSize is the longest side in pixels, bitRate e.g. "6M".
+    "wifi": { "maxSize": 1600, "bitRate": "6M", "maxFps": 60 },
+
+    // Where a recording goes (the Record switch): phone-<date>-<time>.mp4 here.
+    "recordDir": "~/Videos",
+
+    // Any further scrcpy arguments, added last, e.g. ["--window-borderless"].
+    "extraArgs": []
+  },
+
+  "adb": {
+    // When the adb server is started. "onDemand": when you ask for something that needs it. "onPlug": also when a phone with USB
+    // debugging comes onto the cable. The tool stops a server it started itself after `idleKillS` seconds of no need.
+    "start": "onDemand",
+    "idleKillS": 300,
+
+    // The port `arm` opens on the phone (adb tcpip). Wi-Fi mirroring tries each address KDE Connect reports with this port, so a
+    // changed IP needs no setup: nothing here is an address, and no address is ever written down.
+    "port": 5555
+  },
+
+  "shots": {
+    // Where "Screenshot" saves phone-<date>-<time>.png.
+    "dir": "~/Pictures/Screenshots"
+  },
+
+  "flip": {
+    // The phone turns once, front to front, every time the popup opens.
+    "onOpen": true
+  },
+
+  "cast": {
+    // The popup's cast (Mirror on the phone's own screen) keeps running this long after the popup closes, so a quick look
+    // away costs nothing; then it stops. Seconds.
+    "closeAfterS": 120,
+    // A resized Mirror restarts its stream at the new size, so the picture is sharp at every size; the last frame is held,
+    // blurred, while it does (a second or two). false: the stream keeps the size it started at and is scaled. A Desktop never
+    // restarts for a size (its apps would go).
+    "reloadOnResize": true,
+
+    // The Desktop mode's virtual screen is laid out like a laptop's: `desktopScale` is how many pixels of THIS screen one Android dp
+    // gets (1.0: a dp is about a pixel of the picture; 2.0 makes everything on the phone's desktop half as big). 0.5 to 3.
+    "desktopScale": 1.0,
+
+    // ...but the virtual screen's short side is never fewer than this many dp (apps switch to their phone layouts below ~600 dp
+    // wide; 320 is a phone). 240 to 1200.
+    "desktopMinDp": 320,
+
+    // ...and never fewer than this many PIXELS: the phone's own second launcher lays its icons out in pixels, ignores the screen's
+    // density, and its icons overlap below ~600 px of short side. 320 to 2400.
+    "desktopMinPx": 640,
+
+    // When the kept PIN unlocks a locked phone: "start+touch" (as you start a cast, and as you touch the picture of a locked phone) | "start" |
+    // "touch" | "never".
+    "unlock": "start+touch",
+
+    // The keys that are the phone's Back, Home and Recents while the picture has the keyboard (Qt's key names: "Left", "F1", "PageUp" ...). "" =
+    // none: that key goes to the phone as it is.
+    "keys": { "back": "Left", "home": "Down", "recents": "Right" },
+
+    // The phone's screen goes off when a cast ends (only if the cast lit it).
+    "sleepAtEnd": true,
+    // How long a cast may keep the phone awake on the charger without being renewed, minutes. 1 to 240.
+    "holdMin": 30
+  },
+
+  // The body's highlights follow the light of the room (the shell's relight of the phone's frame).
+  "relight": true,
+
+  // The key that is held for the free look (the phone turns with the pointer): "alt" | "ctrl" | "shift" | "off".
+  "lookKey": "alt",
+
+  // Per device, by its name or its key (kdc:<id> / adb:<serial>): a skin to draw ("redmagic-10s-pro-moonlight" or "generic"; the
+  // name decides when this says nothing), and `hidden` to keep a device out of the list.
+  //   "devices": { "REDMAGIC 10S Pro": { "skin": "redmagic-10s-pro-moonlight" }, "kdc:abc123": { "hidden": true } }
+  "devices": {}
+}

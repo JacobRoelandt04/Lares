@@ -1,0 +1,101 @@
+{
+  "v": 1,
+  "doc": "Curated lists the sources need and cannot derive. Read by lib/paths.static_pages(). Every prefix here must match something in the captured docnames and every pinned page must exist, so that a typo or a renamed page does not silently shrink a pool.",
+
+  "arch": {
+    "why": "Arch wiki translations are pages titled `Name (Language)` (2202 of 4363 titles, api_notes.md 6). A title ending in a parenthesised LANGUAGE is a translation; 127 English titles also end in a parenthesis (`Dell XPS 13 (9300)`, `Lenovo ThinkPad T14 (AMD) Gen 3`), so the test is membership of this set, never 'ends in a parenthesis'. The 40 names are exactly the suffixes with language=true in the captured title-suffix counts; the four after them are languages the Translation team lists that have no page today. A suffix that is in neither this set nor obviously an English model number is put to the wiki itself (prop=info pagelanguage) once and the verdict is cached with the index.",
+    "languageSuffixes": [
+      "Русский", "Español", "Português", "Magyar", "Français", "Polski", "Italiano", "Türkçe",
+      "Українська", "Čeština", "Suomi", "العربية", "فارسی", "हिन्दी", "正體中文", "Bosanski",
+      "Català", "한국어", "Lietuvių", "Ελληνικά", "Latviešu", "Bahasa Indonesia", "Svenska", "עברית",
+      "Српски", "Slovenščina", "粵語", "Română", "বাংলা", "文言文", "Dansk", "Slovenčina",
+      "Български", "ไทย", "Nederlands", "Qhichwa", "Hrvatski", "Lietuviškai", "Esperanto", "Norsk Bokmål",
+      "Deutsch", "日本語", "简体中文", "Tiếng Việt"
+    ],
+    "tipsHeadings": ["tips and tricks", "tips and tweaks", "tips"]
+  },
+
+  "gentoo": {
+    "why": "Gentoo's Translate extension keeps a translation as a `/xx` subpage of the English page (Monit/ru, Bugzilla/Bug report guide/zh-cn, Xfce/Guide/ja; api_notes.md 7). English subpages are ordinary (`Power management/Disk`), so the last path segment is compared with real language codes, never with 'two or three letters' (`/etc`, `/srv`, `/bin` are pages). `Gentoo-pl/` is the Polish project's own tree of Polish pages.",
+    "languageCodes": [
+      "ar", "bg", "bn", "ca", "cs", "da", "de", "el", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
+      "he", "hi", "hr", "hu", "id", "is", "it", "ja", "ka", "ko", "lt", "lv", "nb", "nl", "no", "pl",
+      "pt", "pt-br", "ro", "ru", "sk", "sl", "sr", "sv", "ta", "th", "tr", "uk", "vi", "zh", "zh-cn",
+      "zh-hans", "zh-hant", "zh-hk", "zh-tw"
+    ],
+    "nonEnglishPrefixes": ["Gentoo-pl/"]
+  },
+
+  "kernel": {
+    "why": "docs.kernel.org has 3504 documents, and most are per-driver or per-chip reference (hwmon 291, driver-api 360, arch 240, media, sound, scsi, i2c ...) that says nothing to a reader who runs Arch on one laptop and wants to learn something. Deepen is CS with a bias to what this machine does, so the pool is the subtrees that explain an idea or a knob a user of the system meets: how the kernel schedules, locks, allocates, caches, sleeps, isolates and traces. Weight is the subtree's share of the picks (relative, not a probability). An excluded prefix beats an include; a docname that ends in /index is a table of contents with no intro paragraph and never a candidate.",
+    "include": [
+      {"prefix": "admin-guide/", "weight": 3.0, "why": "user and administrator guide: sysrq, cgroups, power management (cpufreq, intel_pstate, sleep states), mm knobs (zswap, ksm, transparent hugepages), sysctl, laptops (thinkpad-acpi), hw-vuln, device-mapper"},
+      {"prefix": "filesystems/", "weight": 2.0, "why": "btrfs, ext4, xfs, f2fs, overlayfs, tmpfs, proc, erofs: what sits under this machine's /"},
+      {"prefix": "core-api/", "weight": 2.0, "why": "the kernel's data structures and primitives (xarray, rbtree, kref, workqueues, idr): CS in working code"},
+      {"prefix": "locking/", "weight": 2.0, "why": "lockdep, mutex design, seqlocks, futex requeue: concurrency as the kernel practices it"},
+      {"prefix": "RCU/", "weight": 2.0, "why": "read-copy-update: the best-documented idea in the tree"},
+      {"prefix": "scheduler/", "weight": 2.0, "why": "CFS, EEVDF, sched-ext: how the CPU is shared"},
+      {"prefix": "mm/", "weight": 2.0, "why": "page tables, overcommit, DAMON: virtual memory in the kernel's own words"},
+      {"prefix": "bpf/", "weight": 2.0, "why": "eBPF, the most interesting new part of the kernel"},
+      {"prefix": "power/", "weight": 2.0, "why": "suspend, hibernation, runtime PM: what a laptop does when the lid closes"},
+      {"prefix": "block/", "weight": 1.0, "why": "I/O schedulers (bfq), blk-mq, inline encryption"},
+      {"prefix": "security/", "weight": 1.5, "why": "Landlock, keys, LSMs"},
+      {"prefix": "trace/", "weight": 1.0, "why": "ftrace, kprobes, perf events"},
+      {"prefix": "timers/", "weight": 1.0, "why": "hrtimers, NO_HZ"},
+      {"prefix": "crypto/", "weight": 1.0, "why": "the kernel crypto API"},
+      {"prefix": "cpu-freq/", "weight": 1.0, "why": "governors and drivers of CPU frequency scaling"},
+      {"prefix": "networking/", "weight": 1.0, "why": "bridge, TLS offload, MPTCP, ip-sysctl"},
+      {"prefix": "userspace-api/", "weight": 1.0, "why": "Landlock, seccomp, io_uring: the syscalls a program can use"},
+      {"prefix": "gpu/", "weight": 0.5, "why": "DRM/KMS core and the Intel drivers (this laptop's iGPU)"},
+      {"prefix": "input/", "weight": 0.5, "why": "the input subsystem, multitouch protocol, gamepads"},
+      {"prefix": "wmi/", "weight": 0.5, "why": "laptop firmware interfaces"},
+      {"prefix": "firmware-guide/", "weight": 0.5, "why": "ACPI on real machines"},
+      {"prefix": "nvme/", "weight": 0.5, "why": "NVMe multipath and fabrics"},
+      {"prefix": "virt/", "weight": 0.5, "why": "KVM"},
+      {"prefix": "rust/", "weight": 0.5, "why": "Rust in the kernel"},
+      {"prefix": "accounting/", "weight": 0.5, "why": "taskstats, delay accounting, PSI"},
+      {"prefix": "netlink/", "weight": 0.5, "why": "netlink specifications"}
+    ],
+    "exclude": [
+      "admin-guide/media/", "admin-guide/perf/", "admin-guide/kernel-parameters", "admin-guide/devices",
+      "admin-guide/svga", "admin-guide/README",
+      "networking/device_drivers/", "networking/dsa/", "networking/phy", "networking/mac80211",
+      "netlink/specs/",
+      "userspace-api/media/", "userspace-api/accelerators/", "userspace-api/gpio/", "userspace-api/ioctl/",
+      "gpu/amdgpu/", "gpu/panfrost", "gpu/panthor", "gpu/vc4", "gpu/imagination", "gpu/tegra", "gpu/meson",
+      "gpu/mcde", "gpu/pl111", "gpu/xen-front", "gpu/komeda", "gpu/afbc", "gpu/zynqmp",
+      "virt/hyperv/", "virt/acrn/", "virt/kvm/s390", "virt/kvm/arm/", "virt/kvm/loongarch/", "virt/kvm/ppc"
+    ],
+    "skipLeaves": ["index", "todo", "TODO", "changes", "ChangeLog"],
+    "pinned": {
+      "why": "Pages that are short, readable on their own and of use on this system: doubled in weight so they come up early. Every name is checked against the captured docnames.",
+      "weight": 2.0,
+      "docnames": [
+        "admin-guide/sysrq", "admin-guide/cgroup-v2", "admin-guide/pm/cpufreq", "admin-guide/pm/intel_pstate",
+        "admin-guide/pm/sleep-states", "admin-guide/laptops/thinkpad-acpi", "admin-guide/mm/zswap",
+        "admin-guide/mm/ksm", "admin-guide/blockdev/zram", "admin-guide/tainted-kernels",
+        "admin-guide/lockup-watchdogs", "admin-guide/perf-security", "admin-guide/binfmt-misc",
+        "filesystems/btrfs", "filesystems/overlayfs", "filesystems/tmpfs", "RCU/whatisRCU",
+        "scheduler/sched-design-CFS", "scheduler/sched-ext", "locking/lockdep-design", "locking/mutex-design",
+        "core-api/xarray", "core-api/rbtree", "power/runtime_pm", "userspace-api/landlock",
+        "userspace-api/seccomp_filter", "mm/page_tables", "mm/overcommit-accounting", "block/bfq-iosched"
+      ]
+    }
+  },
+
+  "freedesktop": {
+    "why": "The index lists 33 specifications. Three (appstream, dbus, polkit) link OFF specifications.freedesktop.org to a project's own site with its own page shape, so they are not fetched. The rest are DocBook/DAPS pages whose first section is an introduction. Several are X11-only (window manager hints, XEMBED, XSETTINGS, the X system tray, startup notification, X11 clipboard): on a Wayland compositor they explain a world this desktop does not run, so Deepen leaves them out. The others describe things Hyprland, Quickshell and mako actually do (notifications, StatusNotifierItem, idle inhibition, desktop entries, base directories, MPRIS, icon themes, MIME apps, the trash, the secret service).",
+    "exclude": {
+      "appstream": "off-site (freedesktop.org/software/appstream/docs)",
+      "dbus": "off-site (dbus.freedesktop.org)",
+      "polkit": "off-site (freedesktop.org/software/polkit)",
+      "wm": "X11 only: extended window manager hints",
+      "xembed": "X11 only",
+      "xsettings": "X11 only",
+      "systemtray": "X11 only (the XEMBED tray); the Wayland one is status-notifier-item",
+      "startup-notification": "X11 only",
+      "clipboard": "X11 selections",
+      "clipboard-extensions": "X11 selections"
+    }
+  }
+}

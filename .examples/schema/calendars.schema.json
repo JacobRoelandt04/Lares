@@ -1,0 +1,78 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "calendars.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "pollIntervalMs": {
+   "type": "integer",
+   "minimum": 60000,
+   "default": 900000,
+   "x-wants": "a whole number, 60000 and up",
+   "description": "How often every feed is fetched, in milliseconds. Default 900000 (15 min); at least 60000 (a shorter one is taken as a\nminute; 0, a negative or a non-number keeps the default).\n\nTakes a whole number, 60000 and up. Default: 900000."
+  },
+  "weekStart": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 6,
+   "default": 1,
+   "x-wants": "a whole number 0 .. 6",
+   "description": "The first day of the week in the month view: 0 = Sunday, 1 = Monday ... 6 = Saturday (another value keeps the default). Default 1.\n\nTakes a whole number 0 .. 6. Default: 1."
+  },
+  "calendars": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "name": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "x-wants": "a text like #89b4fa"
+     },
+     "url": {
+      "type": "string",
+      "x-wants": "a text",
+      "x-secret": true
+     },
+     "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "x-wants": "a whole number, 60000 and up"
+     },
+     "remind": {
+      "anyOf": [
+       {
+        "type": "boolean",
+        "x-wants": "true or false"
+       },
+       {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 1440,
+        "x-wants": "a number 1 .. 1440"
+       }
+      ],
+      "x-wants": "true or false, or a number 1 .. 1440"
+     }
+    },
+    "required": [
+     "url"
+    ]
+   },
+   "x-wants": "a list of objects",
+   "description": "The feeds, each an .ics URL (a Proton Calendar share link, for one). Per entry:\n  id              a stable key for the feed. Default \"cal<index>\".\n  name            what the popup calls it. Default \"Calendar <n>\".\n  color           its events' colour, \"#RRGGBB\". Default the theme's text colour.\n  url             the feed; required (an entry without one is skipped).\n  pollIntervalMs  this feed's own fetch interval, in milliseconds. Default the top-level \"pollIntervalMs\".\n  remind          whether its appointments are announced: true (as notifications.jsonc sources.calendar \"leadMin\" says) | false | a\n                  number of minutes before (1 .. 1440). Default true.\nDefault: no calendars (the two below are a sample).\n\nTakes a list of objects."
+  }
+ }
+}

@@ -1,0 +1,72 @@
+-- The lockscreen's test Hyprland (tools/dev/lock_env.sh). The runner copies this
+-- file into the environment's private directory, replacing the five @-quoted
+-- words below (monitors, output creation, animations, xray, autostart); the
+-- copy is what Hyprland reads. It runs nested inside a headless mutter that
+-- nobody sees, so every output here is a HEADLESS one Hyprland renders itself.
+-- (No comment may spell a placeholder: the runner replaces every occurrence,
+-- and code lands in the comment.)
+--
+-- THE OUTPUTS ARE CREATED IN ORDER. The output-creation placeholder becomes ONE
+-- hl.exec_cmd whose hyprctl calls are chained with `&&` (LOCK-1, then LOCK-2 when
+-- OUTPUTS=2): the first create has been answered before the second is asked, so
+-- LOCK-1 is always monitor 0 and LOCK-2 monitor 1. Two separate hl.exec_cmd calls
+-- raced, and a test that took "the first output" got either.
+--
+-- WHY THESE VALUES.
+--  - session_lock_xray is OFF statically: with it on, a lock that has not
+--    drawn yet (boot, a crash before the first lock lands) shows the desktop
+--    UNBLURRED. The lock switches it on after `secure`.
+--  - allow_session_lock_restore is ON: the supervisor relaunches a dead lock.
+--  - blur is the user's own block (~/.config/hypr/config/appearance.lua), so
+--    the lock's blur looks and costs what it will on the desktop.
+--  - xwayland OFF: a nested Xwayland binds /tmp/.X11-unix, which is shared
+--    with the real session.
+--  - headless host: the WAYLAND-1 window output is disabled (mutter never
+--    configures it, and nothing may depend on it); HOST=window: WAYLAND-1 is
+--    the one output, a window on the user's desktop.
+
+@MONITORS@
+
+hl.config({
+    misc = {
+        disable_hyprland_logo = true,
+        disable_splash_rendering = true,
+        force_default_wallpaper = 0,
+        disable_watchdog_warning = true,
+        disable_hyprland_guiutils_check = true,
+        background_color = "rgb(3a6ea5)",
+        allow_session_lock_restore = true,
+        session_lock_xray = @XRAY@,
+        session_lock_blur = true,
+        lockdead_screen_delay = 1000,
+    },
+    ecosystem = { no_update_news = true, no_donation_nag = true, enforce_permissions = false },
+    decoration = {
+        rounding = 10,
+        blur = {
+            size = 10,
+            passes = 4,
+            noise = 0.1,
+            special = true,
+            popups = true,
+            input_methods = true,
+            xray = true,
+        },
+    },
+    animations = { enabled = @ANIMATIONS@ },
+    xwayland = { enabled = false },
+    debug = { disable_logs = false },
+})
+
+-- The shell's bars and popups draw ABOVE the lock surface, never interactive.
+hl.layer_rule({ name = "lares_bar_above_lock", match = { namespace = "^lares-bar$" }, above_lock = 1 })
+
+-- Media keys work while locked (the deploy config gets the same flag).
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("touch " .. os.getenv("LOCK_ENV_DIR") .. "/key-play"), { locked = true })
+-- A bind WITHOUT the flag: must never fire while locked (probe checks).
+hl.bind("SUPER + T", hl.dsp.exec_cmd("touch " .. os.getenv("LOCK_ENV_DIR") .. "/key-unlocked-bind"))
+
+hl.on("hyprland.start", function()
+@CREATE_OUTPUTS@
+@AUTOSTART@
+end)

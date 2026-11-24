@@ -1,0 +1,17 @@
+// Installed by silicon's install.sh (remove it with install.sh --uninstall).
+//
+// @USER@ -- and only while on the active local session -- may run the silicon root helper
+// (org.lares.silicon.helper: that one program, /usr/local/libexec/silicon-helper) without
+// a password. Nobody else, no other action. The helper checks every value it is given against
+// the kernel's own lists and ranges, writes only a fixed whitelist of power knobs and reads
+// each write back, so what this rule hands over is: change the CPU profile and the power
+// caps (lowering them only), set the charge limit to 80 or 100, queue a GPU mode change, and turn a wireless
+// interface's power save on or off (`wifi-powersave`: /usr/bin/iw by absolute path, the interface checked to exist and to
+// be wireless; the shell uses it while sound goes to an AirPlay speaker).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.lares.silicon.helper" &&
+        subject.user == "@USER@" &&
+        subject.active && subject.local) {
+        return polkit.Result.YES;
+    }
+});

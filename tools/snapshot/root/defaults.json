@@ -1,0 +1,29 @@
+{
+  "enabled": true,
+  "rule": {
+    "minPackages": 40,
+    "critical": [
+      "linux", "linux-lts", "linux-zen", "linux-hardened", "linux-firmware", "nvidia*", "mesa", "glibc", "gcc-libs",
+      "systemd", "systemd-libs", "grub", "mkinitcpio", "pacman", "pam", "sudo", "polkit", "sddm", "hyprland",
+      "aquamarine", "quickshell*", "qt6-base", "qt6-declarative", "openssl", "util-linux", "e2fsprogs", "dbus",
+      "wayland", "bash", "coreutils", "python"
+    ],
+    "criticalAlso": []
+  },
+  "keep": 5,
+  "minFreeGB": 10,
+  "maxAddedGB": 15,
+  "maxMinutes": 15,
+  "prime": true,
+  "exclude": [],
+  "onFail": "stop",
+  "offsite": { "enabled": false, "folder": "/my-files/Lares snapshots", "onBattery": false, "metered": false },
+
+  "paths": ["/usr", "/opt", "/etc", "/srv", "/root", "/var/lib"],
+  "bootFiles": true,
+  "excludes": [
+    "/var/lib/ollama", "/var/lib/systemd/coredump", "/var/lib/docker", "/var/lib/containers", "/var/lib/containerd",
+    "/var/lib/libvirt/images", "/var/lib/machines", "/var/lib/portables", "/var/lib/flatpak/repo", "/var/lib/waydroid",
+    "/var/lib/pacman/sync", "/root/.cache"
+  ]
+}

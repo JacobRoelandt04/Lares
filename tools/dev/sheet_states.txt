@@ -1,0 +1,110 @@
+# The sheet check's reference sheet: every state it renders, by a name that outlives the moves (tools/dev/sheet_render.py reads this;
+# `python3 tools/dev/sheet_render.py --list` prints the expanded names). One row per line:
+#
+#   shell  <name>  [VAR=VALUE ...] [cfg=user] [scales=<k,k>] [modes=<m,m>] [grab=<ms>] [mask=<name>[@<k>]:<x>,<y>,<w>,<h>:<reason with _ for blanks>]
+#   mockup <moduleId> <file> [the same]
+#
+# A shell row is mockups/shell.qml (the mock services on the shell's real ShellFrame, one 2880 x 1620 output over a fixed wallpaper), once per
+# mode and per global scale: shell.<name>.<mode>.<k>x. A mockup row is that mockup's stage at zoom 1, its panel left out, once per mode:
+# mockup.<moduleId>.<mode>.
+#
+# cfg=user: the mock config dir holds tools/dev/sheet_user_shell.jsonc, the non-default values the user's own desktop runs on.
+# grab=<ms>: GRAB_MS for this state (6000 by default; a QML Timer's interval, on the animation clock).
+# mask: a rectangle left out of the comparison. Only for what cannot be frozen or staged; the reason says why. Two rows have one: at a
+# global scale of 1.25 a glyph edge reads one level apart now and then (CLAUDE.md, TEXT AT A FRACTIONAL x: which glyphs sit side by
+# side in Qt's glyph atlas follows the order they were first drawn, and at a fractional scale the sampling takes in its neighbour).
+# Seen in 3 of 9 runs, always these glyphs: the left edges of the audio rows' "80 %" and the wiki card's W mark. A mask names the scale
+# it is for as `<name>@<k>` (1.25 when none is named): round 9 found the W mark one level off at 1x in dark mode too, on an unchanged tree
+# against its own baseline (one pixel, 2228,310), so the wiki row has a 1x mask of its own.
+
+# the bars
+shell rest
+shell weekend SHELL_STOCKS=market-closed
+shell ultrawide OUT=ultrawide
+shell continuous STATE=continuous
+shell hidden STATE=hidden
+
+# every popup out of its own button
+shell open-notes STATE=open:notes
+shell open-window STATE=open:windowtray
+shell open-llm STATE=open:llm
+shell open-clock STATE=open:clock
+shell open-wiki STATE=open:wiki mask=wmark:2406,378,26,24:the_W_mark's_edge,_one_level,_glyph_atlas_order_at_1.25 mask=wmark@1:2205,298,28,26:the_W_mark's_edge_at_1x,_one_level,_the_base_tree_repeats_it_against_the_baseline
+shell open-weather STATE=open:weather
+shell open-player STATE=open:player
+shell open-stocks STATE=open:stocks
+shell open-aerial STATE=open:aerial
+shell open-bridge STATE=open:bridge
+shell open-panorama STATE=open:panorama
+shell open-silicon STATE=open:silicon
+shell open-update STATE=open:update
+shell open-bell STATE=open:notifications
+shell open-power STATE=open:power
+shell open-idle STATE=open:idle
+shell open-launcher STATE=open:launcher
+shell open-clipboard STATE=open:clipboard
+shell open-audio STATE=open:audio mask=volfigures:2388,276,8,224:the_left_edge_of_the_rows'_80_%_(both_rows),_one_level,_glyph_atlas_order_at_1.25
+shell open-theme STATE=open:theme
+
+# the lane and the OSD
+shell toasts STATE=toasts
+shell critical STATE=critical
+shell osd STATE=osd
+shell osd-mute STATE=volume
+
+# the same frame on the values the user's desktop really runs (shadow, border, workspaces, the zones): a loader or a default that loses one shows here
+shell user-rest cfg=user scales=1.25
+shell user-open-clock cfg=user scales=1.25 STATE=open:clock
+shell user-open-player cfg=user scales=1.25 STATE=open:player
+shell user-open-silicon cfg=user scales=1.25 STATE=open:silicon
+shell user-toasts cfg=user scales=1.25 STATE=toasts
+
+# every framework mockup's stage (mockups/shell.qml is the shell rows above)
+mockup audio mockups/audio.qml
+mockup audio_button mockups/audio_button.qml
+mockup audio_player mockups/audio_player.qml grab=12000
+mockup auth mockups/auth.qml
+mockup bar mockups/bar.qml
+mockup bridge mockups/bridge.qml
+mockup panorama mockups/panorama.qml
+mockup clipboard mockups/clipboard.qml
+mockup clock mockups/clock.qml
+mockup glyph_button mockups/glyph_button.qml
+mockup groove_slider mockups/groove_slider.qml
+mockup launcher mockups/launcher.qml
+mockup llm mockups/llm.qml
+mockup lockscreen mockups/lockscreen.qml
+# the lock's veils: one mockup, one state per veil through its VEIL=, each under the name of the mockup it came from (C6), so the baseline still judges it
+mockup lockveil mockups/lockveil.qml
+mockup lockveil_dials mockups/lockveil.qml VEIL=dials
+mockup lockveil_dimples mockups/lockveil.qml VEIL=dimples
+mockup lockveil_gooey mockups/lockveil.qml VEIL=gooey
+mockup lockveil_keycaps mockups/lockveil.qml VEIL=keycaps
+mockup lockveil_louvres mockups/lockveil.qml VEIL=louvres
+mockup lockveil_paper mockups/lockveil.qml VEIL=paper
+mockup lockveil_relief mockups/lockveil.qml VEIL=relief
+mockup aerial mockups/aerial.qml
+# the bar pill's traffic figures and states: aerial's pill mockup (it was the network mockup's traffic stage)
+mockup aerial_traffic mockups/aerial_traffic.qml
+mockup notes mockups/notes.qml
+mockup notifications mockups/notifications.qml
+mockup osd mockups/osd.qml
+mockup power mockups/power.qml
+mockup screentime mockups/screentime.qml
+mockup shadowbox mockups/shadowbox.qml
+mockup silicon mockups/silicon.qml
+mockup stocks mockups/stocks.qml
+mockup system_update mockups/system_update.qml
+mockup template mockups/template.qml
+mockup terminal mockups/terminal.qml
+mockup theme mockups/theme.qml
+mockup weather_popup mockups/weather_popup.qml
+mockup wiki mockups/wiki.qml
+mockup windowtray mockups/windowtray.qml
+mockup workspaces mockups/workspaces.qml
+
+# the mockups whose stage is an empty engine until something is sent: one state with its content out (<id>@<what> is the same file, by its own env)
+mockup notifications@manager mockups/notifications.qml ACT=fill:4@600,manager@1200
+mockup notifications@toasts mockups/notifications.qml ACT=fill:3@1500
+mockup auth@typed mockups/auth.qml AUTH_STATE=typed
+mockup windowtray@strip mockups/windowtray.qml OPEN=top

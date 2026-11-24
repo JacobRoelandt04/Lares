@@ -1,0 +1,76 @@
+// llm.jsonc -- the LLM popup (modules/bar/llm). The template of ~/.config/quickshell/config/llm.jsonc.
+// Every key is optional and every value below IS the default: a missing key (or one of the wrong kind) takes it. The file is
+// read hot. `//` and `/* */` comments are allowed. Keep only what you change.
+{
+    // The conversation store: a file name (a plain <name>.json, nothing else) in ~/.local/state/lares/llm/ (the mockup keeps its
+    // own, mockup_conversations.json). Read as the shell starts.
+    "store": "conversations.json",
+
+    // The text put in the chat's composer, SELECTED (one Backspace or any typing replaces it), when a note is sent to the chat from
+    // its right-click menu "Send to LLM". Any text; "" = none.
+    "notePrompt": "",
+
+    // Told to the model at the start of every chat (the language to answer in, how long, what machine this is). "" = nothing. It takes room
+    // of the context.
+    "systemPrompt": "",
+
+    // THE SERVER the chat talks to: its address, and whether it speaks Ollama's own protocol or OpenAI's ("ollama" | "openai"). With an address
+    // that is not this machine (the laptop using the desktop: "http://desktop:11434") nothing is done to this machine's GPU or CPU for the
+    // chat, and the GPU's memory is not shown. Read as the shell starts.
+    "server": { "url": "http://localhost:11434", "protocol": "ollama" },
+
+    // Minutes the model stays loaded after the chat is closed. 0: let go at once. -1: until you unload it. 0 .. 1440.
+    "unloadAfterMin": 0,
+
+    // Whether a model that can think first does: true | false, or per model: { "qwen3:8b": false } (a model not named thinks).
+    "think": true,
+
+    "context": {
+        // The context of a model you have not tuned in the model picker, in tokens, or "auto" (as large as the GPU's memory takes: it is
+        // measured when the model is first used).
+        "default": 4096,
+        // "auto" gives a small model (8 B parameters at most) never more than this many tokens (4096 at least), and leaves this much of the
+        // GPU's memory free (MiB, 768 at least). Changed, a model is measured again at its next use.
+        "autoMax": 32768,
+        "vramReserveMiB": 768
+    },
+
+    "tools": {
+        // The tools are on when the shell starts (the wrench in the composer).
+        "on": false,
+        // Tools that are never offered, by name ("web_search", "screenshot", "run_command" ...: `ls llm_tools` in the shell's folder).
+        "off": [],
+        // Tools that ask first though they only read ("web_search", "screenshot", "clipboard_read", "read_file" ...). A tool that acts always asks.
+        "ask": [],
+        // How many rounds of tool calls one answer may take, and how many calls one round. 1 .. 40, 1 .. 32.
+        "rounds": 12,
+        "callsPerRound": 8,
+        // The SearXNG that web_search asks, and how many results it hands over. 1 .. 20.
+        "searchUrl": "http://127.0.0.1:8888",
+        "searchResults": 8
+    },
+
+    // The list of conversations when the chat opens: "session" (shut at the shell's start, then as you left it) | "closed" | "open".
+    "history": "session",
+    // A new conversation's title: "model" (the model is asked, once) | "words" (the first words of what you wrote).
+    "titles": "model",
+    // The most conversations kept; past it the oldest that is not pinned goes. Read as the shell starts. A smaller number deletes the rest.
+    "maxConversations": 200,
+    // The folder the attach button's file chooser starts in.
+    "attachFrom": "~",
+
+    // THE SPOKEN QUESTION (Alt+fn+F10).
+    "voice": {
+        // The model that answers it; "" = the chat's current one.
+        "model": "",
+        // A short answer is put on the clipboard.
+        "copy": true,
+        // The few commands that only read run without asking. false: every one asks.
+        "autoRun": true,
+        // A command nobody answered about is dropped after this many minutes. 1 .. 240.
+        "dropMin": 10
+    },
+
+    // While the model answers the CPU's power profile is held at least at "balanced" | "none" (nothing is held).
+    "machine": { "cpuFloor": "balanced" }
+}

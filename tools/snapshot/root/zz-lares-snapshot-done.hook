@@ -1,0 +1,13 @@
+# Lares snapshots: after the transaction, the record learns what changed, and the cleanup and prime start in the background.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Recording what the update changed...
+When = PostTransaction
+Exec = /usr/local/lib/lares/snapshot/hook done
+NeedsTargets

@@ -1,0 +1,11 @@
+// audio.jsonc -- the sound popup and the volume pill (modules/audio, modules/bar/audio). The template of
+// ~/.config/quickshell/config/audio.jsonc. Every key is optional and every value below IS the default. Read hot. Comments are allowed.
+// (The volume keys are osd.jsonc's, AirPlay speakers airplay.jsonc's, a right or middle click on the pill shell.jsonc's "clicks".)
+{
+    // The page of the popup each half of the pill opens: "playback" | "recording" | "sinks" (outputs) | "sources" (inputs) | "cards".
+    "pill": { "speakerOpens": "sinks", "micOpens": "sources" },
+
+    // Devices the popup does not list: names as `pactl list short sinks` says them, `*` matches any text ("alsa_output.pci-*.hdmi-*"). A device
+    // that is the default, or that something plays on, is listed whatever this says.
+    "hide": []
+}

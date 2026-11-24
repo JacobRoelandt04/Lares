@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+echo "ModuleNotFoundError: No module named 'upnpclient'" >&2; exit 1

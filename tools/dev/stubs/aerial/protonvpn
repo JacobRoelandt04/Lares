@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Stub `protonvpn` for tools/dev/aerial_helper_probe.sh: replays the CAPTURED outputs byte for byte (scrubbed fixtures).
+
+World (env AERIAL_STUB_DIR): `state.json` (connected, securecore, killswitch), `argv.log` (one JSON argv per call), `hang` (a file:
+when it exists, `status` sleeps 100 s after writing its pid to `hang.pid`). Exit codes as measured: `disconnect` prints
+"Disconnected." and exits 1 (S0). `status` of a Secure Core connection also prints the Rust panic the real CLI printed on stderr.
+"""
+import os, sys, json, time, subprocess
+D = os.environ["AERIAL_STUB_DIR"]
+FIX = os.environ["AERIAL_FIXTURES"]
+# AERIAL_STUB_NM_BUS (the test bed only): also leave PROTON'S FOOTPRINT in that NetworkManager, as the real CLI does (S0): a dummy
+# `pvpn-killswitch` that is briefly the primary connection, then `ProtonVPN NL#799` (wireguard, proton0), then the IPv6 leak guard
+# `pvpn-killswitch-ipv6` while up; disconnect deletes them. The rig's NetworkManager is private (its own bus, its own netns).
+NM_BUS = os.environ.get("AERIAL_STUB_NM_BUS", "")
+
+
+def nm(*args):
+    env = dict(os.environ, DBUS_SYSTEM_BUS_ADDRESS=NM_BUS, LC_ALL="C")
+    return subprocess.run(["nmcli", "-w", "20"] + list(args), env=env, capture_output=True, text=True)
+
+
+def nm_footprint_up():
+    nm("connection", "add", "type", "dummy", "ifname", "pvpnksintrf0", "con-name", "pvpn-killswitch", "autoconnect", "no",
+       "ipv4.method", "manual", "ipv4.addresses", "100.85.0.1/24", "ipv4.gateway", "100.85.0.1", "ipv4.route-metric", "95",
+       "ipv6.method", "disabled")
+    nm("connection", "up", "pvpn-killswitch")
+    key = subprocess.run(["wg", "genkey"], capture_output=True, text=True).stdout.strip()
+    nm("connection", "add", "type", "wireguard", "ifname", "proton0", "con-name", "ProtonVPN NL#799", "autoconnect", "no",
+       "wireguard.private-key", key, "ipv4.method", "manual", "ipv4.addresses", "10.2.0.2/32", "ipv6.method", "disabled")
+    nm("connection", "up", "ProtonVPN NL#799")
+    nm("connection", "add", "type", "dummy", "ifname", "ipv6leakintrf0", "con-name", "pvpn-killswitch-ipv6", "autoconnect", "no",
+       "ipv4.method", "disabled", "ipv6.method", "manual", "ipv6.addresses", "fdeb:446c:912d:08da::/64")
+    nm("connection", "up", "pvpn-killswitch-ipv6")
+    nm("connection", "delete", "pvpn-killswitch")
+
+
+def nm_footprint_down():
+    for n in ("ProtonVPN NL#799", "pvpn-killswitch-ipv6", "pvpn-killswitch"):
+        nm("connection", "delete", n)
+
+
+def fx(n):
+    with open(os.path.join(FIX, n), "rb") as f:
+        return f.read()
+
+
+def state():
+    try:
+        return json.load(open(os.path.join(D, "state.json")))
+    except Exception:
+        return {"connected": False, "securecore": False, "killswitch": "off"}
+
+
+def save(s):
+    json.dump(s, open(os.path.join(D, "state.json"), "w"))
+
+
+with open(os.path.join(D, "argv.log"), "a") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\n")
+a = sys.argv[1:]
+out = sys.stdout.buffer
+s = state()
+time.sleep(0.05)
+if a[:1] == ["status"]:
+    if os.path.exists(os.path.join(D, "hang")):
+        open(os.path.join(D, "hang.pid"), "w").write(str(os.getpid()))
+        time.sleep(100)
+    if not s["connected"]:
+        out.write(fx("proton_status_off.txt"))
+    elif s["securecore"]:
+        out.write(fx("proton_status_securecore.txt"))
+        sys.stderr.write("\nthread 'tokio-rt-worker' (491836) panicked at /build/.cargo/registry/src/pyo3-0.29.2/src/interpreter_lifecycle.rs:134:13:\n"
+                         "assertion `left != right` failed: The Python interpreter is not initialized\n")
+    else:
+        out.write(fx("proton_status_connected.txt"))
+elif a[:1] == ["connect"]:
+    sc = "--securecore" in a
+    s.update(connected=True, securecore=sc)
+    save(s)
+    if NM_BUS:
+        nm_footprint_up()
+    out.write(fx("proton_connect_securecore.txt" if sc else "proton_connect.txt"))
+elif a[:1] == ["disconnect"]:
+    s.update(connected=False, securecore=False)
+    save(s)
+    if NM_BUS:
+        nm_footprint_down()
+    out.write(fx("proton_disconnect.txt"))
+    out.flush()
+    sys.exit(1)
+elif a[:2] == ["config", "list"]:
+    t = fx("proton_config.txt").decode()
+    t = t.replace("kill-switch              off", "kill-switch              %s" % ("standard" if s.get("killswitch") == "standard" else "off"))
+    out.write(t.encode())
+elif a[:3] == ["config", "set", "kill-switch"] and len(a) == 4:
+    s["killswitch"] = a[3]
+    save(s)
+    out.write(("Kill switch has been set to %s\n" % a[3]).encode())
+else:
+    sys.stderr.write("stub protonvpn: unexpected argv %r\n" % a)
+    sys.exit(2)
+out.flush()

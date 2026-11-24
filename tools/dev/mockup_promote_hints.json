@@ -1,0 +1,165 @@
+{
+  "_comment": [
+    "Hints for tools/dev/mockup_promote.py (a mockup's Save writes the real implementation). A row finds its module property",
+    "by itself where it can: the target chain of its list, or the binding that feeds the module from a mockup-local",
+    "object. What it cannot find is said here, once, and a module author can move an entry into the row itself as",
+    "`promote: { to, map, skip }` -- the row's own hint wins over this file.",
+    "",
+    "  protected   directories the promotion never writes (the user's standing rules)",
+    "  dynamic     per mockup: an expression the mockup gets at RUN TIME, named by the module type it holds",
+    "              (silicon's `win._popup` is the live SiliconPopup; `win._director` etc. follow from it)",
+    "  dressing    per mockup, \"Type.prop\": \"Face\": a font dressing the mockup does from a handler (phase fonts forces it)",
+    "  owned       files that are one module's whatever their users say; shared: the other way round",
+    "              (the shell frame mounts every module's owner: modules/shell/ShellFrame.qml instantiates them, which made each owner \"shared with",
+    "              another module\" to the planner and Save SKIPPED their rows -- StocksBarOwner.popupWidth, the power reel's cellPitch -- from the F2 merge",
+    "              on; the owners are one module's each, listed below, and a row of theirs is written again)",
+    "  rows        per mockup, per `list.prop` (or `list.*`):",
+    "                skip  not a shipped setting (the reason is shown in the panel)",
+    "                to    \"Type.prop\" (or a list of them): the module property this row sets",
+    "                map   the row's value -> the property's value: a list (indexed by the row) or an object",
+    "                allowSentinel  write a -1 default anyway"
+  ],
+  "protected": [
+    "modules/osd/BatteryBody.qml",
+    "modules/osd/BatteryNub.qml",
+    "modules/osd/BatteryFillWavefield.qml",
+    "modules/osd/BatteryWaveStyle.qml",
+    "modules/common/system/BatteryData.qml"
+  ],
+  "owned": [
+    "modules/notes/NotesBarOwner.qml",
+    "modules/bar/llm/LlmBarOwner.qml",
+    "modules/windowtray/WindowTrayOwner.qml",
+    "modules/weather/WeatherBarOwner.qml",
+    "modules/clock/ClockBarOwner.qml",
+    "modules/stocks/StocksBarOwner.qml",
+    "modules/bar/player/PlayerBarOwner.qml",
+    "modules/aerial/AerialBarOwner.qml",
+    "modules/silicon/SiliconBarOwner.qml",
+    "modules/bridge/BridgeBarOwner.qml",
+    "modules/panorama/PanoramaBarOwner.qml",
+    "modules/bar/system_update/SystemUpdateBarOwner.qml",
+    "modules/notifications/NotificationsBarOwner.qml",
+    "modules/launcher/LauncherBarOwner.qml",
+    "modules/clipboard/ClipboardBarOwner.qml",
+    "modules/osd/OsdOwner.qml",
+    "modules/auth/AuthOwner.qml",
+    "modules/bar/reel/ReelBarModule.qml",
+    "modules/bar/workspaces/Workspaces.qml"
+  ],
+  "shared": [],
+  "dynamic": {
+    "mockups/silicon.qml": {
+      "win._popup": "SiliconPopup"
+    },
+    "mockups/notifications.qml": {
+      "svc.toasts": "ToastScheduler"
+    },
+    "mockups/clock.qml": {
+      "popup.timersCard": "TimersCard"
+    },
+    "mockups/weather_popup.qml": {
+      "popup.hourlyStrip": "WeatherHourlyStrip",
+      "popup.dailyList": "WeatherDailyList",
+      "popup.tileGrid": "WeatherTiles"
+    }
+  },
+  "rows": {
+    "mockups/stocks.qml": {
+      "layoutParams.detailAnchor": {
+        "to": "StocksBarOwner.detailAnchor",
+        "map": [
+          "row",
+          "start",
+          "centre",
+          "end"
+        ]
+      },
+      "barParams.iconAlong": {
+        "skip": "stage placement: where the mockup stands the button on its bar"
+      }
+    },
+    "mockups/notes.qml": {
+      "gridParams.iconAlong": {
+        "skip": "stage placement: where the mockup stands the button on its bar"
+      },
+      "gridParams.dressAudiowide": {
+        "skip": "the mockup's font dressing: the shell dresses every owner from shell.json's font (Audiowide), so the module's own face stays Inter -- the fonts phase is the user's call (STATUS.md, 2026-10-15)"
+      }
+    },
+    "mockups/silicon.qml": {
+      "barParams.iconAlong": {
+        "skip": "stage placement: where the mockup stands the button on its bar"
+      },
+      "lookParams.family": {
+        "skip": "an override the mockup's panel hands the module (familyOverride): silicon.json and the machine decide which family ships"
+      },
+      "lookParams.secondarySide": {
+        "skip": "an override the mockup's panel hands the owner (secondarySideOverride): the owner's own rule decides unless the host says"
+      },
+      "machineParams.*": {
+        "skip": "mock data: the machine the mock service pretends to be"
+      },
+      "memoryParams.*": {
+        "skip": "mock data: the memory the mock service pretends to have"
+      }
+    },
+    "mockups/osd.qml": {
+      "kindParams.*": {
+        "skip": "osd.json owns the per-kind routes and times (the OSD's config file)"
+      },
+      "hostParams.spotBar": {
+        "skip": "the OSD's spot comes from osd.json"
+      },
+      "hostParams.spotAlong": {
+        "skip": "the OSD's spot comes from osd.json"
+      },
+      "hostParams.fsMode": {
+        "skip": "osd.json owns the fullscreen mode"
+      },
+      "hostParams.popupW": {
+        "skip": "the mockup's stand-in popup size"
+      },
+      "hostParams.popupH": {
+        "skip": "the mockup's stand-in popup size"
+      },
+      "hostParams.laneBar": {
+        "skip": "the mockup's stand-in toast lane"
+      },
+      "hostParams.laneAlong": {
+        "skip": "the mockup's stand-in toast lane"
+      },
+      "hostParams.laneW": {
+        "skip": "the mockup's stand-in toast lane"
+      },
+      "hostParams.laneH": {
+        "skip": "the mockup's stand-in toast lane"
+      },
+      "hostParams.rightOn": {
+        "skip": "the mockup's stand-in bars"
+      },
+      "hostParams.rightThickness": {
+        "skip": "the mockup's stand-in bars"
+      },
+      "hostParams.bottomOn": {
+        "skip": "the mockup's stand-in bars"
+      },
+      "hostParams.bottomThickness": {
+        "skip": "the mockup's stand-in bars"
+      }
+    },
+    "mockups/auth.qml": {
+      "cardParams.*": {
+        "skip": "the card reads its look through `look ? look.x : <literal>` fallbacks: there is no property default to rewrite"
+      },
+      "pillParams.*": {
+        "skip": "the pill reads its look through `look ? look.x : <literal>` fallbacks: there is no property default to rewrite"
+      }
+    }
+  },
+  "dressing": {
+    "mockups/windowtray.qml": {
+      "WindowTrayStyle.titleFamily": "Audiowide"
+    }
+  }
+}

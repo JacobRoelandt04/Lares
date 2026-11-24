@@ -1,0 +1,58 @@
+1795123497620 NetworkManager is running
+1795123499340 pvpnksintrf0: device created
+1795123499341 pvpnksintrf0: unavailable
+1795123499343 pvpn-killswitch: connection profile created
+1795123499344 pvpnksintrf0: disconnected
+1795123499345 pvpnksintrf0: using connection 'pvpn-killswitch'
+1795123499347 pvpnksintrf0: connecting (prepare)
+1795123499348 pvpnksintrf0: connecting (configuring)
+1795123499350 pvpnksintrf0: connecting (getting IP configuration)
+1795123499351 'pvpn-killswitch' is now the primary connection
+1795123499352 Networkmanager is now in the 'connecting' state
+1795123499354 pvpnksintrf0: connecting (checking IP connectivity)
+1795123499369 pvpnksintrf0: connecting (starting secondary connections)
+1795123499370 pvpnksintrf0: connected
+1795123499372 Networkmanager is now in the 'connected' state
+1795123499379 HomeNet-AP 1: connection profile changed
+1795123499547 proton0: device created
+1795123499549 proton0: unavailable
+1795123499551 ProtonVPN NL#799: connection profile created
+1795123499552 proton0: disconnected
+1795123499553 proton0: using connection 'ProtonVPN NL#799'
+1795123499555 proton0: connecting (prepare)
+1795123499556 proton0: connecting (configuring)
+1795123499557 proton0: connecting (need authentication)
+1795123499558 proton0: connecting (prepare)
+1795123499560 proton0: connecting (configuring)
+1795123499561 ProtonVPN NL#799: connection profile changed
+1795123499562 proton0: connecting (getting IP configuration)
+1795123499645 proton0: deactivating
+1795123499676 proton0: disconnected
+1795123499677 proton0: using connection 'ProtonVPN NL#799'
+1795123499679 proton0: connecting (prepare)
+1795123499680 proton0: connecting (configuring)
+1795123499681 proton0: connecting (need authentication)
+1795123499683 proton0: connecting (prepare)
+1795123499684 proton0: connecting (configuring)
+1795123499685 ProtonVPN NL#799: connection profile changed
+1795123499686 proton0: connecting (getting IP configuration)
+1795123499699 proton0: connecting (checking IP connectivity)
+1795123499701 proton0: connecting (starting secondary connections)
+1795123499702 proton0: connected
+1795123500101 ipv6leakintrf0: device created
+1795123500103 ipv6leakintrf0: unavailable
+1795123500104 pvpn-killswitch-ipv6: connection profile created
+1795123500106 ipv6leakintrf0: disconnected
+1795123500107 ipv6leakintrf0: using connection 'pvpn-killswitch-ipv6'
+1795123500108 ipv6leakintrf0: connecting (prepare)
+1795123500110 ipv6leakintrf0: connecting (configuring)
+1795123500111 ipv6leakintrf0: connecting (getting IP configuration)
+1795123500113 ipv6leakintrf0: connecting (checking IP connectivity)
+1795123500114 ipv6leakintrf0: connecting (starting secondary connections)
+1795123500116 ipv6leakintrf0: connected
+1795123500123 pvpn-killswitch: connection profile removed
+1795123500124 pvpnksintrf0: deactivating
+1795123500142 pvpnksintrf0: disconnected
+1795123500143 'HomeNet-AP 1' is now the primary connection
+1795123500162 pvpnksintrf0: device removed
+1795123500172 HomeNet-AP 1: connection profile changed

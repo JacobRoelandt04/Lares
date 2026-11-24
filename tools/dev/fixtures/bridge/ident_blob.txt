@@ -1,0 +1,6 @@
+==ip
+1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
+16: rmnet_data1    inet 100.64.0.3/29 scope global rmnet_data1\       valid_lft forever preferred_lft forever
+31: wlan2    inet 10.0.140.20/24 brd 10.0.140.255 scope global wlan2\       valid_lft forever preferred_lft forever
+==name
+REDMAGIC 10 Pro

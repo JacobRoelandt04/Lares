@@ -1,0 +1,596 @@
+{
+ "defaults": {
+  "minPackages": 40,
+  "critical": [
+   "linux",
+   "linux-lts",
+   "linux-zen",
+   "linux-hardened",
+   "linux-firmware",
+   "nvidia*",
+   "mesa",
+   "glibc",
+   "gcc-libs",
+   "systemd",
+   "systemd-libs",
+   "grub",
+   "mkinitcpio",
+   "pacman",
+   "pam",
+   "sudo",
+   "polkit",
+   "sddm",
+   "hyprland",
+   "aquamarine",
+   "quickshell*",
+   "qt6-base",
+   "qt6-declarative",
+   "openssl",
+   "util-linux",
+   "e2fsprogs",
+   "dbus",
+   "wayland",
+   "bash",
+   "coreutils",
+   "python"
+  ]
+ },
+ "cases": [
+  {
+   "why": "39 plain packages are not enough",
+   "names": [
+    "pkg0",
+    "pkg1",
+    "pkg2",
+    "pkg3",
+    "pkg4",
+    "pkg5",
+    "pkg6",
+    "pkg7",
+    "pkg8",
+    "pkg9",
+    "pkg10",
+    "pkg11",
+    "pkg12",
+    "pkg13",
+    "pkg14",
+    "pkg15",
+    "pkg16",
+    "pkg17",
+    "pkg18",
+    "pkg19",
+    "pkg20",
+    "pkg21",
+    "pkg22",
+    "pkg23",
+    "pkg24",
+    "pkg25",
+    "pkg26",
+    "pkg27",
+    "pkg28",
+    "pkg29",
+    "pkg30",
+    "pkg31",
+    "pkg32",
+    "pkg33",
+    "pkg34",
+    "pkg35",
+    "pkg36",
+    "pkg37",
+    "pkg38"
+   ],
+   "want": false,
+   "count": 39,
+   "critical": [],
+   "notable": [],
+   "title": "Before 39 packages"
+  },
+  {
+   "why": "40 plain packages are",
+   "names": [
+    "pkg0",
+    "pkg1",
+    "pkg2",
+    "pkg3",
+    "pkg4",
+    "pkg5",
+    "pkg6",
+    "pkg7",
+    "pkg8",
+    "pkg9",
+    "pkg10",
+    "pkg11",
+    "pkg12",
+    "pkg13",
+    "pkg14",
+    "pkg15",
+    "pkg16",
+    "pkg17",
+    "pkg18",
+    "pkg19",
+    "pkg20",
+    "pkg21",
+    "pkg22",
+    "pkg23",
+    "pkg24",
+    "pkg25",
+    "pkg26",
+    "pkg27",
+    "pkg28",
+    "pkg29",
+    "pkg30",
+    "pkg31",
+    "pkg32",
+    "pkg33",
+    "pkg34",
+    "pkg35",
+    "pkg36",
+    "pkg37",
+    "pkg38",
+    "pkg39"
+   ],
+   "want": true,
+   "count": 40,
+   "critical": [],
+   "notable": [],
+   "title": "Before 40 packages"
+  },
+  {
+   "why": "duplicates count once",
+   "names": [
+    "pkg0",
+    "pkg1",
+    "pkg2",
+    "pkg3",
+    "pkg4",
+    "pkg5",
+    "pkg6",
+    "pkg7",
+    "pkg8",
+    "pkg9",
+    "pkg10",
+    "pkg11",
+    "pkg12",
+    "pkg13",
+    "pkg14",
+    "pkg15",
+    "pkg16",
+    "pkg17",
+    "pkg18",
+    "pkg19",
+    "pkg20",
+    "pkg21",
+    "pkg22",
+    "pkg23",
+    "pkg24",
+    "pkg25",
+    "pkg26",
+    "pkg27",
+    "pkg28",
+    "pkg29",
+    "pkg30",
+    "pkg31",
+    "pkg32",
+    "pkg33",
+    "pkg34",
+    "pkg35",
+    "pkg36",
+    "pkg37",
+    "pkg38",
+    "pkg1",
+    "pkg2"
+   ],
+   "want": false,
+   "count": 39,
+   "critical": [],
+   "notable": [],
+   "title": "Before 39 packages"
+  },
+  {
+   "why": "empty names are ignored",
+   "names": [
+    "",
+    "a"
+   ],
+   "want": false,
+   "count": 1,
+   "critical": [],
+   "notable": [],
+   "title": "Before 1 packages"
+  },
+  {
+   "why": "one critical package asks",
+   "names": [
+    "linux"
+   ],
+   "want": true,
+   "count": 1,
+   "critical": [
+    "linux"
+   ],
+   "notable": [
+    "linux"
+   ],
+   "title": "Before 1 packages: linux"
+  },
+  {
+   "why": "a glob asks and names the match",
+   "names": [
+    "nvidia-open",
+    "nvidia-utils",
+    "foo"
+   ],
+   "want": true,
+   "count": 3,
+   "critical": [
+    "nvidia-open",
+    "nvidia-utils"
+   ],
+   "notable": [
+    "nvidia-open",
+    "nvidia-utils"
+   ],
+   "title": "Before 3 packages: nvidia-open, nvidia-utils"
+  },
+  {
+   "why": "a glob is the whole name",
+   "names": [
+    "xnvidia",
+    "nvidi"
+   ],
+   "want": false,
+   "count": 2,
+   "critical": [],
+   "notable": [],
+   "title": "Before 2 packages"
+  },
+  {
+   "why": "case matters",
+   "names": [
+    "Linux",
+    "MESA"
+   ],
+   "want": false,
+   "count": 2,
+   "critical": [],
+   "notable": [],
+   "title": "Before 2 packages"
+  },
+  {
+   "why": "list order first, then name order within a glob",
+   "names": [
+    "quickshell-git",
+    "mesa",
+    "linux",
+    "quickshell"
+   ],
+   "want": true,
+   "count": 4,
+   "critical": [
+    "linux",
+    "mesa",
+    "quickshell",
+    "quickshell-git"
+   ],
+   "notable": [
+    "linux",
+    "mesa",
+    "quickshell",
+    "quickshell-git"
+   ],
+   "title": "Before 4 packages: linux, mesa, quickshell, quickshell-git"
+  },
+  {
+   "why": "only four are shown",
+   "names": [
+    "linux",
+    "mesa",
+    "glibc",
+    "gcc-libs",
+    "systemd",
+    "grub"
+   ],
+   "want": true,
+   "count": 6,
+   "critical": [
+    "linux",
+    "mesa",
+    "glibc",
+    "gcc-libs",
+    "systemd",
+    "grub"
+   ],
+   "notable": [
+    "linux",
+    "mesa",
+    "glibc",
+    "gcc-libs"
+   ],
+   "title": "Before 6 packages: linux, mesa, glibc, gcc-libs"
+  },
+  {
+   "why": "a long title drops names from the end",
+   "names": [
+    "linux-hardened",
+    "linux-firmware",
+    "qt6-declarative",
+    "e2fsprogs"
+   ],
+   "want": true,
+   "count": 4,
+   "critical": [
+    "linux-hardened",
+    "linux-firmware",
+    "qt6-declarative",
+    "e2fsprogs"
+   ],
+   "notable": [
+    "linux-hardened",
+    "linux-firmware",
+    "qt6-declarative",
+    "e2fsprogs"
+   ],
+   "title": "Before 4 packages: linux-hardened, linux-firmware"
+  },
+  {
+   "why": "minPackages is the user's",
+   "names": [
+    "pkg0",
+    "pkg1",
+    "pkg2",
+    "pkg3",
+    "pkg4"
+   ],
+   "settings": {
+    "rule": {
+     "minPackages": 5
+    }
+   },
+   "want": true,
+   "count": 5,
+   "critical": [],
+   "notable": [],
+   "title": "Before 5 packages"
+  },
+  {
+   "why": "minPackages above the count",
+   "names": [
+    "pkg0",
+    "pkg1",
+    "pkg2",
+    "pkg3",
+    "pkg4"
+   ],
+   "settings": {
+    "rule": {
+     "minPackages": 6
+    }
+   },
+   "want": false,
+   "count": 5,
+   "critical": [],
+   "notable": [],
+   "title": "Before 5 packages"
+  },
+  {
+   "why": "criticalAlso adds to the list",
+   "names": [
+    "htop"
+   ],
+   "settings": {
+    "rule": {
+     "criticalAlso": [
+      "htop"
+     ]
+    }
+   },
+   "want": true,
+   "count": 1,
+   "critical": [
+    "htop"
+   ],
+   "notable": [
+    "htop"
+   ],
+   "title": "Before 1 packages: htop"
+  },
+  {
+   "why": "critical replaces the list",
+   "names": [
+    "linux",
+    "htop"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "htop"
+     ]
+    }
+   },
+   "want": true,
+   "count": 2,
+   "critical": [
+    "htop"
+   ],
+   "notable": [
+    "htop"
+   ],
+   "title": "Before 2 packages: htop"
+  },
+  {
+   "why": "an empty critical list asks for nothing by name",
+   "names": [
+    "linux"
+   ],
+   "settings": {
+    "rule": {
+     "critical": []
+    }
+   },
+   "want": false,
+   "count": 1,
+   "critical": [],
+   "notable": [],
+   "title": "Before 1 packages"
+  },
+  {
+   "why": "a name on two globs is listed once",
+   "names": [
+    "nvidia"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "nvidia*",
+      "nv*",
+      "nvidia"
+     ]
+    }
+   },
+   "want": true,
+   "count": 1,
+   "critical": [
+    "nvidia"
+   ],
+   "notable": [
+    "nvidia"
+   ],
+   "title": "Before 1 packages: nvidia"
+  },
+  {
+   "why": "a wildcard in the middle",
+   "names": [
+    "lib-foo-dev",
+    "lib-dev"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "lib*-dev"
+     ]
+    }
+   },
+   "want": true,
+   "count": 2,
+   "critical": [
+    "lib-dev",
+    "lib-foo-dev"
+   ],
+   "notable": [
+    "lib-dev",
+    "lib-foo-dev"
+   ],
+   "title": "Before 2 packages: lib-dev, lib-foo-dev"
+  },
+  {
+   "why": "two wildcards need their middle in order",
+   "names": [
+    "a-c-b",
+    "a-b-c",
+    "ab"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "a*b*c"
+     ]
+    }
+   },
+   "want": true,
+   "count": 3,
+   "critical": [
+    "a-b-c"
+   ],
+   "notable": [
+    "a-b-c"
+   ],
+   "title": "Before 3 packages: a-b-c"
+  },
+  {
+   "why": "the middle may not overlap the end",
+   "names": [
+    "ab"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "a*b*b"
+     ]
+    }
+   },
+   "want": false,
+   "count": 1,
+   "critical": [],
+   "notable": [],
+   "title": "Before 1 packages"
+  },
+  {
+   "why": "a bare star matches everything",
+   "names": [
+    "x"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "*"
+     ]
+    }
+   },
+   "want": true,
+   "count": 1,
+   "critical": [
+    "x"
+   ],
+   "notable": [
+    "x"
+   ],
+   "title": "Before 1 packages: x"
+  },
+  {
+   "why": "regex characters are plain characters",
+   "names": [
+    "c++",
+    "cxx",
+    "a.b",
+    "axb"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "c++",
+      "a.b"
+     ]
+    }
+   },
+   "want": true,
+   "count": 4,
+   "critical": [
+    "c++",
+    "a.b"
+   ],
+   "notable": [
+    "c++",
+    "a.b"
+   ],
+   "title": "Before 4 packages: c++, a.b"
+  },
+  {
+   "why": "a glob's end must match too",
+   "names": [
+    "abc"
+   ],
+   "settings": {
+    "rule": {
+     "critical": [
+      "a*b"
+     ]
+    }
+   },
+   "want": false,
+   "count": 1,
+   "critical": [],
+   "notable": [],
+   "title": "Before 1 packages"
+  }
+ ]
+}

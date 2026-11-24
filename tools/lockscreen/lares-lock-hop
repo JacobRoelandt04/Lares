@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# tools/lockscreen/lares-lock-hop <info | move X Y | create NAME | remove NAME>: the hands of the lock's KEYBOARD HOP
+# (modules/lockscreen/lock/KeyboardWatch.qml says why). Hyprland sends a lock surface `wl_keyboard.enter` when the keyboard
+# focus CHANGES, and after a resume it does not: the focus is where it was. A pointer that goes to another output and comes back
+# changes it twice, and the surface hears `enter` again. All of it is Hyprland's own `hyprctl` and nothing here touches the lock.
+#   info          `cursor X Y` and one `mon NAME X Y W H` per output (the layout's own units: pixels / scale)
+#   move X Y      the pointer to X,Y of the layout (hl.dsp.cursor.move)
+#   create NAME   a headless output (one output has no other to hop to; the lock gives it a surface of its own)
+#   remove NAME   the headless output goes again
+# Prints `ok` or `FAIL <why>`; exit status 0 only for ok (info prints its lines).
+set -u
+c=${1:-}
+case "$c" in
+    info)
+        p=$(timeout 3 hyprctl cursorpos 2> /dev/null) || { echo "FAIL cursorpos"; exit 1; }
+        echo "cursor ${p/,/}"
+        timeout 3 hyprctl -j monitors 2> /dev/null | jq -r '.[] | select((.disabled // false) | not) | "mon \(.name) \(.x) \(.y) \((.width / .scale) | floor) \((.height / .scale) | floor)"' \
+            || { echo "FAIL monitors"; exit 1; }
+        ;;
+    move)
+        [[ ${2:-} =~ ^-?[0-9]+$ && ${3:-} =~ ^-?[0-9]+$ ]] || { echo "FAIL move wants two integers"; exit 2; }
+        r=$(timeout 3 hyprctl dispatch "hl.dsp.cursor.move({ x = $2, y = $3 })" 2>&1)
+        case "$r" in ok*) echo ok ;; *) echo "FAIL $r"; exit 1 ;; esac
+        ;;
+    create | remove)
+        [[ ${2:-} =~ ^[A-Za-z0-9_-]+$ ]] || { echo "FAIL a name of letters, digits, - and _"; exit 2; }
+        a=("$c" "$2"); [ "$c" = create ] && a=(create headless "$2")
+        r=$(timeout 3 hyprctl output "${a[@]}" 2>&1)
+        case "$r" in ok*) echo ok ;; *) echo "FAIL $r"; exit 1 ;; esac
+        ;;
+    *) echo "usage: lares-lock-hop info | move X Y | create NAME | remove NAME" >&2; exit 2 ;;
+esac

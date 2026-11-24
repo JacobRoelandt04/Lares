@@ -1,0 +1,4 @@
+# Captured/sample terminal transcripts carry meaningful carriage returns
+# (progress bars overwriting themselves). Git's text normalisation would strip
+# them and silently destroy exactly the behaviour these fixtures exist to test.
+tools/system_update/fixtures/*.log -text

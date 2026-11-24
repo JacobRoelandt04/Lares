@@ -1,0 +1,39 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "workspaces.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "shown": {
+   "type": "array",
+   "items": {
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 20,
+    "x-wants": "a whole number 1 .. 20"
+   },
+   "minItems": 1,
+   "maxItems": 10,
+   "default": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "x-wants": "a list of whole numbers",
+   "description": "The workspaces that always have a dot, whether they exist or not (a number 1 .. 20 each, 1 to 10 of them). A workspace that\nexists beside these gets a dot while it exists. The groove has room for two dots on each side of the clock; more stand closer.\n\nTakes a list of whole numbers. Default: [1,2,3,4]."
+  },
+  "scope": {
+   "enum": [
+    "all",
+    "screen"
+   ],
+   "default": "all",
+   "x-wants": "\"all\" or \"screen\"",
+   "description": "\"all\": every bar shows every workspace. \"screen\": a bar shows only the workspaces that are on its own display (and, of \"shown\", the\nones that are nowhere yet or that Panorama keeps on that display). \"all\" | \"screen\".\n\nTakes \"all\" or \"screen\". Default: \"all\"."
+  }
+ }
+}

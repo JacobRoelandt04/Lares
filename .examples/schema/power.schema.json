@@ -1,0 +1,114 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "power.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "items": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "sleep",
+     "poweroff",
+     "reboot",
+     "hibernate",
+     "logout",
+     "lock"
+    ],
+    "x-wants": "\"sleep\", \"poweroff\", \"reboot\", \"hibernate\", \"logout\" or \"lock\""
+   },
+   "default": [
+    "sleep",
+    "poweroff",
+    "reboot",
+    "hibernate",
+    "logout",
+    "lock"
+   ],
+   "x-wants": "a list of words (\"sleep\", \"poweroff\", \"reboot\", \"hibernate\", \"logout\" or \"lock\")",
+   "description": "The items of the reel, in the order they stand on its ring. One left out is not there; \"lock\" always is (left out, it comes last).\nRead as the shell starts.\n\nTakes a list of words (\"sleep\", \"poweroff\", \"reboot\", \"hibernate\", \"logout\" or \"lock\"). Default: [\"sleep\",\"poweroff\",\"reboot\",\"hibernate\",\"logout\",\"lock\"]. Read as the shell starts."
+  },
+  "rest": {
+   "enum": [
+    "sleep",
+    "poweroff",
+    "reboot",
+    "hibernate",
+    "logout",
+    "lock"
+   ],
+   "default": "lock",
+   "x-wants": "\"sleep\", \"poweroff\", \"reboot\", \"hibernate\", \"logout\" or \"lock\"",
+   "description": "The item the reel rests on when the shell starts: a right click fires the item it rests on. One of \"items\".\n\nTakes \"sleep\", \"poweroff\", \"reboot\", \"hibernate\", \"logout\" or \"lock\". Default: \"lock\". Read as the shell starts."
+  },
+  "commands": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "sleep": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "Takes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+    },
+    "poweroff": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "Takes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+    },
+    "reboot": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "Takes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+    },
+    "hibernate": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "Takes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+    },
+    "logout": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "Takes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]."
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "What an item runs instead of its own command, as a list: { \"sleep\": [\"systemctl\", \"suspend\"], \"poweroff\": [\"systemctl\", \"poweroff\"],\n\"reboot\": [\"systemctl\", \"reboot\"], \"logout\": [\"hyprctl\", \"dispatch\", \"hl.dsp.exit()\"] } is what they run now. \"hibernate\" runs nothing (it\nsays so in a notification) until it has a command here: [\"systemctl\", \"hibernate\"], [\"systemctl\", \"suspend-then-hibernate\"]. \"lock\" is\nthe lock's own and cannot be changed. With session restore on, the session is still saved first for poweroff, reboot and logout.\n\nDefault: {}."
+  },
+  "waitForFlourish": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Power off, reboot, hibernate and log out wait until their glyph's flourish has played. false: they run at once. true | false.\n\nTakes true or false. Default: true."
+  },
+  "leftClickFires": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "A right click fires the item (scrolling never does). true: a left click fires it too. true | false.\n\nTakes true or false. Default: false."
+  }
+ }
+}

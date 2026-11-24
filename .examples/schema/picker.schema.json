@@ -1,0 +1,65 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "picker.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "tabs": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "emoji",
+     "symbols",
+     "nerd"
+    ],
+    "x-wants": "\"emoji\", \"symbols\" or \"nerd\""
+   },
+   "minItems": 1,
+   "default": [
+    "emoji",
+    "symbols",
+    "nerd"
+   ],
+   "x-wants": "a list of words (\"emoji\", \"symbols\" or \"nerd\")",
+   "description": "The tabs, in order: \"emoji\" | \"symbols\" | \"nerd\" (Nerd Fonts icons; without it their list is never fetched).\n\nTakes a list of words (\"emoji\", \"symbols\" or \"nerd\"). Default: [\"emoji\",\"symbols\",\"nerd\"]."
+  },
+  "openTab": {
+   "enum": [
+    "emoji",
+    "symbols",
+    "nerd",
+    "last"
+   ],
+   "default": "emoji",
+   "x-wants": "\"emoji\", \"symbols\", \"nerd\" or \"last\"",
+   "description": "The tab it opens on: one of them, or \"last\".\n\nTakes \"emoji\", \"symbols\", \"nerd\" or \"last\". Default: \"emoji\"."
+  },
+  "nerdPick": {
+   "enum": [
+    "glyph",
+    "name"
+   ],
+   "default": "glyph",
+   "x-wants": "\"glyph\" or \"name\"",
+   "description": "What Enter takes of a Nerd Fonts icon: \"glyph\" | \"name\". The other is Ctrl+Enter.\n\nTakes \"glyph\" or \"name\". Default: \"glyph\"."
+  },
+  "recents": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "A row of what you picked lately stands above the list.\n\nTakes true or false. Default: true."
+  },
+  "pick": {
+   "enum": [
+    "paste",
+    "copy"
+   ],
+   "default": "paste",
+   "x-wants": "\"paste\" or \"copy\"",
+   "description": "A pick is \"paste\" (pasted into the window the picker was opened over, and copied) | \"copy\" (copied only).\n\nTakes \"paste\" or \"copy\". Default: \"paste\"."
+  }
+ }
+}

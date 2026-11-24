@@ -1,0 +1,4 @@
+Status: Connected
+Server: IS-BE#3 in Brussels, via Iceland
+Load: 63%
+Protocol: wireguard

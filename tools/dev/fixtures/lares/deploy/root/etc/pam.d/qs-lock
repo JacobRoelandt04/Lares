@@ -1,0 +1,5 @@
+#%PAM-1.0
+# Lares lockscreen: password only. No lockout; pam_unix's own ~2 s
+# delay after a failure is the cooldown.
+auth       required   pam_unix.so
+account    include    system-auth

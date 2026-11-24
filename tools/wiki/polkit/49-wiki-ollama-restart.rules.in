@@ -1,0 +1,20 @@
+// 49-wiki-ollama-restart.rules.in -- lets the shell restart ollama.service without a password prompt. A template: @USER@ is
+// the user it is for, filled in as it is installed (below).
+//
+// WHY. The wiki's batch writes intros with the local model on the dGPU. When the shell switches the laptop to Hybrid for it
+// (silicon's API) and ollama had been started while the card was blocked (its journal says "inference compute ...
+// library=cpu"), ollama has never seen the card and must be restarted once to use it. `systemctl restart ollama.service` is
+// a privileged action; this rule allows exactly that one, for your user, on your local active session, and nothing else.
+// Without it the shell does NOT prompt (the call is made with --no-ask-password): the batch is paused and the progress
+// notification says to install this file.
+//
+// INSTALL (once, as root; this file is not installed by anything in this repository):
+//     sed "s/@USER@/$USER/" tools/wiki/polkit/49-wiki-ollama-restart.rules.in \
+//         | sudo install -m 644 /dev/stdin /etc/polkit-1/rules.d/49-wiki-ollama-restart.rules
+// polkit reads rules.d on change; no restart.
+//
+// REMOVE:  sudo rm /etc/polkit-1/rules.d/49-wiki-ollama-restart.rules
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && action.lookup("unit") == "ollama.service" && action.lookup("verb") == "restart" && subject.user == "@USER@" && subject.local && subject.active)
+        return polkit.Result.YES;
+});

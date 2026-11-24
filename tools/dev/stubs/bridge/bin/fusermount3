@@ -1,0 +1,8 @@
+#!/bin/sh
+# Logs, and removes the mount point's line from $BRIDGE_MOUNTINFO (the probe's fake mount table); the line is the point's own.
+echo "fusermount3 $*" >> "${BRIDGE_STUB_LOG:-/dev/null}"
+for last; do :; done
+if [ -n "$BRIDGE_MOUNTINFO" ] && [ -f "$BRIDGE_MOUNTINFO" ]; then
+  grep -v " $last " "$BRIDGE_MOUNTINFO" > "$BRIDGE_MOUNTINFO.tmp"; mv "$BRIDGE_MOUNTINFO.tmp" "$BRIDGE_MOUNTINFO"
+fi
+exit 0

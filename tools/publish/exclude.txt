@@ -1,0 +1,6 @@
+# The paths that never leave the private repository (docs/publishing.md). `lares publish` builds the public tree
+# without them, and tools/publish/privacy_check.py judges everything else. One pattern a line: a path, a glob, or a
+# directory ending in `/`.
+CLAUDE.md
+feedback/
+docs/agent_added_files_and_folders/

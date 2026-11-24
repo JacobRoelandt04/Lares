@@ -1,0 +1,76 @@
+// wiki.jsonc -- the wiki card and its batches (modules/wiki, tools/wiki). The template of ~/.config/quickshell/config/wiki.jsonc.
+// Every key is optional: the value written here IS the default, and a missing key takes it. Keep only what you change;
+// comments are allowed. The file is re-read when it is saved: a file that does not parse keeps the last good version,
+// a bad value takes its default; both are named in the wiki service's lastError.
+//
+// THIS FILE CAN HOLD A SECRET (jevKey, below): keep it private, `chmod 600 ~/.config/quickshell/config/wiki.jsonc`. config/ is never
+// committed (.gitignore), and the key is read by tools/wiki/wiki.py alone: no QML forwards it, and it never reaches an argument list, a
+// child's environment, a log or `lares config`.
+{
+  // ---- the refill ask -------------------------------------------------------------------
+  // When a tab has this many unseen entries left (or fewer), ONE notification asks
+  // "Only 5 Discover entries left -- process 30 new ones now?". Answering runs a batch.
+  // Default 5; a whole number, 0 .. 1000.
+  "askAt": 5,
+  // How many new entries one batch processes. Default 30; a whole number, 1 .. 200.
+  "batchSize": 30,
+
+  // ---- the day --------------------------------------------------------------------------
+  // The wiki day rolls at this local hour. An article nobody saw carries over. Default 4; a whole number, 0 .. 12.
+  "rolloverHour": 4,
+
+  // ---- what counts as attention (milliseconds) ---------------------------------------
+  // Read this long in the wiki detail (the clock popup's, opened by you) = seen: it is replaced at the next
+  // rollover and never shown again. Each tab on its own; a glance elsewhere never counts. Default 5000; 0 .. 600000.
+  "seenMs": 5000,
+  // The pointer over the card this long = a weak "I like this" (once per card). Default 15000; 1000 .. 3600000.
+  "dwellMs": 15000,
+  // "Next" before this long on a card = a weak "not this" (quick next). Default 4000; 0 .. 600000.
+  "quickNextMs": 4000,
+
+  // ---- the tool (passed to tools/wiki/wiki.py in its environment) --------------------
+  // The local Ollama that judges and writes when Jev is off or unavailable; the shell's GPU helper watches it too while the LLM's
+  // server is not this machine's. Default "http://localhost:11434"; an http:// or https:// URL.
+  "ollamaUrl": "http://localhost:11434",
+  // Jev (Defapi) locates and scores intros. false = the local model does it all. Default true.
+  "jev": true,
+  // Jev's API key (Defapi, "dk-..."). Empty: no Jev, the local model does it all. Default "" (a secret: never printed).
+  "jevKey": "",
+
+  // ---- save to note -----------------------------------------------------------------------
+  // Save-to-note writes <notesRoot>/<notesFolder>/<title>.md. notesRoot: a path ("~/" is the home). Default "~/Documents/Notes".
+  "notesRoot": "~/Documents/Notes",
+  // One plain folder name (no "/", not "." or ".."). Default "Wiki".
+  "notesFolder": "Wiki",
+
+  // ---- where the card is ------------------------------------------------------------------
+  // On the calendar, in an empty notification manager, on the lock screen, under the launcher's search. Each is true or false; default true.
+  "show": { "calendar": true, "notifications": true, "lock": true, "launcher": true },
+
+  // ---- subjects ----------------------------------------------------------------------------
+  // A subject that is false is never picked and never fetched (what is in the pool stays there). Discover: history geography people visual-arts
+  // performing-arts literature philosophy society physical-sciences life-sciences earth technology everyday. Deepen: arch-installed
+  // arch-discovery wikipedia-cs arch-tips other-wikis. For example { "people": false }.
+  "families": {},
+
+  // ---- the batches -------------------------------------------------------------------------
+  // "Later" on the refill ask is asked again after this many hours. Default 24; 1 .. 720.
+  "askAgainHours": 24,
+  // What one batch may cost at Jev, US dollars. Default 0.04; 0 .. 10.
+  "jevCapUsd": 0.04,
+  // The local models that write and judge ("" = the ones tools/wiki/data/models.json names; a judge it has no thresholds for takes its
+  // "default" ones).
+  "models": { "write": "", "judge": "" },
+
+  // ---- sources ----------------------------------------------------------------------------
+  // Switch a source off and its families leave the batch plan (entries already in the
+  // pool stay). Discover is Wikipedia; Deepen is the rest. Each is true or false; default true.
+  "sources": {
+    "wikipedia": true,     // Discover, and Deepen's Wikipedia computing
+    "arch": true,          // the Arch wiki: pages of what you have installed and what you have not
+    "archTips": true,      // the "Tips and tricks" sections of installed software's Arch pages (only with "arch")
+    "gentoo": true,        // wiki.gentoo.org
+    "kernel": true,        // docs.kernel.org
+    "freedesktop": true    // the freedesktop.org specifications
+  }
+}

@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Warms the GPU driver's shader cache with every lockscreen veil's shaders.
+#
+#   tools/lockscreen/lares-lock-warm [--if-stale] [--force]
+#
+#   --if-stale   do nothing unless the stamp says the cache may be cold: a few
+#                milliseconds and no quickshell started when it matches. This is
+#                what the supervisor runs after an unlock and what a session
+#                start (hyprland exec-once) should run.
+#   --force      warm whatever the stamp says.
+#   (no flag)    same as --force.
+#
+# WHY. A veil's first visible frame compiles its shaders. With an empty Mesa
+# cache that frame stalls the lock for 0.5-1.3 s on some of the veils; with a
+# warm one it costs 0.06-0.12 s. A Mesa update or a changed .qsb empties the
+# cache for the veils concerned, so the cache is re-filled when what it depends on
+# changed -- never while locked, never on a timer.
+#
+# WHAT IT DOES. Runs lock/warm.qml: a quickshell (not a lock: no WlSessionLock, no PAM)
+# that draws each veil for a few frames in a window of a private headless compositor
+# (see below for why). Its cache home is
+# the caller's, so the Mesa cache it fills is the one the lock reads; its config,
+# state and runtime dirs are private and removed afterwards (a quickshell without
+# a private config dir flips the user's theme; instance dirs pile up in the
+# runtime dir). Runs at the lowest CPU and IO priority, one at a time (flock),
+# and writes the stamp only after every veil drew.
+#
+# THE STAMP, $XDG_CACHE_HOME/lares-lock/warm.stamp: a hash of the veils'
+# .qsb files, of the Mesa driver, Qt Quick and quickshell binaries (size + mtime),
+# and of the warmer's own QML. Cheap on purpose: no pacman, no quickshell.
+#
+# NVIDIA. Where the boot GPU is NVIDIA's the lock draws through NVIDIA's EGL (lares-lock pins Mesa's only on an Intel boot
+# GPU) and the driver's own cache ($XDG_CACHE_HOME/nvidia/GLCache) is the one to fill: the compositor and the warmer then
+# take NVIDIA's EGL, and the stamp is another file (warm-nvidia.stamp, with NVIDIA's libraries in the hash), so a laptop
+# that changes its MUX keeps both.
+set -u
+ulimit -c 0
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+DIR="$CACHE/lares-lock"
+STAMP="$DIR/warm.stamp"
+IF_STALE=0
+for a in "$@"; do
+    case "$a" in
+        --if-stale) IF_STALE=1 ;;
+        --force) IF_STALE=0 ;;
+        *) echo "usage: lares-lock-warm [--if-stale] [--force]" >&2; exit 2 ;;
+    esac
+done
+
+# The boot GPU, the one the session's compositor renders on, and its driver.
+gpu="" drv=""
+for r in /sys/class/drm/renderD*; do
+    [ "$(cat "$r/device/boot_vga" 2> /dev/null)" = 1 ] || continue
+    gpu="/dev/dri/$(basename "$r")"
+    drv="$(basename "$(readlink -f "$r/device/driver" 2> /dev/null)")"
+    break
+done
+EGL=(__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa)
+SWAY_ARGS=()
+DRIVER_LIBS=()
+if [ "$drv" = nvidia ] && [ -f /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+    EGL=(__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json __GLX_VENDOR_LIBRARY_NAME=nvidia)
+    # the session's own choice of NVIDIA's EGL platform file goes along (environment.lua)
+    [ -n "${__EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES:-}" ] \
+        && EGL+=(__EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES="$__EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES")
+    SWAY_ARGS=(--unsupported-gpu)
+    DRIVER_LIBS=(/usr/lib/libEGL_nvidia.so.* /usr/lib/libnvidia-eglcore.so.*)
+    STAMP="$DIR/warm-nvidia.stamp"
+fi
+
+# What the compiled programs depend on.
+fingerprint() {
+    {
+        cat "$ROOT"/modules/lockscreen/shaders/veil_*.qsb "$ROOT/lock/warm.qml" "$ROOT/modules/lockscreen/veil/LockVeil.qml" 2> /dev/null
+        # the driver (Mesa names its gallium library by version), and the two
+        # libraries that turn a .qsb into the GLSL the driver sees
+        stat -L -c '%n %s %Y' /usr/lib/dri/iris_dri.so /usr/lib/libgallium-*.so \
+            /usr/lib/libQt6Quick.so /usr/lib/libQt6Gui.so /usr/bin/quickshell "${DRIVER_LIBS[@]}" 2> /dev/null
+    } | sha256sum | cut -d' ' -f1
+}
+
+want="$(fingerprint)"
+if [ "$IF_STALE" = 1 ] && [ "$(cat "$STAMP" 2> /dev/null)" = "$want" ]; then
+    exit 0
+fi
+
+mkdir -p "$DIR" || exit 1
+# One warm at a time; a second caller has nothing to add.
+exec 9> "$DIR/warm.lock"
+flock -n 9 || exit 0
+
+# Everything private except the cache home. The runtime dir is short: a socket path ends at
+# 108 bytes.
+W="$(mktemp -d /tmp/lrlw.XXXXXX)" || exit 1
+SWAY_PID=""
+trap '[ -n "$SWAY_PID" ] && kill "$SWAY_PID" 2> /dev/null; rm -rf "$W"' EXIT
+mkdir -p "$W/cfg/theme" "$W/state" "$W/rt" "$W/data"
+chmod 700 "$W/rt"
+printf '{"theme":"eva","mode":"light"}\n' > "$W/cfg/theme/state.json"
+
+# WHY A COMPOSITOR AND NOT QT'S OFFSCREEN PLATFORM. The driver caches a compiled program under
+# a key made of the GLSL it was given, and Qt picks the GLSL variant from the GL context's
+# version: offscreen asks for a 2.0 context (GLSL 120), a Wayland window (what the lock is)
+# gets the real 4.6 compatibility one. A cache filled offscreen is never read by the lock
+# (measured: keycaps' first lock frame 1441 ms after an offscreen warm, 114 ms after a Wayland
+# one), so the veils are drawn as a plain Wayland client of a private HEADLESS compositor:
+# sway on wlroots' headless backend, which has no output anywhere, shows nothing and is gone
+# when the warm ends. Never the user's compositor (a window there would be tiled in among their
+# own windows), and not mutter (it opens every GPU's render node, the discrete one included).
+# The compositor is pinned to the boot GPU, so the cache is keyed for the right device.
+command -v sway > /dev/null || { echo "lares-lock-warm: no sway to host the warm (it needs a headless Wayland compositor)" >&2; exit 1; }
+base=(HOME="$HOME" PATH="$PATH" USER="${USER:-}" LANG="${LANG:-C.UTF-8}"
+      XDG_RUNTIME_DIR="$W/rt" XDG_CONFIG_HOME="$W/cfg" XDG_STATE_HOME="$W/state" XDG_DATA_HOME="$W/data"
+      XDG_CACHE_HOME="$CACHE" "${EGL[@]}")
+# a caller that moved Mesa's cache (a probe) keeps it moved
+[ -n "${MESA_SHADER_CACHE_DIR:-}" ] && base+=(MESA_SHADER_CACHE_DIR="$MESA_SHADER_CACHE_DIR")
+slow=(nice -n 19)
+command -v ionice > /dev/null && slow+=(ionice -c 3)
+printf 'xwayland disable\n' > "$W/sway.conf"
+# 9>&- : nothing started here may hold the lock fd beyond this script
+"${slow[@]}" env -i "${base[@]}" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 ${gpu:+WLR_RENDER_DRM_DEVICE="$gpu"} \
+    sway "${SWAY_ARGS[@]}" -c "$W/sway.conf" > "$W/sway.log" 2>&1 < /dev/null 9>&- &
+SWAY_PID=$!
+sock=""
+for _ in $(seq 1 100); do
+    sock=$(find "$W/rt" -maxdepth 1 -name 'wayland-*' ! -name '*.lock' -printf '%f\n' 2> /dev/null | head -1)
+    [ -n "$sock" ] && break
+    sleep 0.1
+done
+[ -n "$sock" ] || { echo "lares-lock-warm: the headless compositor did not start (see $DIR/last-failed.log)" >&2; cp "$W/sway.log" "$DIR/last-failed.log" 2> /dev/null; exit 1; }
+
+run=(env -i "${base[@]}" WAYLAND_DISPLAY="$sock" QT_QPA_PLATFORM=wayland QT_QUICK_BACKEND=rhi QS_DISABLE_CRASH_HANDLER=1)
+[ -n "${WARM_VEILS:-}" ] && run+=(WARM_VEILS="$WARM_VEILS")
+run+=(quickshell -p "$ROOT/lock/warm.qml")
+
+LOG="$W/warm.log"
+"${slow[@]}" timeout 120 "${run[@]}" > "$LOG" 2>&1 9>&-
+sed -r 's/\x1b\[[0-9;]*m//g' "$LOG" | sed -n 's/^.*qml: \(WARM .*\)$/\1/p' > "$W/lines" 2> /dev/null
+if tail -1 "$W/lines" | grep -aq 'WARM RESULT PASS'; then
+    echo "$want" > "$STAMP"
+    rm -f "$DIR/last-failed.log"
+    [ "$IF_STALE" = 1 ] || cat "$W/lines"
+    exit 0
+fi
+cat "$W/lines" 2> /dev/null
+echo "lares-lock-warm: the warm did not complete (log: $LOG)" >&2
+# keep the log for a look: the trap removes $W, so copy it out
+cp "$LOG" "$DIR/last-failed.log" 2> /dev/null
+exit 1

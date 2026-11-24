@@ -1,0 +1,17 @@
+# the desktop, 2025-12-12: it slept and came back, spd5118 not bound
+Dec 12 17:28:42.902902 host kernel: PM: suspend entry (deep)
+Dec 12 17:31:15.351183 host kernel: Freezing user space processes
+Dec 12 17:31:15.351285 host kernel: Freezing user space processes completed (elapsed 0.001 seconds)
+Dec 12 17:31:15.351311 host kernel: OOM killer disabled.
+Dec 12 17:31:15.351322 host kernel: Freezing remaining freezable tasks
+Dec 12 17:31:15.351343 host kernel: Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+Dec 12 17:31:15.351356 host kernel: printk: Suspending console(s) (use no_console_suspend to debug)
+Dec 12 17:31:15.351578 host kernel: ACPI: PM: Preparing to enter system sleep state S3
+Dec 12 17:31:15.351589 host kernel: ACPI: PM: Saving platform NVS memory
+Dec 12 17:31:15.351610 host kernel: smpboot: CPU 15 is now offline
+Dec 12 17:31:15.351767 host kernel: ACPI: PM: Low-level resume complete
+Dec 12 17:31:15.351941 host kernel: ACPI: PM: Restoring platform NVS memory
+Dec 12 17:31:15.352385 host kernel: CPU15 is up
+Dec 12 17:31:15.352396 host kernel: ACPI: PM: Waking up from system sleep state S3
+Dec 12 17:31:15.353533 host kernel: OOM killer enabled.
+Dec 12 17:31:15.356859 host kernel: PM: suspend exit

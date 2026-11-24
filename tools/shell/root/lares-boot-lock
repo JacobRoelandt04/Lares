@@ -1,0 +1,17 @@
+#!/bin/sh
+# /usr/local/bin/lares-boot-lock -- the boot lock: Hyprland's --locked-cmd in the session file hyprland-lares.desktop (SDDM's
+# autologin starts that session). Installed by the user as a ROOT STEP (`lares setup` prints the commands and their undo);
+# never run by lares.
+#
+# Hyprland --locked-cmd holds the session locked from its first frame until a locker takes the lock, so this command must
+# ALWAYS start one: the Lares lock from its snapshot (`lares deploy` keeps $XDG_STATE_HOME/lares/lock/current), and
+# hyprlock when that snapshot is not there (a fresh machine, a state dir wiped) -- a missing command here would be a black,
+# locked screen with a TTY as the only way out. One word, no argument: SDDM's wayland-session ends in an unquoted `exec $@`, so
+# the session file cannot pass `--boot` to the lock's own launcher.
+# The lock's snapshot is under the Lares name; before `lares migrate-name` (and for a boot right after R1 was run first) it is still under the
+# old one, whose launcher is qs-lock-session. The command must never be missing: Lares name, old name, hyprlock.
+st="${XDG_STATE_HOME:-$HOME/.local/state}"
+for s in "$st/lares/lock/current/tools/lockscreen/lares-lock-session" "$st/quickshell/lock/current/tools/lockscreen/qs-lock-session"; do
+    [ -x "$s" ] && exec "$s" --boot
+done
+exec /usr/bin/hyprlock

@@ -1,0 +1,106 @@
+# The final text's rules (sttlib/fillers.py drop_repeats, sttlib/textrules.py) against fixed sentences: tools/stt/policy_check.py runs
+# each row through textrules.finish with the default `dictation.text` (no tidy pass) and checks what is written AND the rule names the
+# seg would carry. Rows marked (take N) are the user's own takes from the take log (2026-11-08).
+#
+# family  the check that counts the row (PCHECK cases <family>)
+# lang    en | nl
+# prev    "-": the take's first sentence; "+": a later sentence after a finished one ("Done."); else the take's previous WRITTEN sentence
+# raw     what the recogniser wrote, fillers and all; " || " marks a pause the policy held open (the words before it are its mark)
+# want    what is written; for family "hold": hold | close (does a pause after `raw` keep the sentence open?)
+# rules   the rule names the seg carries, in order, comma-separated; "-" none
+#
+# family	lang	prev	raw	want	rules
+repeat	en	-	I might repeat what I just said, uh, what I just said before.	I might repeat what I just said before.	fillerRepeat,filler
+repeat	en	-	We should, um, we should go now.	We should go now.	fillerRepeat,filler
+repeat	en	+	It is in the, uh, uh, in the drawer.	It is in the drawer.	fillerRepeat,filler
+repeat	en	+	Take the uh the uh the station exit.	Take the station exit.	fillerRepeat,filler
+repeat	en	+	Press the uh, F ten, uh F ten key.	Press the F10 key.	fillerRepeat,filler,fkey
+repeat	en	-	So it can || so it can think about the command.	So it can think about the command.	pauseRepeat
+repeat	en	-	And I said || and I said it again.	And I said it again.	pauseRepeat
+repeat	nl	-	Ik wil, euh, ik wil naar huis.	Ik wil naar huis.	fillerRepeat,filler
+repeat	en	-	It works. Uh, it works on the GPU too.	It works. It works on the GPU too.	filler
+repeat	en	+	type it here above underneath each each feedback item that is an issue so you know	type it here above underneath each each feedback item that is an issue so you know	-
+repeat	en	+	I think it works works rather well.	I think it works works rather well.	-
+repeat	en	+	any VS Code themes or any GTK GTK themes still missing?	any VS Code themes or any GTK GTK themes still missing?	-
+repeat	en	-	We should go to the || station before noon.	We should go to the station before noon.	-
+repeat	en	-	And if that happens the uh uh speech to text model writes that thing down twice.	And if that happens the speech to text model writes that thing down twice.	filler
+fkey	en	-	Press F ten to start.	Press F10 to start.	fkey
+fkey	en	+	And you see, it's writing the f ten key now.	And you see, it's writing the F10 key now.	fkey
+fkey	en	+	But when I say F one O	But when I say F10	fkey
+fkey	en	+	The F one zero key and F 10 and F 5.	The F10 key and F10 and F5.	fkey
+fkey	en	+	Shift F twenty four, then F twelve.	Shift F24, then F12.	fkey
+fkey	en	+	Bind it to f10 or F-11.	Bind it to F10 or F11.	fkey
+fkey	en	-	No, now that I think about it, maybe just having Fn control and F ten as the keybind to listen	No, now that I think about it, maybe just having Fn control and F10 as the keybind to listen	fkey
+fkey	nl	-	Druk op F tien.	Druk op F10.	fkey
+fkey	en	+	F is for fun.	F is for fun.	-
+fkey	en	+	It got an F and an A.	It got an F and an A.	-
+fkey	en	+	F zero is not a key.	F zero is not a key.	-
+fkey	en	+	Press F10 now.	Press F10 now.	-
+code	en	So if I were to, for example, say the code	X nine five Z B three oh nine underscore QR ST would that look correct in this transcription or would these be written full out?	X95ZB309_QRST would that look correct in this transcription or would these be written full out?	code
+code	en	+	x nine five Z B three oh nine underscore QR ST	X95ZB309_QRST	code
+code	en	+	x 9 5 z b 3 0 9 underscore q r s t	X95ZB309_QRST	code
+code	en	+	The code is B seven seven C nine.	The code is B77C9.	code
+code	en	+	The serial is Q W E four oh oh seven, got it?	The serial is QWE4007, got it?	code
+code	nl	+	De code is X negen vijf Z B drie nul negen.	De code is X95ZB309.	code
+code	en	+	Open version V two dot oh now.	Open version V2.0 now.	code
+code	en	+	Set it to A B dash one two.	Set it to AB-12.	code
+code	en	+	Call it A B underscore C D.	Call it AB_CD.	code
+code	en	+	Press F one zero, then X nine B.	Press F10, then X9B.	code,fkey
+code	en	+	Option A or B, take plan B.	Option A or B, take plan B.	-
+code	en	+	Choose a B and a C, a one and a two.	Choose a B and a C, a one and a two.	-
+code	en	+	I have two kids and the A team won.	I have two kids and the A team won.	-
+code	en	+	COVID nineteen was bad, ninety-two C is hot.	COVID nineteen was bad, ninety-two C is hot.	-
+code	en	+	One two three four five six.	One two three four five six.	-
+code	en	+	Oh no, I said B.	Oh no, I said B.	-
+code	en	+	The CPU one and the GPU two are busy.	The CPU one and the GPU two are busy.	-
+code	en	+	A dash B is not a code.	A dash B is not a code.	-
+code	en	+	Five dash six.	Five dash six.	-
+sign	en	-	I was trying to write a greater than sign at the headers.	I was trying to write a > at the headers.	sign
+sign	en	+	Use the at sign, then the domain.	Use the @, then the domain.	sign
+sign	en	+	The less than sign and the equals sign.	The < and the =.	sign
+sign	en	+	Type a hash sign, an ampersand sign and a tilde sign.	Type a #, an & and a ~.	sign
+sign	en	+	The underscore sign and the pipe sign.	The _ and the |.	sign
+sign	en	+	Greater than expected, so it was a sign of trouble.	Greater than expected, so it was a sign of trouble.	-
+sign	en	+	We met at the end and looked at sign language.	We met at the end and looked at sign language.	-
+sign	en	+	The sign said stop, so sign in at the top.	The sign said stop, so sign in at the top.	-
+sign	en	+	It is greater than ten, a plus, sign here.	It is greater than ten, a plus, sign here.	-
+sign	en	+	And I pronounced greater than and then after feedback like I usually type	And I pronounced greater than and then after feedback like I usually type	-
+leadgt	en	-	Greater Than After Review	> After review	leadingQuote
+leadgt	en	-	Greater Than Feature Request For GTK	> Feature request for GTK	leadingQuote
+leadgt	en	-	Greater than After Review of I	> After Review of I	leadingQuote
+leadgt	en	-	Greater than after review.	> After review.	leadingQuote
+leadgt	en	-	Greater Than Sign	>	leadingQuote
+leadgt	en	-	Greater than sign feature request.	> Feature request.	leadingQuote
+leadgt	en	-	Greater than, tested at commit f547e3876.	> Tested at commit f547e3876.	leadingQuote
+leadgt	en	-	Greater than expected results came in.	Greater than expected results came in.	-
+leadgt	en	-	Greater than or equal to ten.	Greater than or equal to ten.	-
+leadgt	en	-	Greater than ten percent.	Greater than ten percent.	-
+leadgt	en	+	Greater than after review	Greater than after review	-
+words	en	-	to listen to the currently active window by Hyperland could be a good solution and	to listen to the currently active window by Hyprland could be a good solution and	words
+words	en	+	Hyperland's config, not hyperland.	Hyprland's config, not Hyprland.	words
+words	en	+	So could you help me figure out if there's any GTK teams still missing?	So could you help me figure out if there's any GTK teams still missing?	-
+continue	en	How the tidying now works is pretty good but I do find myself thinking and saying the	Stop word.	stop word.	continue
+continue	en	No, now that I think about it, maybe just having Fn control and F10 as the keybind to listen to the currently active window by Hyprland could be a good solution and	Elegant without needing to design another GUI.	elegant without needing to design another GUI.	continue
+continue	en	So I could think that on other pop-ups though I haven't tested it	Uh this could be the same problem where in like inner corners the seam would arise.	this could be the same problem where in like inner corners the seam would arise.	filler,continue
+continue	en	So when I start my speech to text the aura appears but what also usually appears is the microphone unmute OSD	Interface.	interface.	continue
+continue	en	Let's see if you can tweak some parameters here or there.	Two	Two	-
+continue	en	maybe just having Fn control and	I think so.	I think so.	-
+continue	en	go the	GUI route.	GUI route.	-
+continue	en	push it to	GitHub now.	GitHub now.	-
+continue	en	go to the	Hyperland settings.	Hyprland settings.	words
+continue	en	Okay.	Next one.	Next one.	-
+continue	en	I want to.	Next one.	Next one.	-
+continue	nl	Ik ga morgen naar de	Winkel in Brussel.	winkel in Brussel.	continue
+continue	en	>	After review.	After review.	-
+hold	en	-	How the tidying now works is pretty good but I do find myself thinking and saying the	hold	-
+hold	en	-	could be a good solution and	hold	-
+hold	en	-	this module would then have transcript live feeding in from the	hold	-
+hold	en	-	So I cannot distinguish between having	hold	-
+hold	en	-	It would be cool if I could assign this st feature to a specific audio source. So for example I could use it to transcribe any	hold	-
+hold	en	-	We should go to the uh	hold	-
+hold	en	-	I want to.	hold	-
+hold	en	-	Let's see if you can tweak some parameters here or there.	close	-
+hold	en	-	It writes it as words as well.	close	-
+hold	en	-	How would this work?	close	-
+hold	nl	-	Ik ga morgen naar de	hold	-
+hold	nl	-	Ik weet het.	close	-

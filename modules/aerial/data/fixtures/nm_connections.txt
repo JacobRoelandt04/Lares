@@ -1,0 +1,28 @@
+HomeNet-AP 1:a0ba3e32-ac3f-5cc1-81f5-29baedd38200:802-11-wireless:wlp47s0:activated:yes:0:1795106046:/etc/NetworkManager/system-connections/HomeNet-AP 1.nmconnection
+lo:0a529d0b-0bd8-5ea7-91dc-b4e4657e7b6a:loopback:lo:activated:yes:0:1795106041:/run/NetworkManager/system-connections/lo.nmconnection
+br-12d09e81b6d0:a551d481-dfd8-5416-a90a-720583a94b2c:bridge:br-12d09e81b6d0:activated:yes:0:1795106048:/run/NetworkManager/system-connections/br-12d09e81b6d0.nmconnection
+br-44b0d84f209b:120b6f23-24fa-5e08-887c-6511b02557be:bridge:br-44b0d84f209b:activated:yes:0:1795106048:/run/NetworkManager/system-connections/br-44b0d84f209b.nmconnection
+br-4cd59f5988bb:16b81d83-5634-55e6-9422-f222dea1902e:bridge:br-4cd59f5988bb:activated:yes:0:1795106048:/run/NetworkManager/system-connections/br-4cd59f5988bb.nmconnection
+br-96a749755545:382a522f-9c84-513f-bae6-d11395e3de18:bridge:br-96a749755545:activated:yes:0:1795106048:/run/NetworkManager/system-connections/br-96a749755545.nmconnection
+docker0:215284c7-dff8-50a4-96f2-98037f0a37e3:bridge:docker0:activated:yes:0:1795106048:/run/NetworkManager/system-connections/docker0.nmconnection
+Hotspot:561e885b-37ad-53af-8fbe-fe3ea2455532:802-11-wireless:::no:0:1772355563:/etc/NetworkManager/system-connections/Hotspot.nmconnection
+Saved-D:17223bf5-6716-598d-83db-1760e45e5197:802-11-wireless:::yes:0:1795086247:/etc/NetworkManager/system-connections/Saved-D.nmconnection
+Saved-E:a530f980-ffd7-5387-8dad-a826c1ef2bd2:802-11-wireless:::yes:0:1782245459:/etc/NetworkManager/system-connections/Saved-E.nmconnection
+Saved-A:3212b944-3dc7-5ac0-b1a2-3cb1efddaa2b:802-11-wireless:::yes:0:1761899665:/etc/NetworkManager/system-connections/Saved-A.nmconnection
+Saved-A 1:ea6c845e-dbf9-5f30-99e4-a59cc54055ba:802-11-wireless:::yes:0:1774547873:/etc/NetworkManager/system-connections/Saved-A 1.nmconnection
+Saved-B:61f341fb-01fb-525a-86d2-0477a1673c87:802-11-wireless:::yes:0:1767883311:/etc/NetworkManager/system-connections/Saved-B.nmconnection
+Saved-B 1:931bbda4-f509-5665-89f5-9750462ad3d0:802-11-wireless:::yes:0:1794066081:/etc/NetworkManager/system-connections/Saved-B 1.nmconnection
+Saved-C:91bfca54-c1f1-5010-a92d-b2373e6774ef:802-11-wireless:::yes:0:1771781094:/etc/NetworkManager/system-connections/Saved-C.nmconnection
+Phone-Hotspot:3d961b09-affa-5d9a-b837-361965478613:802-11-wireless:::yes:0:1765619343:/etc/NetworkManager/system-connections/Phone-Hotspot.nmconnection
+Phone-Hotspot 1:29471930-5f09-5d4a-9a75-6327ec7ab314:802-11-wireless:::yes:0:1795017545:/etc/NetworkManager/system-connections/Phone-Hotspot 1.nmconnection
+Campus-Open:5abfa08f-4fb5-5143-821a-8370baa5b695:802-11-wireless:::yes:0:1762189046:/etc/NetworkManager/system-connections/Campus-Open.nmconnection
+Studio:8cd6dd5c-b609-5a04-ba89-d85d5231ba2e:802-11-wireless:::yes:0:1760721730:/etc/NetworkManager/system-connections/Studio.nmconnection
+Wired connection 1:08045f2e-a9bf-5842-8320-773f01ad297a:802-3-ethernet:::yes:-999:0:/run/NetworkManager/system-connections/Wired connection 1.nmconnection
+eduroam:454619d5-c1d4-5f24-afa4-3553c5877618:802-11-wireless:::yes:0:1795020071:/etc/NetworkManager/system-connections/eduroam.nmconnection
+laptop-hotspot:4e0fa779-5c47-54fd-a021-59eba0f4ed98:802-11-wireless:::yes:0:0:/etc/NetworkManager/system-connections/laptop-hotspot.nmconnection
+Spare-Router:0368cebf-7b14-57aa-bcdf-ed733a682d9a:802-11-wireless:::no:0:0:/etc/NetworkManager/system-connections/Spare-Router.nmconnection
+Cafe-WiFi:3a816260-fdae-5486-9730-6362824f3507:802-11-wireless:::yes:0:1762254565:/etc/NetworkManager/system-connections/Cafe-WiFi.nmconnection
+Office-Guest:aa07f616-4143-5e94-bab3-c44e68543da3:802-11-wireless:::yes:0:1758100841:/etc/NetworkManager/system-connections/Office-Guest.nmconnection
+HomeNet:6ba57855-9d2c-5ee1-b6cb-890a0f0581e0:802-11-wireless:::no:0:1787859430:/etc/NetworkManager/system-connections/HomeNet.nmconnection
+HomeNet-AP:d2fe3496-6aa1-5c27-a61c-e1da6fe0b267:802-11-wireless:::yes:0:1772362385:/etc/NetworkManager/system-connections/HomeNet-AP.nmconnection
+HomeNet_5Ghz:51579676-4e77-5538-8460-806e6b0ec31a:802-11-wireless:::no:0:1794771305:/etc/NetworkManager/system-connections/HomeNet_5Ghz.nmconnection

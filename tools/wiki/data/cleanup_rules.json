@@ -1,0 +1,84 @@
+{
+  "v": 1,
+  "doc": "Data for tools/wiki/lib/cleanup.py (the deterministic Wikipedia-lead cleanup) and intro.py (sentence splitter). A rule is removed only when it matches; anything else in a parenthesis stays. Codes are the closed set of CONTRACT.md: pronunciation, ipa, native_names, dates, coordinates, citations, hatnote, parentheticals, notes.",
+
+  "wikis": {
+    "wikipedia": ["hatnote_text", "markup", "citations", "notes", "coordinates", "parentheticals", "empty_parens"],
+    "default": ["hatnote_text", "markup", "citations", "notes"]
+  },
+
+  "text_rules": {
+    "markup": {
+      "code": null,
+      "pattern": "</?translate>|<!--T:\\d+-->|<languages\\s*/>"
+    },
+    "citations": {
+      "code": "citations",
+      "flags": "i",
+      "pattern": "(?:\\s+|(?<=[.,;:!?)\u201d\u2019\"]))(?:\\[(?:\\d{1,3}(?:\\s*,\\s*\\d{1,3})*|\\d{1,3}\\s*\u2013\\s*\\d{1,3})\\])+|\\s?\\[(?:(?:full |better |non-primary |attribution |verification |clarification |page |update |dead link )?(?:citation|source|verification|clarification|page|update)s? needed|when\\?|who\\?|whom\\?|according to whom\\?|by whom\\?|why\\?|which\\?|where\\?|how\\?|what\\?|original research\\?|failed verification|not in citation given|dubious(?: [\u2013-] discuss)?|unreliable source\\?|vague|specify|dead link|peacock term|weasel words|neutrality is disputed)\\]"
+    },
+    "notes": {
+      "code": "notes",
+      "pattern": "(?:\\s+|(?<=[.,;:!?)\u201d\u2019\"]))\\[(?:[a-z]|[nN]\\s?\\d{1,2}|[nN][bB]\\s?\\d{0,2}|[nN]ote\\s?[a-z0-9]{1,2})\\]"
+    },
+    "coordinates": {
+      "code": "coordinates",
+      "pattern": "\\s?\\d{1,3}\u00b0(?:\\s?\\d{1,2}[\u2032'](?:\\s?\\d{1,2}(?:\\.\\d+)?[\u2033\"])?)?\\s?[NS]\\s*[,/]?\\s*\\d{1,3}\u00b0(?:\\s?\\d{1,2}[\u2032'](?:\\s?\\d{1,2}(?:\\.\\d+)?[\u2033\"])?)?\\s?[EW](?:\\s*/\\s*[-\u2212]?\\d{1,3}(?:\\.\\d+)?\u00b0?\\s?[NS]?\\s*[-\u2212]?\\d{1,3}(?:\\.\\d+)?\u00b0?\\s?[EW]?)?"
+    }
+  },
+
+  "hatnote_text": {
+    "max_words": 45,
+    "patterns": [
+      "^[\"\u201c\u2018']?[^\"\u201d\u2019']{1,80}[\"\u201d\u2019']? redirects here\\b",
+      "^For other uses,? see\\b",
+      "^For (?:the|a|an|other) [^.]{1,120}, see\\b",
+      "^This (?:article|page) is about\\b",
+      "^Not to be confused with\\b",
+      "^(?:Main|Further|See also|Related) (?:article|articles|information)?:"
+    ]
+  },
+
+  "parentheticals": {
+    "lead_window": 220,
+    "copula": "\\b(?:is|was|are|were|has|had|became|remains|refers|denotes|describes)\\b",
+    "event_words": ["War", "Wars", "Battle", "Siege", "Revolution", "Revolt", "Treaty", "Crisis", "Conference", "Empire", "Dynasty", "Kingdom", "Republic", "Caliphate", "Sultanate", "Khanate", "Shogunate", "Reich", "Commonwealth", "Federation", "Union", "Festival", "Games", "Olympics", "Season", "Election", "Expedition", "Massacre", "Uprising", "Rebellion", "Campaign", "Depression", "Age", "Era", "Period", "Reformation", "Renaissance", "Plague", "Pandemic", "Epidemic", "Famine", "Strike", "Riot", "Trial", "Coup", "Congress", "Exhibition", "Tournament", "Cup", "Championship", "Series", "Mission", "Operation", "Crusade", "Invasion", "Occupation", "Hurricane", "Typhoon", "Cyclone", "Storm", "Earthquake", "Eruption", "Tsunami", "Flood", "Fire", "Outbreak", "Incident", "Affair", "Scandal", "Conflict", "Rising", "Mutiny", "Assassination", "Disaster", "Accident", "University", "College", "Institute", "Company", "Corporation", "Party", "Church", "Society", "Association", "League", "City", "County", "Province", "State", "Colony", "Territory", "Protectorate"],
+    "name_particles": ["van", "von", "de", "der", "den", "da", "di", "du", "del", "della", "la", "le", "bin", "ibn", "al", "el", "ap", "of", "y", "e", "dos", "das", "ter", "ten", "zu", "af", "av"],
+    "name_not_first": ["The", "A", "An"],
+    "native_markers": ["lit.", "literally"],
+    "pronounce_markers": "\\b(?:pronounced|pronunciation|respelled|respelling)\\b",
+    "listen_markers": "\\b(?:listen|audio)\\b",
+    "xref_patterns": [
+      "^see (?:below|above|later|earlier)$",
+      "^see (?:also )?[\u00a7#].*$",
+      "^see (?:the )?[A-Za-z ]{1,30} section$"
+    ],
+    "ipa_chars": "\u02c8\u02cc\u02d0\u0251\u0252\u00e6\u0250\u0259\u025a\u025b\u025c\u026a\u0254\u028a\u028c\u0283\u0292\u03b8\u00f0\u014b\u0261\u0279\u027e\u0294\u03c7\u0281\u0272\u028e\u026b\u026c\u026d\u0255\u0291\u0263\u0265\u026f\u028f\u00f8\u0153\u0268\u0275\u0264\u0258\u025e\u0276\u0303\u02b0\u02b2\u02b7\u02e0\u02c0\u203f\u1d7b\u0298\u01c0\u01c3\u01c2\u01c1\u0253\u0257\u0288\u0256\u0271\u0273\u0274\u0280\u027d\u0281\u0282\u0290\u029d\u0296\u0295\u0267\u0270\u029b\u029c\u02a1\u02a2\u029f\u028b\u0289\u0278\u028d\u0266",
+    "ipa_labels": ["IPA", "UK", "US", "Br\\.", "Am\\.", "British", "American", "Australian", "Canadian", "General American", "Received Pronunciation", "RP", "GA", "Standard", "Also", "Traditional", "Modern", "Anglicised", "Anglicized", "Old", "Middle"],
+    "languages": [
+      "Afrikaans", "Akkadian", "Albanian", "Amharic", "Arabic", "Aramaic", "Armenian", "Assamese", "Azerbaijani", "Basque", "Belarusian", "Bengali", "Bosnian", "Breton", "Bulgarian", "Burmese", "Cantonese", "Catalan", "Cebuano", "Chinese", "Coptic", "Cornish", "Corsican", "Croatian", "Czech", "Danish", "Dutch", "Egyptian", "English", "Esperanto", "Estonian", "Faroese", "Filipino", "Finnish", "Flemish", "Franconian", "Frankish", "French", "Frisian", "Galician", "Georgian", "German", "Gothic", "Greek", "Gujarati", "Hakka", "Hausa", "Hawaiian", "Hebrew", "Hindi", "Hittite", "Hokkien", "Hungarian", "Icelandic", "Igbo", "Indonesian", "Inuktitut", "Irish", "Italian", "Japanese", "Javanese", "Kannada", "Kazakh", "Khmer", "Korean", "Kurdish", "Kyrgyz", "Lao", "Latin", "Latvian", "Lithuanian", "Low German", "Luxembourgish", "Macedonian", "Malay", "Malayalam", "Maltese", "Manchu", "Mandarin", "Marathi", "M\u0101ori", "Maori", "Mongolian", "Nahuatl", "Nepali", "Norman", "Norse", "Norwegian", "Occitan", "Odia", "Pashto", "Persian", "Phoenician", "Polish", "Portuguese", "Punjabi", "Quechua", "Romanian", "Romansh", "Russian", "Sami", "Sanskrit", "Scots", "Scottish Gaelic", "Serbian", "Serbo-Croatian", "Sindhi", "Sinhala", "Slovak", "Slovene", "Slovenian", "Somali", "Spanish", "Sumerian", "Swahili", "Swedish", "Tagalog", "Tajik", "Tamil", "Tatar", "Telugu", "Thai", "Tibetan", "Turkish", "Turkmen", "Ugaritic", "Ukrainian", "Urdu", "Uyghur", "Uzbek", "Vietnamese", "Welsh", "Wu", "Yiddish", "Yoruba", "Zulu"
+    ],
+    "language_modifiers": ["Alemannic", "Bavarian", "Swabian", "Bernese", "High", "Low", "Upper", "Lower", "Central", "Old", "Middle", "Modern", "Classical", "Ancient", "Attic", "Koine", "Late", "Medieval", "Vulgar", "Biblical", "Standard", "Literary", "Traditional", "Simplified", "Mandarin", "Northern", "Southern", "Eastern", "Western", "Brazilian", "European", "Latin American", "Ottoman", "Proto", "Byzantine", "Homeric", "Ecclesiastical", "Church", "Colloquial", "Egyptian", "Levantine", "Moroccan", "Gulf", "Quebec", "Canadian", "Swiss", "Austrian", "Scottish", "Irish", "American", "British"],
+    "script_labels": ["romani[sz]ed", "romani[sz]ation", "transl\\.", "translit\\.", "transliterated", "transliteration", "translated", "pinyin", "Hanyu Pinyin", "Wade\u2013Giles", "Wade-Giles", "Jyutping", "Hepburn", "Revised Romani[sz]ation", "McCune\u2013Reischauer", "McCune-Reischauer", "Yale", "Cyrillic", "Hangul", "Kanji", "Kana", "Hiragana", "Katakana", "Hanzi", "Hanja", "Devanagari", "Native name", "Native names", "Original name"],
+    "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "Jan", "Feb", "Mar", "Apr", "Jun", "Jul", "Aug", "Sept", "Sep", "Oct", "Nov", "Dec"],
+    "born_markers": ["born", "b\\.", "died", "d\\.", "bapt(?:ised|ized|\\.)", "christened", "buried", "bur\\."],
+    "approx_markers": ["circa", "ca\\.", "c\\.", "fl\\.", "floruit", "reigned", "r\\.", "active"],
+    "nonlatin_scripts": ["GREEK", "CYRILLIC", "HEBREW", "ARABIC", "CJK", "HIRAGANA", "KATAKANA", "HANGUL", "DEVANAGARI", "THAI", "ARMENIAN", "GEORGIAN", "BENGALI", "TAMIL", "TELUGU", "KANNADA", "MALAYALAM", "GUJARATI", "GURMUKHI", "SINHALA", "KHMER", "LAO", "TIBETAN", "MYANMAR", "ETHIOPIC", "MONGOLIAN", "SYRIAC", "THAANA", "COPTIC", "GOTHIC", "PHOENICIAN", "CUNEIFORM", "EGYPTIAN", "BOPOMOFO", "YI"]
+  },
+
+  "intro": {
+    "pointer_patterns": [
+      "^See\\b",
+      "^For [^.]{0,140}, see\\b",
+      "^Not to be (?:confused|mistaken) with\\b",
+      "^Refer to\\b"
+    ]
+  },
+
+  "abbreviations": [
+    "e.g", "i.e", "etc", "vs", "viz", "cf", "al", "approx", "ca", "fl", "ed", "eds", "est", "ibid", "op", "cit", "sq", "ft", "lb", "oz", "mt", "mts", "st", "ste", "mr", "mrs", "ms", "mx", "dr", "prof", "sr", "jr", "fr", "rev", "hon", "gen", "col", "lt", "sgt", "capt", "cmdr", "cdr", "maj", "adm", "cpl", "pvt", "gov", "sen", "rep", "pres", "supt", "insp", "det", "messrs", "mme", "mlle", "inc", "ltd", "corp", "llc", "plc", "dept", "univ", "assn", "bros", "jan", "feb", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "bc", "bce", "ph", "phd", "dds", "bsc", "msc", "esq", "hrh", "kg", "km", "cm", "mm", "hrs", "ave", "blvd", "hwy", "apt", "aka"
+  ],
+  "numbered_abbreviations": [
+    "no", "nos", "vol", "vols", "pp", "fig", "figs", "ch", "art", "sec", "min", "lat", "lon", "alt", "c", "p"
+  ]
+}

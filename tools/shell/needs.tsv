@@ -1,0 +1,48 @@
+# What the shell uses beside its core programs, one row per thing, for `lares setup` (tools/shell/lares, needs_report): what is missing is
+# listed with what it is for, and one install line at the end holds every package. A missing row makes its feature absent; nothing else breaks.
+# Tab-separated: part, what to look for, the Arch package, where it comes from (repo | aur), what it is for.
+# What to look for: cmd:<program>  file:<path>  py:<python module>  font:<family>  icons:<icon theme>
+fonts	font:Inter	inter-font	repo	the shell's own text
+fonts	font:Audiowide	audiowide-font	aur	the bar and the titles
+fonts	font:Symbols Nerd Font	ttf-nerd-fonts-symbols	repo	every glyph of the shell
+fonts	font:Consolas	consolas-font	aur	the terminal view and code
+fonts	font:Exo 2	otf-exo	aur	the chat's text
+fonts	font:Noto Color Emoji	noto-fonts-emoji	repo	emoji
+icons	icons:Papirus	papirus-icon-theme	repo	the apps' icons
+idle and lock	cmd:hypridle	hypridle	repo	idle, sleep and the lock that goes before them
+idle and lock	cmd:hyprlock	hyprlock	repo	the lock's last resort
+idle and lock	cmd:sway	sway	repo	a hidden session that warms the lock's shaders (the first lock is slow without it)
+wallpaper	cmd:hyprpaper	hyprpaper	repo	the wallpaper, switched with the theme
+sound	cmd:pactl	libpulse	repo	the mixer
+sound	cmd:wpctl	wireplumber	repo	the volume
+sound	cmd:pw-play	pipewire-audio	repo	the shell's sounds
+player	cmd:mpd	mpd	repo	the music player
+player	cmd:ffprobe	ffmpeg	repo	what a track is
+brightness	cmd:brightnessctl	brightnessctl	repo	a laptop panel's and a keyboard's light
+brightness	cmd:ddcutil	ddcutil	repo	an external display's own brightness
+network	cmd:nmcli	networkmanager	repo	the network popup
+network	py:dbus	python-dbus	repo	the network popup
+network	py:gi	python-gobject	repo	the network popup, the bridge
+network	cmd:bluetoothctl	bluez-utils	repo	Bluetooth
+network	cmd:iw	iw	repo	Wi-Fi details and AirPlay's power save
+clipboard	cmd:wl-copy	wl-clipboard	repo	the clipboard
+clipboard	py:PIL	python-pillow	repo	pictures in the clipboard
+screenshots	cmd:grim	grim	repo	screenshots
+screenshots	cmd:slurp	slurp	repo	screenshots of a region
+screenshots	cmd:swappy	swappy	repo	editing a screenshot
+folders	cmd:inotifywait	inotify-tools	repo	notes, launcher scripts and downloads are noticed as they change
+notifications	cmd:notify-send	libnotify	repo	other programs' notices
+notifications	cmd:dbus-monitor	dbus	repo	what asks the screen to stay on
+notifications	cmd:udisksctl	udisks2	repo	the USB drive card
+update	cmd:yay	yay	aur	the system update
+update	cmd:checkupdates	pacman-contrib	repo	how many updates wait
+weather	file:/usr/lib/geoclue-2.0/demos/where-am-i	geoclue	repo	the weather where you are (or name a place in weather.jsonc)
+chat and wiki	cmd:ollama	ollama	repo	the local model (ollama-cuda, ollama-rocm on a GPU)
+chat and wiki	py:matplotlib	python-matplotlib	repo	formulas in an answer
+picker	py:fontTools	python-fonttools	repo	the Nerd Fonts icons
+helpers	cmd:cargo	rust	repo	building the screen-time daemon (and silicon's helper on a machine that has its hardware)
+bridge	cmd:kdeconnect-cli	kdeconnect	repo	the bridge to a phone
+bridge	cmd:adb	android-tools	repo	the phone's screen
+bridge	cmd:scrcpy	scrcpy	repo	the phone's screen
+bridge	cmd:aft-mtp-mount	android-file-transfer	repo	the phone's files over a cable
+bridge	cmd:sshfs	sshfs	repo	the phone's files over Wi-Fi

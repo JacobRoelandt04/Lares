@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# What a SYSTEMD UNIT of silicon runs, for the MUX probe (tools/dev/silicon_service_probe.sh, phase mux) -- in TEST
+# MODE only, never as the shell would (pkexec) and never as root:
+#
+#     silicon-unit <mux-apply|mux-guard> <the helper> <test-mode flags...>
+#
+# mux-apply is silicon-mux.service's ExecStop (at shutdown), mux-guard is silicon-mux-guard.service (at boot);
+# the probe plays the machine's shutdown and boot by running them against the fake machine. This file logs
+# every call and REFUSES (a `REFUSED` line the runner fails on, exit 126) anything else: another command, not the
+# helper the runner allows, a call with no --sysfs-root (the real /sys), a caller that came through pkexec
+# (the helper itself refuses a unit command then), root. The guard's reboot is a line in
+# $SILICON_STUB_LOG_DIR/guard-reboot.log (the helper's own SILICON_TEST_REBOOT), never a reboot.
+LOG="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}/unit.log"
+now() { date +%s%3N; }
+printf '%s %s\n' "$(now)" "$*" >> "$LOG"
+refuse() { printf '%s REFUSED (%s)\n' "$(now)" "$1" >> "$LOG"; echo "silicon-unit stand-in: refused ($1)" >&2; exit 126; }
+[ "$(id -u)" != 0 ] || refuse "running as root"
+[ -z "${PKEXEC_UID:-}" ] || refuse "through pkexec"
+cmd="${1:-}"; helper="${2:-}"
+[ "$#" -ge 2 ] || refuse "no helper named"
+shift 2
+case "$cmd" in mux-apply | mux-guard) ;; *) refuse "not a unit command: $cmd" ;; esac
+[ "$helper" = "${SILICON_STUB_HELPER:-/nonexistent}" ] || refuse "not the helper the runner allows"
+case " $* " in *" --sysfs-root "*) ;; *) refuse "no --sysfs-root: not test mode" ;; esac
+export SILICON_TEST_REBOOT="$SILICON_STUB_LOG_DIR/guard-reboot.log"
+exec "$helper" "$@" "$cmd"

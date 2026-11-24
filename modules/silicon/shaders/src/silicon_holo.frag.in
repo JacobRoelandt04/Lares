@@ -1,0 +1,125 @@
+#version 440
+
+// =============================================================================
+// silicon_holo.frag -- silicon's holograms: the CPU's symbol, the GPU die's fractal and the
+// integrated mode's beam with its see-through card. One shader, three kinds (frame.z).
+//
+// The plane the CPU symbol lives on is UPRIGHT through the anchor and faces the viewer's
+// horizontal direction. Under the true isometric camera that plane maps LINEARLY onto the screen
+// (1:1 across, x 0.8165 up: a 2d image transformed to match isometric perspective), so a
+// symbol is plain 2D art in the plane's (u, v) millimetres and needs no ray at all. The GPU's
+// fractal is real 3D: a ray from the same camera marches the volume above the die. The beam is a
+// thin fan of light along the board with a flat projection of the card at its end.
+//
+// Every hologram wears the same treatment (holo_common.glsl): a projector cone, a translucent body,
+// a bright outline and a soft rim glow, thin scanlines drifting up, a gentle flicker, a slight
+// chromatic split. PREMULTIPLIED, and a TINT on a light ground (darker, more saturated ink, never an
+// additive white-out): the dark theme leans on the same ink, brighter, with part of its alpha
+// handed back so it glows (CLAUDE.md: an additive glow designed on a dark ground blows a light one out).
+//
+// The pieces: holo_common.glsl (helpers, glitch, flicker, cone), holo_symbols.glsl (leaf,
+// scales, shock), holo_fractals.glsl (Sierpinski, Menger, Mandelbulb), holo_beam.glsl (the fan and
+// the card). No uniform is named `noise` or `half`; no array is indexed by a loop counter.
+// =============================================================================
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec4 view;      // x, y: this item's size px; z: px per mm; w: family 0 Material, 1 Blueprint
+    vec4 frame;     // x, y: SCENE px of the board origin; z: kind 0 cpu, 1 gpu, 2 beam; w: 1 = dark mode
+    vec4 quad;      // x, y: this item's offset in the scene px; z: render scale; w: the beam's arch mm
+    vec4 plane;     // x: plane width mm; y: plane base above the anchor mm; z: plane height mm; w: beam haze strength
+    vec4 anchorP;   // xyz: the anchor, board mm; w: presence 0..1
+    vec4 targetP;   // xyz: the beam's target, board mm; w: energy 0..1
+    vec4 look;      // x: derez 0..1; y: tweak 0..1; z: the entrance ramp 0..1 (this hologram's own); w: symbol
+    vec4 look2;     // x: next symbol; y: corner brackets strength; z: scanline depth; w: scan band strength
+    vec4 phA;       // oscillators in cycles: x scan drift, y flicker 0.83 Hz, z flicker 1.57 Hz, w hiccup
+    vec4 phB;       //   x bob, y sway, z flow (sap, barbs), w pulse
+    vec4 phC;       //   x crackle, y orbit, z spin, w beam pulse
+    vec4 colA;      // the hologram's colour now; a: awake 0..1 (dims the whole hologram)
+    vec4 colB;      // the colour it is changing to
+    vec4 colT;      // the tweak's second hue
+    vec4 cardPcb;   // the card (beam): the PCB footprint x0 z0 x1 z1, board mm
+    vec4 cardSub;   //   the GPU substrate
+    vec4 cardDie;   //   the die
+    vec4 cardM0;    //   the four GDDR chips
+    vec4 cardM1;
+    vec4 cardM2;
+    vec4 cardM3;
+    vec4 cardH;     //   board mm, the card at rest: x: the PCB's underside, y: its top, z: the substrate's top, w: the die's top
+    vec4 liveP;     // x: the idle ladder's live 0..1 (1 alive: the flicker, the scan and the lenses run; 0 halted: none of them); y: the breath, a brightness factor (1 = none); z: the lenses' strength (1 = full); w free
+    // ---- the ghost card's other parts, read from SceneGeometry.PARTS by HoloLayer (group card, no I/O bracket) ----
+    // A row of identical cells: the first cell's rectangle x0 z0 x1 z1 | the step between cells x z and the counts x z | y0 y1 and the shape (0 box, 1 cylinder),
+    // board mm with the card at rest. A single box is a row of one (counts 0 0 = the part is not there: nothing is drawn).
+    vec4 r3hBox;    // the box the ghost hangs in, footprint x0 z0 x1 z1 (board mm, padded for its outlines and halo) -- the pixels whose ray misses it skip the ghost
+    vec4 r3hHover;  // x: the ghost's mean hover above the card's place, mm; y: its bob; z, w: the lowest and the highest of its parts (the box's height, at rest)
+    vec4 r3hBeam;   // x, y: the fan's thickness at the tile and what the card adds, mm; z: kept 0 (ghostCard's row loop runs 5 + z rows: a bound from a uniform, so it is not unrolled); w free
+    vec4 r3hTops;   // x: the GDDR chips' top, y: the heatsink base's top (board mm, at rest); z: the gold fingers' pitch, w: their width
+    vec4 r3hFing;   // the gold fingers' band: x0 z0 x1 z1
+    vec4 r3hSink;   // the heatsink's base: x0 z0 x1 z1
+    vec4 r3hFin0;   // the heatsink's fins (a row)
+    vec4 r3hFin1;
+    vec4 r3hFin2;
+    vec4 r3hChk0;   // the VRM chokes (a row)
+    vec4 r3hChk1;
+    vec4 r3hChk2;
+    vec4 r3hFet0;   // the VRM MOSFETs (a row)
+    vec4 r3hFet1;
+    vec4 r3hFet2;
+    vec4 r3hCap0;   // the capacitors (a row, cylinders)
+    vec4 r3hCap1;
+    vec4 r3hCap2;
+    vec4 r3hMlc0;   // the MLCCs (a row)
+    vec4 r3hMlc1;
+    vec4 r3hMlc2;
+    // ---- the holograms' additions, each its own switch (0 or 1; 0 everywhere = the picture without them, pixel for pixel; the Quiet leaf has none, it stays
+    // the simplest) ----
+    vec4 fxOn;      // x: the beam's data stream, y: the scales' plinth (and the foot standing on it), z: the shock's oscilloscope trace, w: the GPU's armillary rings
+    vec4 phD;       // cycles: x free, y the scope trace (9 s), z the plinth's turn (25 s), w the data stream (16.7 s = 8 cells)
+    // the armillary (GPU): three rings about the volume's centre, worked out once a frame by HoloLayer._ring. X: the ring's major axis as a unit screen vector (xy) and the minor
+    // axis as a unit vector over its (floored) length in units of R (zw: so y = q.zw / R is the ring's own second coordinate); Y: 1/R, the near half's sign eased to 0 at
+    // edge-on (+-1 elsewhere), the bead's near weight 0..1, the ring's turn (cycles); orbB / orbC: the beads' screen places (rings 0 and 1 | ring 2)
+    vec4 orbX0;
+    vec4 orbY0;
+    vec4 orbX1;
+    vec4 orbY1;
+    vec4 orbX2;
+    vec4 orbY2;
+    vec4 orbB;
+    vec4 orbC;
+};
+
+// the true isometric camera (yaw 45, pitch 35.264): screen right, screen up, toward the camera
+const vec3 CAM_R = vec3(0.70710678, 0.0, -0.70710678);
+const vec3 CAM_U = vec3(-0.40824829, 0.81649658, -0.40824829);
+const vec3 CAM_C = vec3(0.57735027, 0.57735027, 0.57735027);
+const float PLANE_V = 0.81649658;        // the upright plane's vertical foreshortening
+
+// @@CONSTS
+
+// @@INCLUDE holo_common.glsl
+// @@INCLUDE holo_symbols.glsl
+// @@INCLUDE holo_fractals.glsl
+// @@INCLUDE holo_beam.glsl
+
+void main() {
+    int kind = int(frame.z + 0.5);
+    gDark = frame.w;
+    float pxDev = view.z * max(quad.z, 1.0);
+    gAA = 0.62 / pxDev;                                   // 0.6 device px, in mm
+    vec2 px = quad.xy + qt_TexCoord0 * view.xy;
+    vec2 scr = vec2((px.x - frame.x) / view.z, (frame.y - px.y) / view.z);   // screen mm: right, up
+    vec4 c;
+    if (kind == 0)
+        c = holoCpu(scr);
+    else if (kind == 1)
+        c = holoGpu(scr, px);
+    else
+        c = holoBeam(scr, px);
+    // dark ground: hand part of the alpha back (an additive share) so the ink glows
+    c.a *= 1.0 - 0.55 * gDark;
+    fragColor = c * qt_Opacity;
+}

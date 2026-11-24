@@ -1,0 +1,2142 @@
+#!/usr/bin/env bash
+# lares -- runs the Lares desktop shell. The shell and its lock run from a SNAPSHOT of a commit of this repo (never the
+# working tree), the shell under a supervisor that Hyprland's autostart starts at login. lares never edits a config file of
+# yours: `binds` prints the lines your Hyprland config needs and checks the ones it has, `setup` checks a whole machine.
+#
+#   lares deploy [REV] [--dry-run] [--force]   a snapshot of REV (default HEAD) for the shell and for the lock, and the
+#                                    running shell restarted on it (its supervisor: stop, `current` -> REV, start)
+#   lares start [--force]         what autostart.lua runs at login: the deployed shell under its supervisor, and the geoclue
+#                                    agent when shell.jsonc asks for it ("geoclueAgent": true)
+#   lares restart [--force]       the shell stopped and started again from its snapshot -- Super+Shift+F12, the rescue for a
+#                                    hung shell; with no supervisor in this session it starts one
+#   lares status                  the deployed commit, the shell and its supervisor, the notification name, the lock, the log
+#   lares log [shell|supervisor|tool|last|stalls]   follow a log (default: the shell's); `last` = the previous shell's tail that outlives
+#                                       the runtime dir, `stalls` = the evidence dirs of the watchdog's restarts
+#   lares binds                   the lines the shell needs in your Hyprland config -- its keys (the rescue key included),
+#                                    layer rules, environment line and autostart lines -- and how yours compare: MISSING,
+#                                    CONFLICT, DIFFERS, STALE. Writes nothing
+#   lares init [--dry-run]        ONE TIME, on a new machine: the config files its HARDWARE asks for (no battery, no internal panel, no
+#                                    keyboard light), written to ~/.config/quickshell/config -- only a file that is not there; what a
+#                                    file of yours lacks is printed (tools/shell/lares-init.py has the rules)
+#   lares config [NAME...]        your config/*.jsonc checked: ok, or every mistake with its line (a mistyped key, a wrong value, a text that
+#                                    does not parse; exit 1). `lares config set` lists every key you changed beside its default,
+#                                    `lares config find WORD` the keys about WORD. Writes nothing (tools/shell/lares-config-check.py)
+#   lares setup                   what a machine needs for the shell, checked one by one: the programs, the snapshots, the
+#                                    config lines, hypridle's locks, the folder opener (yazi), the notification name, the portal units' drop-ins, the root steps (printed, never run;
+#                                    R6, optional, is the interaction boost's unit: docs/silicon.md)
+#   lares apply --commit [--force] MODULE FILE...   what a mockup's Save runs: commit exactly those files as
+#                                    "<NAME> - tuning: MODULE" (NAME: the first word of git's user.name, in capitals); a
+#                                    deployed shell is then deployed on that commit
+#   lares publish check|build [REV]   the public copy (docs/publishing.md): the export of REV (default HEAD) without the
+#                                    agents' notes, judged by the leak check; `build` makes it the local branch `public`'s
+#                                    next commit (pushing it is yours: git push public public:main)
+#   lares preview [--dry-run] [--force]   the shell with MOCK services in a nested Hyprland WINDOW on the desktop
+#                                    (tools/dev/lock_env.sh HOST=window); the running shell is left alone
+#   lares perf tour [--fresh] [--boost-ab]   one fixed scripted pass over YOUR running shell (every popup, toasts, titles, the OSD,
+#                                    with --fresh a restart first), reported from the frame journal: run it before and after a
+#                                    deploy and `lares perf tour compare A.json B.json` (tools/shell/lares-perf-tour; docs/shell.md)
+#   lares oled shift|status|flourish   the OLED care (the bars' content steps a device pixel every 240 s), through the
+#                                    running shell's IPC: `shift` takes the next step now, `status` is one line of JSON, `flourish`
+#                                    plays a random flourish now on every screen (the scheduler's gates hold); the care's one
+#                                    switch is shell.jsonc's `oled.enabled`
+#   lares session save|list|show|restore|reveal|forget|status|classify|preset|hook   session restore (docs/session.md): the tool
+#                                    tools/session/lares-session of this tree, run as it is (`restore --dry` prints the plan
+#                                    and starts nothing); `hook` prints the line for your ~/.bashrc; the switch is
+#                                    config/session.jsonc `enabled`
+#   lares snapshot status|list|show|create|keep|delete|undo-plan|files|undo|rescue|offsite ...   the system snapshots (docs/snapshots.md):
+#                                    the tool tools/snapshot/lares-snapshot of this tree, run as it is; `offsite` is the copy on
+#                                    Proton Drive (tools/snapshot/lares-offsite); `setup` says how it is installed (the root step R5)
+#   lares update-running          the pid of a system update that is running (nothing, exit 1, otherwise)
+#   lares panorama-import [--dry-run]   ONE TIME: Panorama (the displays) takes over ~/.config/hypr/config/monitors.lua -- its
+#                                    blocks become setups, hyprland.lua requires config/panorama instead, monitors.lua becomes
+#                                    a note; the plan, the diffs and a typed yes first, a backup kept (tools/panorama/panorama-import.py)
+#   lares cleanup-marks [--dry-run]   takes out the `lares deploy` marks some config files still carry from an earlier
+#                                    version of deploy: the lines stay, the BEGIN / END marks and the commented-out lines go;
+#                                    the diff and a typed yes first (tools/shell/lares-config.py has the rules)
+#   lares migrate-name [--dry-run]   ONE TIME, after the project became Lares: what is ours under the Quickshell names
+#                                    (~/.local/state|cache|share/quickshell/<ours>, ~/.local/state/qs-shell, the runtime dirs qs-shell and
+#                                    qs-session) moves to its Lares name, and a SYMLINK stays at each old path -- every move is ONE
+#                                    exchange (renameat2), so a running shell, supervisor and lock never miss the old path; links
+#                                    ~/.local/bin/lares and takes out ~/.local/bin/qs-shell (a link of ours); the plan and a typed yes
+#                                    first, then the lines of yours and the root steps that follow (tools/shell/lares-migrate.py)
+#   lares cleanup-old-name [--dry-run]   ONE TIME, later: removes those symlinks and lists the root files of the old name to remove; REFUSES
+#                                    while a line of yours, the SDDM session line, a lock or supervisor of the old name or the dictation's
+#                                    venv still names the old name
+#   lares help
+#
+# EXIT STATUS. 0 done; 1 failed (or, for `binds` / `setup` / `status`, something to fix); 2 usage; 3 nothing deployed (`status`,
+# `oled`); 4 refused by the restart guard (a package transaction runs; `--force` goes on; for `apply` the commit IS made and
+# only the deploy is refused).
+#
+# FORMER COMMANDS. `fallback` restarts the shell and says the line that ran it is stale (an older keybinds.lua runs it from
+# Super+Shift+F12: `binds` shows the line to use); `trial`, `revert`, `root-steps` and `binds apply|check` are gone (`setup`
+# prints the root steps).
+# ----------------------------------------------------------------------------------------------- (`help` prints the lines above)
+#
+# THE SNAPSHOTS. `deploy` takes `git archive <commit>` into ~/.local/state/lares/shell/<commit>/ (without .qmlls.ini, with
+# which two quickshells in one root fight, and without the dev kit tools/dev/, which the shell never reads; your config/
+# folder linked beside shell.qml, and a locale.jsonc still in the old place) and the lock's part (lock/ modules/ themes/ tools/lockscreen/) into
+# ~/.local/state/lares/lock/<commit>/, and points each `current` link at it. Everything that runs the shell or the lock
+# goes through `current`: autostart.lua's lines, the keys, hypridle's lock_cmd, SDDM's boot lock. A deployed shell running in
+# this session is switched by its supervisor in this order: stop, `current` -> the commit, start -- quickshell keeps the path
+# AS GIVEN (its instance, what `ipc` and QS_CONFIG_PATH find, and its shellDir are the link), so `current` never moves under a
+# running shell. Kept: current, the one before, and the running supervisor's own commit; older snapshots go. The lock's
+# snapshot never moves while a lock is up (tools/lockscreen/lares-lock-held: that lock's files stay as they are); the next deploy
+# takes it. After a lock snapshot the snapshot's shader warmer runs (--if-stale): the first lock after a Mesa update or a changed
+# veil would otherwise compile its shaders in front of you. lares-ime (the dictation's input method) is BUILT into
+# ~/.cache/lares-stt/bin, not deployed: a deploy whose commit changes tools/stt/ime/ says to rebuild it.
+#
+# THE SUPERVISOR (tools/shell/lares-supervise; its header has the rest). `start` runs it as a child of the COMPOSITOR
+# (hyprctl dispatch hl.dsp.exec_cmd): it runs `quickshell -n -p <current>/shell.qml`, restarts a shell that exits (a doubling
+# backoff), and when the shell keeps crashing -- more than LARES_RESTART_LIMIT exits in LARES_RESTART_WINDOW seconds --
+# it says so ONCE through Hyprland's own notification (`hyprctl notify`: the shell IS the notification daemon, so notify-send
+# has nobody to show it) and goes on trying slower: LARES_SLOW_BACKOFF seconds, doubling to LARES_SLOW_MAX; a shell that
+# stays up LARES_STABLE seconds ends the loop. `restart` asks it (USR1) to stop the shell and start it again. Its record is
+# $XDG_RUNTIME_DIR/lares/deployed, judged by the Hyprland session it names: /run/user outlives a log-out while the user's
+# systemd manager lingers, so a record of a session that is gone is cleared by the next command, never believed.
+#
+# THE RESTART GUARD. A shell started in the middle of a system update would load a half-replaced Qt. `deploy`, `restart`,
+# `start` (it waits, up to LARES_START_WAIT s), `preview` and the deploy that `apply` ends with therefore REFUSE (exit 4)
+# while a package transaction runs, say why, and take `--force`. A transaction is /var/lib/pacman/db.lck (pacman holds it for as
+# long as one on the system's database lasts, a yay install included) or a pacman / yay process, of any user, whose command line
+# IS one: -S that is not a search / info / list / group query, -U, -R, and not against another database (the shell's own update
+# check runs checkupdates, which runs `pacman -Sy --dbpath <a copy>` every few minutes: it must not count, nor `yay -Qua`). The
+# supervisor's own restarts of a CRASHED shell are not guarded. A restart refused from a key (no terminal to read the reason)
+# says it through `hyprctl notify`.
+#
+# A SYSTEM UPDATE RUNNING. A detached `yay` run asks sudo through the shell's askpass socket
+# ($XDG_RUNTIME_DIR/lares-askpass-update.sock; its helper retries for 300 s and a restarted shell reattaches): a restart
+# mid-run is fine. The shell is started with `env` WITHOUT -i, so it keeps XDG_RUNTIME_DIR.
+#
+# FILES. Runtime $XDG_RUNTIME_DIR/lares/ (deployed, pid, supervise.pid, shell.log, supervise.log, supervise.env);
+# persistent ~/.local/state/lares/tool/ (lares.log, lock, qmlls/ = a .qmlls.ini a preview set aside). The snapshots
+# ~/.local/state/lares/{shell,lock}/ (<commit>/, current). Read: ~/.config/quickshell/config/shell.jsonc (geoclueAgent,
+# theme.apply), ~/.config/hypr/ (`binds`, `setup`). `cleanup-marks` alone writes your files, once, after a typed yes.
+#
+# THE NAME CHANGE (round 9: the project is Lares). The old names keep working until `cleanup-old-name`, and none of these steps asks a
+# running shell, lock or hypridle to stop:
+#   1. `lares migrate-name` (the working tree's tool): our directories move to their Lares names, a symlink stays at each old path.
+#   2. `deploy` REFUSES (exit 4) until step 1 has run: a snapshot taken before it would start a shell on empty state. It then places a
+#      one-line exec SHIM at each OLD entry-point name that a line of yours (Hyprland's Lua and hypridle, hyproled-toggle.sh, ~/.bashrc ...)
+#      or an installed old root file (/usr/local/bin/qs-boot-lock) still runs -- qs-shell, qs-lock-session, qs-lock-held, qs-lock-warm --
+#      INSIDE the snapshot, never in the repo, so hypridle's lock_cmd or the boot never finds a missing file. When nothing names them any
+#      more the next deploy places none. A supervisor that runs under the old name is replaced by a deploy (stop, `current` moves,
+#      start): quickshell lists a shell by the path it was given, and the old supervisor gives the old path.
+#   3. `binds` and `setup` call a line of yours that names an old thing STALE, with the line to use; `setup` prints the root steps, which
+#      install the Lares files BESIDE the old ones (/etc/pam.d/lares-lock, /usr/local/bin/lares-boot-lock, hyprland-lares.desktop, the
+#      polkit action org.lares.silicon.helper), then the SDDM line. The lock asks for the PAM service lares-lock once that file is there,
+#      qs-lock before; a lock of either name counts as "a lock is up" (lares-lock-held reads both lock files).
+#   4. `cleanup-old-name` removes the symlinks and prints the root removal -- once nothing of yours names an old path.
+#
+# ENVIRONMENT (the probes' fake worlds point these at stubs; unset = the real thing)
+#   LARES_REPO          the repo (default: two levels above this script)
+#   LARES_HYPRCTL, LARES_SYSTEMCTL, LARES_QUICKSHELL   the programs (PATH names)
+#   LARES_READY_TIMEOUT 30    seconds to wait for the ready line        LARES_OWNER_WAIT 5   for the name owner
+#   LARES_STOP_TIMEOUT  5     seconds between TERM and KILL
+#   LARES_RESTART_LIMIT 3     exits within LARES_RESTART_WINDOW (60 s) before the supervisor calls it a crash loop
+#   LARES_BACKOFF       1     seconds before the first restart; doubles for each one in the window
+#   LARES_SLOW_BACKOFF  30    seconds between tries in a crash loop, doubling up to LARES_SLOW_MAX (300)
+#   LARES_STABLE        300   seconds a shell must stay up for a crash loop to be over
+#   LARES_LOG_MAX       104857600   bytes the shell's log may reach before the supervisor cuts it to a tenth
+#                          (looked at every LARES_LOGCAP_EVERY, 10, seconds)
+#   LARES_PREVIEW_ENV   shellpv   the LOCK_ENV name `preview` uses
+#   LARES_PACMAN_LOCK   /var/lib/pacman/db.lck   the file whose presence is a package transaction
+#   LARES_PM_COMMS      "pacman yay"   the programs whose command lines the restart guard reads
+#   LARES_GEOCLUE_AGENT /usr/lib/geoclue-2.0/demos/agent   the geoclue demo agent
+#   LARES_HYPRIDLE_CONF ~/.config/hypr/hypridle.conf
+#   LARES_ROOT_PREFIX   ""        where /etc and /usr/local are READ for the root steps' state (a probe's fake root)
+#   LARES_DBUS_SERVICES "/usr/share/dbus-1/services ~/.local/share/dbus-1/services"   where `setup` looks for D-Bus services
+#   LARES_START_WAIT    600       seconds `start` waits for a package transaction to end
+#   LARES_BIN_DIR          ~/.local/bin   where `migrate-name` links `lares` (a probe's fake home)
+# shellcheck source-path=SCRIPTDIR
+# shellcheck disable=SC2059,SC2016   # the LUA_* forms are printf formats on purpose; jq programs hold $variables
+set -u
+[ "${BASH_VERSINFO[0]}" -ge 5 ] || { echo "lares: needs bash 5" >&2; exit 1; }
+
+# ==================================================================================================
+# THE HYPRLAND FORMS -- every string this tool prints for Hyprland's Lua config or says to Hyprland, in one table, so a
+# correction is one edit. Hyprland reads a LUA config: `hyprctl dispatch exec X` is a syntax error.
+#
+# FACTS (Hyprland 0.56.2 measured in the nested compositor of tools/dev/lock_env.sh; `notify` on 0.57.1):
+#   - `hyprctl eval|dispatch` answer "ok" with exit 0; a failure answers "error: <Lua message>" with EXIT 7; a Lua WARNING
+#     exits 0 with "warning: ..." and did nothing: the TEXT is read
+#   - hl.dsp.exec_cmd runs its string through `sh -c` (`&&` and quoted paths work); the child is the compositor's
+#   - hl.bind("SUPER + SHIFT + F12", ...) is listed by `hyprctl -j binds` as modmask 65 (SUPER 64 + SHIFT 1), key "F12";
+#     { locked = true } makes a key work on the lock screen, { non_consuming = true } lets it reach the application too
+#   - hl.layer_rule({ name = ..., match = { namespace = ... }, no_anim = true }) stops the ~0.5 s fade of the surfaces of that
+#     namespace (a rule is per namespace); a rule of the same name replaces
+#   - `hyprctl notify <icon> <ms> <colour> <text>` shows Hyprland's own notification (icon 0 warning, 3 error; colour 0 = the
+#     icon's) with no notification daemon at all
+# Re-prove them, and the tool's own strings, against the nested compositor after a Hyprland update.
+# ===================================================================================================
+LUA_BIND='hl.bind("%s", %s%s)'                       # keys, dispatcher, options (LUA_OPT_*, or nothing)
+LUA_GLOBAL='hl.dsp.global("lares:%s")'          # the GlobalShortcut's name (appid lares)
+LUA_EXEC='hl.dsp.exec_cmd("%s")'                     # a shell command, Lua-escaped; also what `hyprctl dispatch` gets
+LUA_AUTOSTART_EXEC='hl.exec_cmd("%s")'               # a shell command run at login (autostart.lua's form, inside its hyprland.start handler)
+LUA_ENV='hl.env("%s", "%s")'                         # an environment variable of Hyprland and every child (environment.lua's form)
+LUA_OPT_LOCKED=', { locked = true }'                 # also while the session is locked (the OSD's keys)
+LUA_OPT_NONCONSUMING=', { non_consuming = true }'    # the key still reaches the application (Caps / Num lock)
+LUA_LAYER_RULE='hl.layer_rule({ name = "%s", match = { namespace = "%s" }, no_anim = true })'   # rule name, namespace regexp
+HYPR_MONITORS=(-j monitors)                          # the arguments of hyprctl: is the compositor answering
+HYPR_ERROR_RE='^error'                               # a reply that says it failed (the exit status is 7 then, too)
+RESCUE_KEYS='SUPER + SHIFT + F12'                    # runs `lares restart`: the way out of a hung shell
+
+# The shell's keys. Each row: keys | what runs | option. What runs is global:<GlobalShortcut name> or exec:<command>
+# (@SNAP@ = the deployed snapshot, through `current`). The dictation's four keys (modules/dictation/DictationShortcuts.qml) are
+# fn+F10 (XF86Launch5); the second block is modules/osd/OsdShortcuts.qml's header, key for key (tools/dev/lares_tool_probe.sh
+# compares them). The rescue key is added in front of these (binds_rows).
+BINDS_TABLE='
+ALT + SPACE                    | global:launcher                              |
+ALT + V                        | global:clipboard                             |
+ALT + PERIOD                   | global:picker                                |
+ALT + N                        | global:notes                                 |
+SUPER + F2                     | global:bars                                  |
+SUPER + SHIFT + S              | exec:@SNAP@/tools/osd/shot.sh region         |
+XF86Launch5                    | global:dictate                               |
+SHIFT + XF86Launch5            | global:dictate-nl                            |
+CTRL + XF86Launch5             | global:dictate-source                        |
+ALT + XF86Launch5              | global:dictate-ask                           |
+XF86AudioRaiseVolume           | global:osd-volume-up                         | locked
+XF86AudioLowerVolume           | global:osd-volume-down                       | locked
+XF86AudioMute                  | global:osd-volume-mute                       | locked
+XF86AudioMicMute               | global:osd-mic-mute                          | locked
+XF86MonBrightnessUp            | global:osd-brightness-up                     | locked
+XF86MonBrightnessDown          | global:osd-brightness-down                   | locked
+SHIFT + XF86MonBrightnessUp    | global:osd-brightness-up-fine                | locked
+SHIFT + XF86MonBrightnessDown  | global:osd-brightness-down-fine              | locked
+XF86KbdBrightnessUp            | global:osd-kbd-up                            | locked
+XF86KbdBrightnessDown          | global:osd-kbd-down                          | locked
+XF86AudioNext                  | global:osd-media-next                        | locked
+XF86AudioPrev                  | global:osd-media-prev                        | locked
+XF86AudioPlay                  | global:osd-media-toggle                      | locked
+XF86AudioPause                 | global:osd-media-toggle                      | locked
+XF86AudioStop                  | global:osd-media-stop                        | locked
+CAPS + Caps_Lock               | global:osd-lockkeys                          | nonconsuming
+MOD2 + Num_Lock                | global:osd-lockkeys                          | nonconsuming
+'
+# The globals the shell answers that need no line of yours: `popup-escape` is bound by the shell itself while a popup is up
+# (modules/shell/EscapeBind.qml), `lock` is there for a key you may want (modules/shell/ShortcutRouter.qml). A bind of any other
+# quickshell: name is STALE in `binds` (tools/dev/lares_tool_probe.sh holds this list and BINDS_TABLE to the modules' names).
+EXTRA_GLOBALS='lock popup-escape'
+
+# The shell's layer surfaces, each of which Hyprland fades in and out (~0.5 s) unless a rule says no_anim; a rule is PER
+# NAMESPACE. Each row: rule name | namespace regexp. The bar's window is `lares-bar` (modules/shell/ShellScreen.qml); the OSD's pill
+# (modules/osd/OsdPillWindow.qml), the auth prompt's (modules/auth/AuthPillWindow.qml), the toasts' pill while the bars are
+# hidden (modules/notifications/toast/ToastPillWindow.qml) and the theme curtain (modules/shell/ThemeCurtain.qml) are layer
+# surfaces of their own. The edge reservers carry no namespace and are 1 px and empty: nothing to fade.
+# tools/dev/lares_tool_probe.sh compares this table with the WlrLayershell.namespace strings in modules/.
+LAYER_RULES_TABLE='
+lares_bar_noanim          | ^lares-bar$
+lares_osd_pill_noanim     | ^osd-pill$
+lares_auth_pill_noanim    | ^auth-pill$
+lares_curtain_noanim      | ^lares-curtain$
+lares_toast_pill_noanim   | ^toast-pill$
+'
+
+# ==================================================================================================
+# settings
+# ==================================================================================================
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+SELF_DIR=${SELF%/*}
+# shellcheck source=lares-lib.sh
+. "$SELF_DIR/lares-lib.sh"
+# shellcheck disable=SC2034   # read by the sourced lib
+LOG_TAG=lares
+
+REPO=${LARES_REPO:-$SELF_DIR/../..}
+REPO=$(cd "$REPO" 2> /dev/null && pwd -P) || REPO=${LARES_REPO:-}
+SHELL_QML=$REPO/shell.qml
+HYPRCTL=${LARES_HYPRCTL:-hyprctl}
+SYSTEMCTL=${LARES_SYSTEMCTL:-systemctl}
+QUICKSHELL=${LARES_QUICKSHELL:-quickshell}
+READY_TIMEOUT=${LARES_READY_TIMEOUT:-30}
+OWNER_WAIT=${LARES_OWNER_WAIT:-5}
+STOP_TIMEOUT=${LARES_STOP_TIMEOUT:-5}
+RESTART_LIMIT=${LARES_RESTART_LIMIT:-3}
+RESTART_WINDOW=${LARES_RESTART_WINDOW:-60}
+BACKOFF=${LARES_BACKOFF:-1}
+SLOW_BACKOFF=${LARES_SLOW_BACKOFF:-30}
+SLOW_MAX=${LARES_SLOW_MAX:-300}
+STABLE=${LARES_STABLE:-300}
+PREVIEW_ENV=${LARES_PREVIEW_ENV:-shellpv}
+PACMAN_LOCK=${LARES_PACMAN_LOCK:-/var/lib/pacman/db.lck}
+PM_COMMS=${LARES_PM_COMMS:-pacman yay}   # the programs whose command line the guard reads (a probe's stand-ins have other names)
+GEOCLUE_AGENT=${LARES_GEOCLUE_AGENT:-/usr/lib/geoclue-2.0/demos/agent}
+GEOCLUE_BUS_NAME=org.freedesktop.GeoClue2.DemoAgent   # the demo agent is a GApplication: this name is taken on the SESSION bus while it runs
+HYPR_CONF_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/hypr
+HYPRIDLE_CONF=${LARES_HYPRIDLE_CONF:-$HYPR_CONF_DIR/hypridle.conf}
+LOCK_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/lares/lock   # the lock's snapshots: <commit>/ and the `current` link
+LOCK_SNAPSHOT_PATHS=(lock modules themes tools/lockscreen .examples/lockscreen.jsonc .examples/locale.jsonc)
+DEPLOY_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/lares/shell   # the shell's snapshots: <commit>/ and the `current` link
+DEPLOYED_QML=$DEPLOY_DIR/current/shell.qml   # the shell's path AS GIVEN to quickshell: its instance and its shellDir follow it
+ROOT_PREFIX=${LARES_ROOT_PREFIX:-}         # where /etc and /usr/local are READ (only read: the root steps are yours); a probe's fake root
+DBUS_SERVICES=${LARES_DBUS_SERVICES:-/usr/share/dbus-1/services ${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services}
+EGL_PLATFORMS=${LARES_EGL_PLATFORMS:-/usr/share/egl/egl_external_platform.d}   # NVIDIA's EGL platforms (setup's latency check)
+START_WAIT=${LARES_START_WAIT:-600}         # seconds `start` waits for a package transaction to end (a login during an update)
+LARES_DEPLOY_PROTOCOL=1   # a snapshot's lares must carry this line to be deployed: its `start` and supervisor speak this tool's protocol
+IME_BIN=${LARES_STT_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/lares-stt}/bin/lares-ime   # the dictation's input method, built from tools/stt/ime
+
+RT=${XDG_RUNTIME_DIR:-}
+RUN=$RT/lares
+PERSIST=${XDG_STATE_HOME:-$HOME/.local/state}/lares/tool
+OLD_DEPLOY_STATE=$PERSIST/deploy   # what an earlier version of deploy recorded of its edits: cleanup-marks reads it and archives it
+DEPLOY_RT=$RUN/deployed            # this session's deployed shell (json): judged by the session it names
+QMLLS_DIR=$PERSIST/qmlls           # a .qmlls.ini a preview set aside, and whose it is: persistent, a reboot must not lose it
+LARES_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/quickshell
+MIGRATE=$SELF_DIR/lares-migrate.py
+BIN_DIR=${LARES_BIN_DIR:-$HOME/.local/bin}
+# The file the shell reads (ConfigFile / JsonComments.configPaths): config/shell.jsonc, the .json beside it, then the old places.
+SHELL_JSON=$LARES_CONFIG_DIR/config/shell.jsonc
+for _c in "$LARES_CONFIG_DIR/config/shell.json" "$LARES_CONFIG_DIR/shell.jsonc" "$LARES_CONFIG_DIR/shell.json"; do
+    [ -e "$SHELL_JSON" ] || SHELL_JSON=$_c
+done
+unset _c
+SILICON_JSON=$LARES_CONFIG_DIR/config/silicon.jsonc   # silicon's file, found the same way (only its interactionBoost is read: setup's R6 row)
+for _c in "$LARES_CONFIG_DIR/config/silicon.json" "$LARES_CONFIG_DIR/silicon.jsonc" "$LARES_CONFIG_DIR/silicon.json"; do
+    [ -e "$SILICON_JSON" ] || SILICON_JSON=$_c
+done
+unset _c
+UPDATE_MARKER=${XDG_STATE_HOME:-$HOME/.local/state}/lares/system-update/last-run.json
+NOTIF_NAME=org.freedesktop.Notifications
+# shellcheck disable=SC2034
+LOG_FILES=("$PERSIST/lares.log")
+PATH=$PATH:/usr/local/bin:/usr/bin:/bin   # a keybind's environment is the compositor's: be sure of the basics
+PROBLEMS=0
+
+problem() { PROBLEMS=$(( PROBLEMS + 1 )); warn "$@"; }
+
+usage() {   # the header up to its divider
+    sed -n '2,/^# -----/p' "$SELF" | sed '$d; s/^# \{0,1\}//'
+    echo "The rest of the manual (the snapshots, the supervisor, the guard, the environment) is the header of $SELF."
+}
+
+# ==================================================================================================
+# the restart guard: no shell is started while the package manager replaces the libraries it loads
+# ==================================================================================================
+# THE RESTART GUARD in the header says why. A transaction is db.lck, or a pacman / yay process that runs one.
+pm_args_transact() {   # pm_args_transact <the arguments of a pacman / yay command line>: 0 when they ask for a transaction
+    local a cl
+    for a in "$@"; do
+        case $a in --dbpath|--dbpath=*|-b) return 1 ;; esac   # checkupdates: a private copy of the database
+    done
+    for a in "$@"; do
+        case $a in
+            --upgrade|--remove) return 0 ;;
+            --sync) case " $* " in *" --search "*|*" --info "*|*" --list "*|*" --groups "*|*" --print "*) return 1 ;; esac; return 0 ;;
+            --*) ;;
+            -?*) cl=${a#-}
+                 case $cl in
+                     *[UR]*) return 0 ;;
+                     *S*) case $cl in *[silgp]*) return 1 ;; esac; return 0 ;;   # -Ss -Si -Sl -Sg -Sp read; -Sy -Syu -S -Sw change
+                 esac
+                 return 1 ;;   # -Q, -F, -T, -V, -D ...: not a transaction
+        esac
+    done
+    return 1
+}
+
+pm_running() {   # "<program> (pid N)" of a pacman / yay process, of any user, that runs a transaction; 1 when none does
+    local f p c i n
+    local -a argv
+    for f in /proc/[0-9]*/comm; do
+        read -r c 2> /dev/null < "$f" || continue
+        case " $PM_COMMS " in *" $c "*) ;; *) continue ;; esac
+        p=${f#/proc/}; p=${p%/comm}
+        pid_alive "$p" || continue
+        pid_argv argv "$p"
+        n=${#argv[@]}
+        for (( i = 0; i < n; i++ )); do [ "${argv[$i]##*/}" = "$c" ] && break; done   # argv[0]; argv[1] for a script an interpreter runs
+        [ "$i" -lt "$n" ] || continue
+        if pm_args_transact "${argv[@]:i+1}"; then printf '%s (pid %s)' "$c" "$p"; return 0; fi
+    done
+    return 1
+}
+
+pacman_busy() {   # says why (one line) and returns 0 while a package transaction runs
+    local why
+    if [ -e "$PACMAN_LOCK" ]; then printf '%s exists' "$PACMAN_LOCK"; return 0; fi
+    if why=$(pm_running); then printf 'a %s runs' "$why"; return 0; fi
+    return 1
+}
+
+guard_pacman() {   # guard_pacman <what is asked> <force 0|1>: 0 goes on; 4 is a refusal, with its reason said
+    local why
+    why=$(pacman_busy) || return 0
+    if [ "$2" -eq 1 ]; then warn "$1: a package transaction runs ($why): going on, because of --force"; return 0; fi
+    warn "$1 refused: a package transaction runs ($why). A shell started in the middle of it can load a half-replaced Qt. Wait for it to end, or add --force."
+    [ -t 1 ] || hypr_notice 0 "lares $1 refused: a package transaction runs ($why). Try again when it is over."
+    return 4
+}
+
+guard_plan() {   # for a dry run: what the guard would do (stdout); 4 when it would refuse
+    local why
+    why=$(pacman_busy) || { echo "the restart guard: no package transaction runs"; return 0; }
+    if [ "$2" -eq 1 ]; then echo "the restart guard: a package transaction runs ($why); --force: it goes on"; return 0; fi
+    echo "WOULD REFUSE $1: a package transaction runs ($why); --force goes on"
+    return 4
+}
+
+trim_log() {   # the tool's own log is cut to its last 2000 lines once it passes 1 MB
+    local f=$PERSIST/lares.log
+    [ "$(stat -c %s "$f" 2> /dev/null || echo 0)" -gt 1048576 ] || return 0
+    tail -n 2000 "$f" > "$f.cut" && cat "$f.cut" > "$f"
+    rm -f "$f.cut"
+}
+
+take_lock() {   # take_lock <seconds to wait>: one deploy / start at a time
+    mkdir -p "$PERSIST" && exec 8> "$PERSIST/lock" && flock -w "$1" 8
+}
+
+# ==================================================================================================
+# Hyprland
+# ==================================================================================================
+# Every program a key's command talks to is bounded: a wedged compositor or bus must not make the rescue key wait for ever.
+# None inherits the lock.
+hypr() { timeout 15 "$HYPRCTL" "$@" 8>&- 9>&-; }
+quickshell_cli() { timeout 5 "$QUICKSHELL" "$@" 8>&- 9>&-; }
+
+hypr_reply_is_error() { local r=${1,,}; [[ $r =~ $HYPR_ERROR_RE ]]; }
+
+hypr_spawn() {   # hypr_spawn <shell command>: run it as the COMPOSITOR's child
+    local lua out rc
+    printf -v lua "$LUA_EXEC" "$(lua_escape "$1")"
+    out=$(hypr dispatch "$lua" 2>&1); rc=$?
+    log "hyprctl dispatch $lua -> rc=$rc${out:+ reply: $out}"
+    [ "$rc" -eq 0 ] && ! hypr_reply_is_error "$out"
+}
+
+hypr_answers() { hypr "${HYPR_MONITORS[@]}" 2> /dev/null | jq -e 'length > 0' > /dev/null 2>&1; }
+hypr_answers_on() {   # hypr_answers_on <signature>: that Hyprland instance answers (a short bound: it is a question, not a command)
+    command -v "$HYPRCTL" > /dev/null || return 0   # cannot ask: do not call it gone
+    HYPRLAND_INSTANCE_SIGNATURE=$1 timeout 3 "$HYPRCTL" "${HYPR_MONITORS[@]}" 8>&- 9>&- 2> /dev/null | jq -e 'length > 0' > /dev/null 2>&1
+}
+
+ensure_hypr_env() {   # a command run from a TTY (the rescue of a hung desktop): find the session's instance when it is not in the environment
+    local d best=""
+    [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && return 0
+    for d in "$RT"/hypr/*/; do
+        [ -S "${d}.socket.sock" ] || continue
+        if [ -z "$best" ] || [ "$d" -nt "$best" ]; then best=$d; fi
+    done
+    if [ -n "$best" ]; then
+        best=${best%/}
+        export HYPRLAND_INSTANCE_SIGNATURE=${best##*/}
+        log "no HYPRLAND_INSTANCE_SIGNATURE: took the newest instance, $HYPRLAND_INSTANCE_SIGNATURE"
+    fi
+}
+
+binds_rows() {   # the keys, cleaned: keys|what runs|option, @SNAP@ filled in with the deployed snapshot's `current`; the rescue key first
+    local keys what opt snap=$DEPLOY_DIR/current
+    [[ $snap =~ ^[A-Za-z0-9_./-]+$ ]] || snap=$(shquote "$snap")   # in a shell command: quote it when it needs it
+    printf '%s|exec:%s/tools/shell/lares restart|\n' "$RESCUE_KEYS" "$snap"
+    while IFS='|' read -r keys what opt; do
+        keys=$(trim "$keys")
+        [ -n "$keys" ] || continue
+        what=$(trim "$what")
+        printf '%s|%s|%s\n' "$keys" "${what//@SNAP@/$snap}" "$(trim "$opt")"
+    done <<< "$BINDS_TABLE"
+}
+
+shell_globals() {   # every quickshell: global the shell answers, one per line
+    binds_rows | sed -n 's/^[^|]*|global:\([^|]*\)|.*$/\1/p' | sort -u
+    printf '%s\n' $EXTRA_GLOBALS
+}
+
+layer_rules_rows() {   # the table, cleaned: rule name|namespace regexp
+    local name ns
+    while IFS='|' read -r name ns; do
+        name=$(trim "$name")
+        [ -n "$name" ] && printf '%s|%s\n' "$name" "$(trim "$ns")"
+    done <<< "$LAYER_RULES_TABLE"
+    return 0
+}
+
+# ==================================================================================================
+# the lock's snapshot (THE SNAPSHOTS)
+# ==================================================================================================
+lock_current_rev() { local r; r=$(readlink "$LOCK_DIR/current" 2> /dev/null) && printf '%s' "${r##*/}"; }
+
+lock_held() {   # 0 while a lock supervisor holds its lock file (the Lares lock, its relaunch or its hyprlock is up)
+    local h=$LOCK_DIR/current/tools/lockscreen/lares-lock-held
+    [ -x "$h" ] || h=$REPO/tools/lockscreen/lares-lock-held
+    [ -x "$h" ] && [ -n "$RT" ] && "$h" "$RT/lares-lock.lock"
+}
+
+lock_snapshot_ok() {   # lock_snapshot_ok <dir> <rev>: the files the lock needs are there and its scripts parse
+    local d=$1 f
+    for f in lock/shell.qml modules/lockscreen/lock/LockRoot.qml; do [ -f "$d/$f" ] || { warn "the lock's snapshot has no $f"; return 1; }; done
+    for f in lares-lock lares-lock-session lares-lock-held; do
+        [ -x "$d/tools/lockscreen/$f" ] || { warn "the lock's snapshot has no executable tools/lockscreen/$f"; return 1; }
+        bash -n "$d/tools/lockscreen/$f" 2> /dev/null || { warn "tools/lockscreen/$f does not parse in ${2:0:9}"; return 1; }
+    done
+}
+
+lock_snapshot() {   # lock_snapshot <rev>: $LOCK_DIR/<commit> (once per commit) and `current` pointed at it; never while a lock is up
+    local rev dir tmp n prev x
+    rev=$(git -C "$REPO" rev-parse -q --verify "$1^{commit}") || { warn "the lock: $REPO has no $1: no snapshot"; return 1; }
+    prev=$(lock_current_rev)
+    if lock_held; then
+        say "      the lock: a lock is up, so its snapshot stays at ${prev:0:9} (the next deploy takes ${rev:0:9})"
+        return 0
+    fi
+    dir=$LOCK_DIR/$rev
+    if [ ! -e "$dir/.complete" ]; then
+        mkdir -p "$LOCK_DIR" || return 1
+        tmp=$(mktemp -d "$LOCK_DIR/.new.XXXXXX") || return 1
+        if ! git -C "$REPO" archive --format=tar "$rev" -- "${LOCK_SNAPSHOT_PATHS[@]}" 2> "$tmp.err" | tar -x -C "$tmp" 2>> "$tmp.err"; then
+            warn "the lock: git archive of ${rev:0:9} failed: $(head -c 300 "$tmp.err")"
+            rm -rf "$tmp" "$tmp.err"; return 1
+        fi
+        rm -f "$tmp.err"
+        lock_snapshot_ok "$tmp" "$rev" || { rm -rf "$tmp"; return 1; }
+        : > "$tmp/.complete"
+        rm -rf "$dir"
+        mv -T "$tmp" "$dir" || { rm -rf "$tmp"; warn "the lock: could not place the snapshot at $dir"; return 1; }
+    fi
+    # your own configs, linked again on every pass: one made since this commit's snapshot counts at once
+    for n in lockscreen locale; do   # <name>.jsonc and <name>.json alike, in the OLD place (ConfigFile still reads it)
+        for x in jsonc json; do
+            if [ -e "$LARES_CONFIG_DIR/$n.$x" ]; then ln -sfn "$LARES_CONFIG_DIR/$n.$x" "$dir/$n.$x"; else rm -f "$dir/$n.$x"; fi
+        done
+    done
+    link_config_dir "$dir"
+    place_shims "$dir" lock
+    if ! { ln -sfn "$rev" "$LOCK_DIR/.current.new" && mv -T "$LOCK_DIR/.current.new" "$LOCK_DIR/current"; }; then
+        warn "the lock: could not point $LOCK_DIR/current at ${rev:0:9}"; return 1
+    fi
+    for n in "$LOCK_DIR"/*; do   # keep this one and the one before: a lock that started from it a moment ago still reads it
+        n=${n##*/}
+        [[ $n =~ ^[0-9a-f]{40}$ ]] || continue
+        [ "$n" = "$rev" ] || [ "$n" = "$prev" ] || rm -rf "${LOCK_DIR:?}/$n"
+    done
+    rm -rf "$LOCK_DIR"/.new.*
+    if [ "$prev" = "$rev" ]; then say "      the lock: snapshot ${rev:0:9}, unchanged"
+    else say "      the lock: snapshot ${rev:0:9}${prev:+ (was ${prev:0:9})} in $LOCK_DIR"; fi
+    lock_warm
+}
+
+lock_warm() {   # the driver's shader cache for the veils, before the first lock: the snapshot's own warmer, --if-stale
+    local w=$LOCK_DIR/current/tools/lockscreen/lares-lock-warm
+    [ -x "$w" ] || return 0
+    # A veil's first frame compiles its shaders: cold, keycaps' took 1.7-1.8 s, and the lock shows the bare blurred desktop until
+    # it lands. The supervisor warms after every UNLOCK, so the first lock of a machine that never warmed -- or the first after a
+    # Mesa update or a changed veil -- is cold. Detached, niced, no stdio (a detached child that keeps a pipe dies of SIGPIPE);
+    # ~15 ms when the stamp matches.
+    setsid -f "$w" --if-stale < /dev/null > /dev/null 2>&1 8>&- 9>&-
+    log "the lock: $w --if-stale started"
+}
+
+# ==================================================================================================
+# a .qmlls.ini a preview set aside and did not give back
+# ==================================================================================================
+# `preview` moves the root's .qmlls.ini aside while its quickshell runs (lares-lib.sh says why) and keeps it in $QMLLS_DIR, a
+# persistent directory, with a record of whose it is. A preview that ends without giving it back -- a reboot, a kill -9 -- leaves
+# the root without its link, so every command but the pure queries first gives back what it finds there: the saved link as it
+# was; when the link is gone too, the one HEAD tracks. A .qmlls.ini a quickshell has made in the root since STAYS (a live one)
+# and the saved one is dropped. A preview that still runs owns its aside (`owner=preview:<pid>`): left alone while that pid lives.
+qmlls_recover() {   # qmlls_recover act|plan: puts it back (plan: only says what it would do)
+    local plan=0 root owner pid saved=$QMLLS_DIR/qmlls.ini.saved target
+    [ "$1" = plan ] && plan=1
+    [ -e "$QMLLS_DIR/record" ] || [ -L "$saved" ] || [ -e "$saved" ] || return 0
+    root=$(qmlls_record_get "$QMLLS_DIR" root); [ -n "$root" ] || root=$REPO
+    owner=$(qmlls_record_get "$QMLLS_DIR" owner)
+    if [[ $owner == preview:* ]]; then
+        pid=${owner#preview:}
+        if pid_alive "$pid" && argv_runs_lares "$pid"; then return 0; fi
+    fi
+    if [ ! -d "$root" ]; then
+        if [ "$plan" -eq 1 ]; then echo "WOULD DROP the saved .qmlls.ini ($QMLLS_DIR): its root $root is gone"; return 0; fi
+        rm -f -- "$saved"; qmlls_forget "$QMLLS_DIR"
+        say "qmlls.ini   a saved link was dropped: the root it came from ($root) is gone"
+    elif qmlls_present "$root"; then
+        if [ "$plan" -eq 1 ]; then echo "WOULD DROP the saved .qmlls.ini ($QMLLS_DIR): a .qmlls.ini is in $root again"; return 0; fi
+        rm -f -- "$saved"; qmlls_forget "$QMLLS_DIR"
+        say "qmlls.ini   a link a ${owner%%:*} had set aside was dropped: the root has a .qmlls.ini again (a quickshell made it), which stays"
+    elif [ -L "$saved" ] || [ -e "$saved" ]; then
+        target=$(readlink "$saved" 2> /dev/null)
+        if [ "$plan" -eq 1 ]; then echo "WOULD PUT BACK the .qmlls.ini a ${owner%%:*} set aside${target:+ (-> $target)}"; return 0; fi
+        if qmlls_restore "$root" "$QMLLS_DIR"; then
+            say "qmlls.ini   put back${target:+ (-> $target)}: a ${owner%%:*} had set it aside and ended without giving it back"
+        else
+            problem "qmlls.ini   could not be put back in $root: the saved one stays in $QMLLS_DIR"
+        fi
+    else
+        if [ "$plan" -eq 1 ]; then echo "WOULD LINK .qmlls.ini again from HEAD: the saved link is gone"; return 0; fi
+        if target=$(qmlls_from_head "$root"); then
+            say "qmlls.ini   linked again from HEAD (-> $target): a ${owner%%:*} had set it aside, and its saved link is gone"
+        else
+            say "qmlls.ini   a record of a link set aside was dropped: the saved link is gone and HEAD tracks none"
+        fi
+        qmlls_forget "$QMLLS_DIR"
+    fi
+    return 0
+}
+
+# ==================================================================================================
+# the shell: its log, its pid, the names it owns
+# ==================================================================================================
+argv_joined() { local a; pid_argv a "$1"; printf '%s' "${a[*]}"; }
+argv_runs_lares() {   # 0 when one of the first three words of the pid's command line IS the lares tool (not a path that has "lares" in it: the state dir does)
+    local a w
+    pid_argv a "$1"
+    for w in "${a[@]:0:3}"; do [ "${w##*/}" = lares ] && return 0; done
+    return 1
+}
+shell_pid()       { local p; read -r p 2> /dev/null < "$RUN/pid" && printf '%s' "$p"; }
+supervisor_pid()  { local p; read -r p 2> /dev/null < "$RUN/supervise.pid" && printf '%s' "$p"; }
+supervisor_cmd_ok() { [[ $1 == *lares-supervise* || $1 == *qs-shell-supervise* ]]; }   # the name it runs under; the old one until a deploy replaces it
+supervisor_alive() {
+    local p a
+    p=$(supervisor_pid); [ -n "$p" ] && pid_alive "$p" || return 1
+    pid_argv a "$p"
+    supervisor_cmd_ok "${a[*]:0:3}"
+}
+supervisor_is_old() {   # 0 while the supervisor of this session was started under the OLD name (its bytes are the old snapshot's)
+    local p a
+    p=$(supervisor_pid); [ -n "$p" ] && pid_alive "$p" || return 1
+    pid_argv a "$p"
+    [[ ${a[*]:0:3} == *qs-shell-supervise* ]]
+}
+shell_log_size() { stat -c %s "$RUN/shell.log" 2> /dev/null || echo 0; }
+
+dbus_call() { gdbus call --timeout 5 --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method "org.freedesktop.DBus.$1" "$2" 2> /dev/null; }
+name_owner_pid() { dbus_call GetConnectionUnixProcessID "$1" | sed -nE 's/.*uint32 ([0-9]+).*/\1/p'; }
+name_owned_by() { [ "$(name_owner_pid "$1")" = "$2" ]; }
+
+shell_instance_pids() {   # the pids quickshell itself lists for the shell's path
+    quickshell_cli list --path "$SHELL_QML" --json 2> /dev/null | jq -r '.[].pid' 2> /dev/null
+}
+
+wait_ready() {   # wait_ready <log offset>: 0 once "LARES ready" has been printed after the offset
+    local off=$1 deadline
+    deadline=$(( $(now_ms) + $(to_ms "$READY_TIMEOUT") ))
+    while :; do
+        tail -c +"$(( off + 1 ))" "$RUN/shell.log" 2> /dev/null | grep -aqE '(LARES|QSSHELL) ready screens=' && return 0
+        supervisor_alive || { warn "the supervisor is gone"; return 1; }
+        [ "$(now_ms)" -ge "$deadline" ] && { warn "no 'LARES ready' within ${READY_TIMEOUT}s (see: lares log)"; return 1; }
+        sleep 0.1
+    done
+}
+
+ready_screens() { tail -c +"$(( $1 + 1 ))" "$RUN/shell.log" 2> /dev/null | grep -aoE '(LARES|QSSHELL) ready screens=[0-9]*' | tail -1 | sed 's/.*=//'; }
+
+verify_shell() {   # verify_shell <log offset>: pid cross-check, the notification name, the ipc ping
+    local pid found=0 p screens
+    pid=$(shell_pid)
+    if [ -z "$pid" ] || ! pid_alive "$pid"; then warn "the shell's pid is not alive"; return 1; fi
+    for p in $(shell_instance_pids); do [ "$p" = "$pid" ] && found=1; done
+    [ "$found" -eq 1 ] || { warn "quickshell does not list pid $pid for $SHELL_QML"; return 1; }
+    wait_until "$OWNER_WAIT" name_owned_by "$NOTIF_NAME" "$pid" \
+        || { warn "$NOTIF_NAME is not owned by the shell (pid $pid): owner is '$(name_owner_pid "$NOTIF_NAME")'"; return 1; }
+    screens=$(ready_screens "$1")
+    say "      ready: pid $pid, ${screens:-?} screen(s); $NOTIF_NAME is the shell's"
+    if [ "$(quickshell_cli ipc -p "$SHELL_QML" call shell ping 2> /dev/null)" = ok ]; then
+        say "      ipc: shell.ping() -> ok"
+    else
+        warn "ipc: shell.ping() did not answer ok"
+    fi
+}
+
+write_supervise_env() {
+    {
+        printf 'RUN=%q\nPERSIST=%q\nTOOL=%q\nSHELL_QML=%q\nDEPLOY_DIR=%q\n' "$RUN" "$PERSIST" "$SELF" "$SHELL_QML" "$DEPLOY_DIR"
+        printf 'QUICKSHELL=%q\nHYPRCTL=%q\n' "$(command -v "$QUICKSHELL")" "$(command -v "$HYPRCTL")"
+        printf 'RESTART_LIMIT=%q\nRESTART_WINDOW=%q\nBACKOFF=%q\nSLOW_BACKOFF=%q\nSLOW_MAX=%q\nSTABLE=%q\nSTOP_TIMEOUT=%q\n' \
+            "$RESTART_LIMIT" "$RESTART_WINDOW" "$BACKOFF" "$SLOW_BACKOFF" "$SLOW_MAX" "$STABLE" "$STOP_TIMEOUT"
+        printf 'LOG_MAX=%q\nLOGCAP_EVERY=%q\n' "${LARES_LOG_MAX:-104857600}" "${LARES_LOGCAP_EVERY:-10}"
+        printf 'export HYPRLAND_INSTANCE_SIGNATURE=%q XDG_RUNTIME_DIR=%q WAYLAND_DISPLAY=%q HOME=%q PATH=%q\n' \
+            "$HYPRLAND_INSTANCE_SIGNATURE" "$RT" "${WAYLAND_DISPLAY:-}" "$HOME" "$PATH"
+        [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && printf 'export DBUS_SESSION_BUS_ADDRESS=%q\n' "$DBUS_SESSION_BUS_ADDRESS"
+    } | atomic_write "$RUN/supervise.env"
+}
+
+update_running_pid() {   # the pid of a system update that is running (its marker says so and the pid lives); nothing otherwise
+    local pid
+    pid=$(jq -r 'select(.state == "running") | .pid // empty' "$UPDATE_MARKER" 2> /dev/null)
+    [[ $pid =~ ^[0-9]+$ ]] && pid_alive "$pid" && printf '%s' "$pid"
+}
+
+describe_pid() { local p=$1; if [ -n "$p" ] && pid_alive "$p"; then echo "pid $p ($(pid_comm "$p"))"; else echo "none"; fi; }
+
+shell_json_get() { jsonc_get "$SHELL_JSON" "$1"; }   # shell_json_get <top-level key>: that key of shell.jsonc
+jsonc_get() {   # jsonc_get <file> <top-level key>: that key of a hand-edited config (comments allowed, as the shell reads it) as JSON; nothing when absent or unreadable
+    [ -r "$1" ] || return 0
+    python3 - "$1" "$2" << 'PY' 2> /dev/null
+import json, sys
+src = open(sys.argv[1], encoding="utf-8").read()
+out, i, n, quoted = [], 0, len(src), False
+while i < n:
+    c = src[i]
+    if quoted:
+        out.append(c)
+        if c == "\\" and i + 1 < n:
+            i += 1
+            out.append(src[i])
+        elif c == '"':
+            quoted = False
+    elif c == '"':
+        quoted = True
+        out.append(c)
+    elif src.startswith("//", i):
+        j = src.find("\n", i)
+        i = n if j < 0 else j - 1
+    elif src.startswith("/*", i):
+        j = src.find("*/", i + 2)
+        i = n if j < 0 else j + 1
+    else:
+        out.append(c)
+    i += 1
+try:
+    value = json.loads("".join(out)).get(sys.argv[2])
+except Exception:
+    sys.exit(0)
+if value is not None:
+    print(json.dumps(value))
+PY
+}
+theme_apply() { local t; t=$(shell_json_get theme | jq -r '.apply // empty' 2> /dev/null); printf '%s' "${t:-shell}"; }
+
+# ---- the geoclue agent ------------------------------------------------------------------------------------------------------
+# The weather finds its place through geoclue (`where-am-i`), and geoclue refuses every client until an agent has registered for
+# the user. The demo agent asks you through a notification ("Allow '<app>' to access your location information?", Yes / No) for
+# each client geoclue.conf names no section for, at every start. `"geoclueAgent": true` in shell.jsonc makes `start` run it as
+# the compositor's child -- unless an agent is up already (its bus name has an owner, or a process of this session runs it): a
+# second AddAgent REPLACES the first and the first one's exit then drops the second, so an agent is never doubled.
+geoclue_wanted() { [ "$(shell_json_get geoclueAgent)" = true ]; }
+
+geoclue_agent_pids() {   # this session's processes that run the geoclue demo agent
+    local p a base=${GEOCLUE_AGENT##*/}
+    for p in $(session_pids_by_comm "${base:0:15}"); do
+        pid_argv a "$p"
+        if [ "${a[0]:-}" = "$GEOCLUE_AGENT" ] || [ "${a[1]:-}" = "$GEOCLUE_AGENT" ]; then echo "$p"; fi
+    done
+    return 0
+}
+
+geoclue_other_agent() {   # says who (one line) and returns 0 when an agent is up already
+    local p
+    p=$(geoclue_agent_pids | head -1)
+    if [ -n "$p" ]; then printf 'the demo agent runs (pid %s)' "$p"; return 0; fi
+    if dbus_call NameHasOwner "$GEOCLUE_BUS_NAME" | grep -q true; then printf '%s has an owner on the session bus' "$GEOCLUE_BUS_NAME"; return 0; fi
+    return 1
+}
+
+start_geoclue() {   # never a reason to fail `start`: without an agent the weather uses its saved places
+    local why p="" i
+    geoclue_wanted || return 0
+    if [ ! -x "$GEOCLUE_AGENT" ]; then warn "geoclue: shell.jsonc asks for the agent but $GEOCLUE_AGENT is not installed (pacman -S geoclue)"; return 0; fi
+    if why=$(geoclue_other_agent); then say "      geoclue: an agent is up already ($why): left as it is"; return 0; fi
+    hypr_spawn "$(shquote "$GEOCLUE_AGENT")" || { warn "geoclue: Hyprland would not start the agent"; return 0; }
+    for (( i = 0; i < 50; i++ )); do
+        p=$(geoclue_agent_pids | head -1)
+        [ -n "$p" ] && break
+        sleep 0.1
+    done
+    if [ -n "$p" ]; then say "      geoclue: the demo agent runs (pid $p), a child of the compositor"; else warn "geoclue: the agent did not come up"; fi
+}
+
+# ==================================================================================================
+# the deployed shell: its record in this session
+# ==================================================================================================
+dr_get() { jq -r "$1" "$DEPLOY_RT" 2> /dev/null; }
+dr_put() { local tmp="$DEPLOY_RT.tmp"; jq "$@" "$DEPLOY_RT" > "$tmp" && mv -f "$tmp" "$DEPLOY_RT"; }
+deployed_current_rev() { local r; r=$(readlink "$DEPLOY_DIR/current" 2> /dev/null) && printf '%s' "${r##*/}"; }
+snapshot_repo() {   # snapshot_repo <rev>: the repo that snapshot was taken from (its .complete says; else this tool's own, when it is a work tree)
+    local r
+    r=$(sed -n 's/^repo=//p' "$DEPLOY_DIR/$1/.complete" 2> /dev/null | head -1)
+    [ -n "$r" ] || r=$(jq -r '.repo // empty' "$OLD_DEPLOY_STATE/deploy.json" 2> /dev/null)
+    [ -n "$r" ] || { git -C "$REPO" rev-parse --git-dir > /dev/null 2>&1 && r=$REPO; }
+    printf '%s' "$r"
+}
+
+deployed_running() {   # the supervisor of THIS session lives: the runtime record names the session, the pid and its start time
+    local p s a
+    [ -e "$DEPLOY_RT" ] || return 1
+    [ "$(dr_get '.session.sig')" = "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || return 1
+    p=$(supervisor_pid); [ -n "$p" ] && pid_alive "$p" || return 1
+    s=$(dr_get '.session.supervisor.start // empty')
+    [ -z "$s" ] || [ "$(pid_start "$p")" = "$s" ] || return 1
+    pid_argv a "$p"
+    supervisor_cmd_ok "${a[*]:0:3}"
+}
+
+deployed_is_stale() {   # the runtime record names a session that is gone
+    local rec
+    [ -e "$DEPLOY_RT" ] || return 1
+    rec=$(dr_get '.session.sig // empty')
+    [ -n "$rec" ] || return 1
+    [ "$rec" != "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || return 1
+    supervisor_alive && return 1
+    hypr_answers_on "$rec" && return 1
+    return 0
+}
+
+deployed_stale_recover() {   # before every command but the pure queries: a record of a dead session's shell is cleared (a dry run only says)
+    local sig p c a
+    [ -n "$RT" ] && [ -d "$RT" ] || return 0
+    deployed_is_stale || return 0
+    sig=$(dr_get '.session.sig')
+    for a in "$@"; do
+        if [ "$a" = --dry-run ]; then echo "WOULD CLEAR the record of a shell of an earlier session (Hyprland $sig)"; return 0; fi
+    done
+    say "a shell of an EARLIER SESSION is still recorded (Hyprland $sig): that session is gone, its record is cleared"
+    while read -r p; do
+        [[ $p =~ ^[0-9]+$ ]] || continue
+        pid_alive "$p" || continue
+        c=$(pid_comm "$p")
+        case $c in quickshell|lares-supervis*|qs-shell-superv*) ;; *) continue ;; esac
+        pid_env_has "$p" "HYPRLAND_INSTANCE_SIGNATURE=$sig" || continue
+        if [ "$c" = quickshell ]; then stop_quickshell "$p" "$STOP_TIMEOUT"; else stop_pid "$p" "$c" "$STOP_TIMEOUT"; fi
+        say "      stopped $c (pid $p), which had outlived its session"
+    done < <(cat "$RUN/pid" "$RUN/supervise.pid" 2> /dev/null)
+    rm -f "$DEPLOY_RT" "$RUN/pid" "$RUN/supervise.pid" "$RUN/switch" "$RUN/stop"
+}
+
+# ==================================================================================================
+# the name change: the gate, the shims, the handover (THE NAME CHANGE in the header)
+# ==================================================================================================
+migrate_args() {
+    MIGRATE_ARGS=(--state "${XDG_STATE_HOME:-$HOME/.local/state}" --cache "${XDG_CACHE_HOME:-$HOME/.cache}" --data "${XDG_DATA_HOME:-$HOME/.local/share}"
+        --runtime "$RT" --home "$HOME" --config-home "${XDG_CONFIG_HOME:-$HOME/.config}" --bindir "$BIN_DIR" --repo "$REPO" --tool "$SELF"
+        --hypr "$HYPR_CONF_DIR" --root-prefix "$ROOT_PREFIX")
+}
+
+migration_pending() {   # says what is still only under its old name (one per line) and returns 0 while `migrate-name` has not run
+    local out
+    migrate_args
+    if out=$(python3 "$MIGRATE" pending "${MIGRATE_ARGS[@]}" 2>&1); then return 1; fi
+    printf '%s' "$out"
+}
+
+migration_gate() {   # migration_gate <what is asked>: 0 goes on; 4 is a refusal (the same exit status as the restart guard's), the reason said
+    local why
+    why=$(migration_pending) || return 0
+    warn "$1 refused: the project's name is Lares now and \`lares migrate-name\` has not run: a snapshot taken before it would start a shell on empty state. Still only under the old name:"
+    printf '        %s\n' "${why//$'\n'/$'\n        '}" >&2
+    return 4
+}
+
+# A SHIM is one line at an OLD entry-point name, inside a snapshot: it runs the new name beside it. Placed for exactly the names a line of
+# yours (or an installed old root file) still runs; removed again once nothing names them.
+SHIM_MARK='a shim of the OLD name'
+shim_new() { case $1 in qs-shell) echo lares ;; qs-lock-session) echo lares-lock-session ;; qs-lock-held) echo lares-lock-held ;; qs-lock-warm) echo lares-lock-warm ;; esac; }
+shim_dir() { case $1:$2 in shell:qs-shell) echo tools/shell ;; lock:qs-lock-*) echo tools/lockscreen ;; esac; }
+place_shims() {   # place_shims <snapshot dir> shell|lock
+    local dir=$1 kind=$2 n sub new f
+    local -a want=() placed=()
+    migrate_args
+    mapfile -t want < <(python3 "$MIGRATE" shims "${MIGRATE_ARGS[@]}" 2> /dev/null)
+    for n in qs-shell qs-lock-session qs-lock-held qs-lock-warm; do   # a shim an earlier pass placed here and nothing needs now goes
+        sub=$(shim_dir "$kind" "$n"); [ -n "$sub" ] || continue
+        f=$dir/$sub/$n
+        if [ -f "$f" ] && grep -qF "$SHIM_MARK" "$f" 2> /dev/null; then rm -f "$f"; fi
+    done
+    for n in "${want[@]}"; do
+        sub=$(shim_dir "$kind" "$n"); [ -n "$sub" ] || continue
+        new=$(shim_new "$n")
+        [ -x "$dir/$sub/$new" ] || continue
+        [ -e "$dir/$sub/$n" ] && continue   # never over a real file of that name
+        printf '#!/bin/sh\n# %s (lares deploy placed it: a line of yours or an installed root file still runs %s; the name to use now is %s)\nexec "$(dirname "$(readlink -f "$0")")/%s" "$@"\n' \
+            "$SHIM_MARK" "$n" "$new" "$new" > "$dir/$sub/$n.tmp" && chmod 755 "$dir/$sub/$n.tmp" && mv -f "$dir/$sub/$n.tmp" "$dir/$sub/$n" && placed+=("$n")
+    done
+    if [ "${#placed[@]}" -gt 0 ]; then
+        say "      shims of the old name placed in the $kind snapshot: ${placed[*]} -- a line of yours or an installed root file still runs them ('lares binds' / 'lares setup' show the lines to use)"
+    fi
+}
+
+handover_supervisor() {   # handover_supervisor <sha>: the supervisor of this session runs under the OLD name: stop it (its shell stops with it), `current` -> sha, start the new one
+    local sha=$1 p here
+    here=$DEPLOY_DIR/$sha/tools/shell
+    [ -x "$here/lares" ] || { warn "deploy: the snapshot has no $here/lares: the old supervisor is left running"; return 1; }   # BEFORE it is stopped: its shell goes with it
+    p=$(supervisor_pid)
+    say "      the supervisor of this session runs under the old name (pid $p): it is replaced (stop, switch, start) -- quickshell lists a shell by the path it was given, and the old supervisor gives the old path"
+    : > "$RUN/stop"
+    kill -TERM "$p" 2> /dev/null
+    wait_until $(( STOP_TIMEOUT + 10 )) pid_gone "$p" || { kill -KILL "$p" 2> /dev/null; wait_until 3 pid_gone "$p" || { warn "the old supervisor (pid $p) did not stop"; return 1; }; }
+    rm -f "$RUN/stop" "$RUN/switch"
+    deploy_point_current "$sha" || { warn "deploy: could not point $DEPLOY_DIR/current at ${sha:0:9}"; return 1; }
+    say "      $DEPLOY_DIR/current -> ${sha:0:9}"
+    here=$DEPLOY_DIR/current/tools/shell
+    [ -x "$here/lares" ] || { warn "the snapshot has no $here/lares"; return 1; }
+    exec 8>&-   # the deploy's lock: the snapshot's `start` takes it
+    "$here/lares" start
+}
+
+# ==================================================================================================
+# deploy (THE SNAPSHOTS)
+# ==================================================================================================
+deploy_snapshot_ok() {   # deploy_snapshot_ok <dir>: what the shell, its autostart line and its keys run is there, and speaks this protocol
+    local d=$1 f
+    for f in shell.qml tools/shell/lares tools/shell/lares-supervise tools/shell/lares-lib.sh tools/osd/shot.sh; do
+        [ -f "$d/$f" ] || { warn "deploy: the snapshot has no $f"; return 1; }
+    done
+    for f in lares lares-supervise lares-lib.sh; do
+        bash -n "$d/tools/shell/$f" 2> /dev/null || { warn "deploy: the snapshot's tools/shell/$f does not parse"; return 1; }
+    done
+    grep -q "^LARES_DEPLOY_PROTOCOL=[0-9]" "$d/tools/shell/lares" \
+        || { warn "deploy: that commit's tools/shell/lares has no deployed mode (no LARES_DEPLOY_PROTOCOL): its 'start' would not start the shell at login"; return 1; }
+}
+
+deploy_snapshot() {   # deploy_snapshot <sha>: $DEPLOY_DIR/<sha>, once per commit (git archive: never the working tree), your locale linked into it
+    local sha=$1 dir=$DEPLOY_DIR/$1 tmp x
+    if [ ! -e "$dir/.complete" ]; then
+        mkdir -p "$DEPLOY_DIR" || return 1
+        tmp=$(mktemp -d "$DEPLOY_DIR/.new.XXXXXX") || return 1
+        if ! git -C "$REPO" archive --format=tar "$sha" -- . ':(exclude).qmlls.ini' ':(exclude)tools/dev' 2> "$tmp.err" | tar -x -C "$tmp" 2>> "$tmp.err"; then
+            warn "deploy: git archive of ${sha:0:9} failed: $(head -c 300 "$tmp.err")"
+            rm -rf "$tmp" "$tmp.err"; return 1
+        fi
+        rm -f "$tmp.err"
+        deploy_snapshot_ok "$tmp" || { rm -rf "$tmp"; return 1; }
+        printf 'repo=%s\n' "$REPO" > "$tmp/.complete"
+        rm -rf "$dir"
+        mv -T "$tmp" "$dir" || { rm -rf "$tmp"; warn "deploy: could not place the snapshot at $dir"; return 1; }
+        say "      snapshot of ${sha:0:9} in $dir"
+    else
+        say "      snapshot of ${sha:0:9} is there already"
+    fi
+    for x in jsonc json; do   # a locale file still in the OLD place (LocaleConfig reads <shellDir>/config/locale.jsonc, then this)
+        if [ -e "$LARES_CONFIG_DIR/locale.$x" ]; then ln -sfn "$LARES_CONFIG_DIR/locale.$x" "$dir/locale.$x"; else rm -f "$dir/locale.$x"; fi
+    done
+    link_config_dir "$dir"
+    place_shims "$dir" shell
+}
+
+# link_config_dir <snapshot>: your config/ folder, linked into a snapshot again each time (what the shell and the lock read by
+# their own root, RepoRoot: config/locale.jsonc, config/lockscreen.jsonc, the mockups' config/shell.jsonc). git never has a
+# config/ (.gitignore), so the snapshot has none of its own to stand in the way.
+link_config_dir() {
+    if [ -d "$LARES_CONFIG_DIR/config" ]; then ln -sfn "$LARES_CONFIG_DIR/config" "$1/config"; elif [ -L "$1/config" ]; then rm -f "$1/config"; fi
+}
+
+deploy_point_current() { ln -sfn "$1" "$DEPLOY_DIR/.current.new" && mv -T "$DEPLOY_DIR/.current.new" "$DEPLOY_DIR/current"; }
+
+deploy_prune() {   # deploy_prune <sha to keep>...: every other snapshot goes (the caller names current, the one before, the running supervisor's)
+    local n k keep=" $* "
+    for n in "$DEPLOY_DIR"/*; do
+        k=${n##*/}
+        [[ $k =~ ^[0-9a-f]{40}$ ]] || continue
+        [[ $keep == *" $k "* ]] || { rm -rf "${DEPLOY_DIR:?}/$k"; log "deploy: snapshot $k removed"; }
+    done
+    rm -rf "$DEPLOY_DIR"/.new.*
+}
+
+deploy_switch() {   # deploy_switch <sha>: `current` -> sha. A shell running in this session is STOPPED, switched and started again by
+    # its supervisor (in that order: the shell's shellDir is the link path, and a lazily loaded file read across the switch would mix two commits)
+    local sha=$1 off p
+    if supervisor_is_old; then handover_supervisor "$sha"; return; fi
+    if ! deployed_running; then
+        deploy_point_current "$sha" || { warn "deploy: could not point $DEPLOY_DIR/current at ${sha:0:9}"; return 1; }
+        say "      $DEPLOY_DIR/current -> ${sha:0:9}"
+        return 0
+    fi
+    SHELL_QML=$DEPLOYED_QML
+    printf '%s\n' "$sha" > "$RUN/switch" || return 1
+    off=$(shell_log_size)
+    kill -USR1 "$(supervisor_pid)" || { warn "deploy: could not signal the supervisor (pid $(supervisor_pid))"; return 1; }
+    say "      the shell is switched to ${sha:0:9} by its supervisor (stop, switch, start)"
+    wait_ready "$off" || return 1
+    [ "$(deployed_current_rev)" = "$sha" ] || { warn "deploy: the shell came back, but current is $(deployed_current_rev), not ${sha:0:9}"; return 1; }
+    p=$(shell_pid)
+    dr_put --arg r "$sha" --argjson p "${p:-0}" --arg s "$(pid_start "${p:-0}")" '.rev = $r | .session.shell = {pid: $p, start: $s}'
+    verify_shell "$off"
+}
+
+deploy_dirty_note() {   # deploy_dirty_note <sha>: a deploy takes a COMMIT; tracked files that differ from it in the working tree are not in it
+    local n
+    [ "$1" = "$(git -C "$REPO" rev-parse -q --verify HEAD 2> /dev/null)" ] || return 0
+    n=$(git -C "$REPO" status --porcelain --untracked-files=no 2> /dev/null | grep -vc ' \.qmlls\.ini$' || true)
+    [ "${n:-0}" -gt 0 ] && echo "note: $n tracked file(s) of $REPO differ from HEAD: a deploy takes the COMMIT, so they are not in it (commit them first)"
+    return 0
+}
+
+ime_note() {   # ime_note <previous rev> <new rev>: lares-ime is built into the cache, never deployed: say so when its source changed
+    local prev=$1 sha=$2
+    [ -n "$prev" ] && [ "$prev" != "$sha" ] || return 0
+    [ -n "$(git -C "$REPO" ls-tree "$sha" -- tools/stt/ime 2> /dev/null)" ] || return 0
+    git -C "$REPO" cat-file -e "$prev^{commit}" 2> /dev/null || return 0
+    git -C "$REPO" diff --quiet "$prev" "$sha" -- tools/stt/ime 2> /dev/null && return 0
+    echo "note: lares-ime's source changed (tools/stt/ime): the dictation's input method is BUILT, not deployed -- rebuild it:"
+    echo "      $DEPLOY_DIR/$sha/tools/stt/ime/build.sh    (writes ${IME_BIN/#$HOME/\~})"
+}
+
+marks_note() {   # one line while an earlier deploy's marks and record are still there
+    [ -e "$OLD_DEPLOY_STATE/record.json" ] || [ -e "$OLD_DEPLOY_STATE/deploy.json" ] || return 0
+    echo "note: some of your config files still carry an earlier deploy's marks: 'lares cleanup-marks' takes them out (once; it shows the diff first)"
+}
+
+deploy_dry_run() {   # deploy_dry_run <sha> <force>: 0, or 4 when the restart guard would refuse
+    local sha=$1 force=$2 guarded=0 cur why
+    echo "deploy --dry-run: ${sha:0:9} \"$(git -C "$REPO" log -1 --format=%s "$sha")\" from $REPO"
+    deploy_dirty_note "$sha"
+    guard_plan "deploy" "$force" || guarded=1
+    if why=$(migration_pending); then
+        echo "WOULD REFUSE deploy: the project's name is Lares now and 'lares migrate-name' has not run; still only under the old name:"
+        printf '    %s\n' "${why//$'\n'/$'\n    '}"
+        guarded=1
+    fi
+    if [ -e "$DEPLOY_DIR/$sha/.complete" ]; then echo "snapshot ${sha:0:9} is there already ($DEPLOY_DIR/$sha)"
+    else echo "WOULD SNAPSHOT ${sha:0:9} into $DEPLOY_DIR/$sha (git archive of the commit, without .qmlls.ini and tools/dev; your config/ linked)"; fi
+    if lock_held; then echo "the lock: a lock is up, so its snapshot stays at $(lock_current_rev | cut -c1-9)"
+    elif [ "$(lock_current_rev)" = "$sha" ]; then echo "the lock's snapshot is ${sha:0:9} already"
+    else echo "WOULD SNAPSHOT ${sha:0:9} for the lock in $LOCK_DIR"; fi
+    cur=$(deployed_current_rev)
+    if [ "$cur" = "$sha" ]; then echo "current is ${sha:0:9} already"
+    elif deployed_running; then echo "WOULD SWITCH the running shell to ${sha:0:9} (its supervisor: stop, current -> ${sha:0:9}, start)"
+    else echo "WOULD POINT $DEPLOY_DIR/current at ${sha:0:9}${cur:+ (was ${cur:0:9})}"; fi
+    ime_note "$cur" "$sha"
+    echo "no config file is read or written by a deploy ('lares binds' checks them)"
+    echo "nothing was changed"
+    [ "$guarded" -eq 0 ] || return 4
+}
+
+deploy_cmd() {
+    local dry=0 force=0 rev=HEAD a sha subject prev
+    for a in "$@"; do
+        case $a in
+            --dry-run) dry=1 ;;
+            --force) force=1 ;;
+            -*) usage_error "deploy [REV] [--dry-run] [--force]" ;;
+            *) rev=$a ;;
+        esac
+    done
+    a=$(git -C "$REPO" rev-parse --show-toplevel 2> /dev/null) && [ "$(cd "$a" && pwd -P)" = "$REPO" ] \
+        || die "deploy: $REPO is not the top of a git work tree (run the repo's lares, not a snapshot's)"
+    sha=$(git -C "$REPO" rev-parse -q --verify "$rev^{commit}") || die "deploy: no commit '$rev' in $REPO"
+    subject=$(git -C "$REPO" log -1 --format=%s "$sha")
+    if [ "$dry" -eq 1 ]; then deploy_dry_run "$sha" "$force"; return; fi
+    migration_gate "deploy" || exit 4
+    guard_pacman "deploy" "$force" || exit 4
+    take_lock 120 || die "another lares command has held the lock ($PERSIST/lock) for 2 minutes"
+    trim_log
+    say "deploy ${sha:0:9} \"$subject\" from $REPO"
+    deploy_dirty_note "$sha"
+    prev=$(deployed_current_rev)
+    printf '[1/4] %s\n' "the shell's snapshot"
+    deploy_snapshot "$sha" || die "deploy: no snapshot: nothing else was done"
+    printf '[2/4] %s\n' "the lock's snapshot"
+    if ! lock_snapshot "$sha" && [ -z "$(lock_current_rev)" ]; then
+        die "deploy: the lock has no snapshot at all, and your config locks with it: nothing else was done"
+    fi
+    printf '[3/4] %s\n' "current"
+    if [ "$prev" != "$sha" ] || { deployed_running && [ "$(dr_get .rev)" != "$sha" ]; }; then
+        deploy_switch "$sha" || problem "deploy: the shell did not come back on ${sha:0:9}: see lares status / lares log"
+    else
+        say "      current is ${sha:0:9} already"
+    fi
+    printf '[4/4] %s\n' "older snapshots"
+    deploy_prune "$sha" "$prev" "$(dr_get '.supervisor_rev // empty')"
+    echo
+    if deployed_running; then say "deployed ${sha:0:9}: the shell runs from it (pid $(shell_pid))"
+    else say "deployed ${sha:0:9}: no shell runs in this session -- 'lares start' starts it (autostart.lua runs that at login)"; fi
+    ime_note "$prev" "$sha"
+    config_check --summary | sed 's/^/config: /'
+    marks_note
+    [ "$PROBLEMS" -eq 0 ]
+}
+
+# ==================================================================================================
+# start, restart, the former fallback
+# ==================================================================================================
+start_cmd() {   # what autostart.lua runs at login
+    local force=0 a off waited=0 why here p sp
+    for a in "$@"; do
+        case $a in --force) force=1 ;; *) usage_error "start [--force]" ;; esac
+    done
+    [ -e "$DEPLOYED_QML" ] || die "start: nothing is deployed ($DEPLOYED_QML is not there): lares deploy first"
+    here=$(readlink -f "$DEPLOY_DIR/current/tools/shell")
+    if [ "$SELF_DIR" != "$here" ] && [ -x "$here/lares" ]; then   # the supervisor and the tool it calls are a commit's, never the working tree's
+        exec "$here/lares" start "$@"
+    fi
+    SHELL_QML=$DEPLOYED_QML
+    take_lock 120 || die "another lares command has held the lock ($PERSIST/lock) for 2 minutes"
+    if deployed_running; then say "the shell runs already (pid $(shell_pid))"; return 0; fi
+    { [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; } || die "start: run it inside the Hyprland session (WAYLAND_DISPLAY / HYPRLAND_INSTANCE_SIGNATURE are not set)"
+    wait_until 15 hypr_answers || die "start: Hyprland does not answer 'hyprctl -j monitors'"
+    while [ "$force" -eq 0 ] && why=$(pacman_busy); do   # a login in the middle of an update: the shell would load a half-replaced Qt
+        [ "$waited" -eq 0 ] && say "start: a package transaction runs ($why): the shell starts when it is over (--force does not wait)"
+        if [ "$waited" -ge "$START_WAIT" ]; then warn "start: the transaction still runs after ${START_WAIT}s: starting anyway"; break; fi
+        sleep 2; waited=$(( waited + 2 ))
+    done
+    ( umask 077; mkdir -p "$RUN" && : >> "$RUN/shell.log" ) || die "start: could not make $RUN"
+    rm -f "$RUN/stop" "$RUN/switch"
+    write_supervise_env || die "start: could not write $RUN/supervise.env"
+    off=$(shell_log_size)
+    hypr_spawn "$(shquote "$SELF_DIR/lares-supervise") --run $(shquote "$RUN")" || die "start: Hyprland would not start the supervisor"
+    wait_until 10 supervisor_alive || die "start: the supervisor did not come up (see $PERSIST/lares.log)"
+    sp=$(supervisor_pid)
+    jq -n --arg sig "${HYPRLAND_INSTANCE_SIGNATURE:-}" --arg wl "${WAYLAND_DISPLAY:-}" --argjson sp "$sp" --arg sps "$(pid_start "$sp")" \
+        --arg rev "$(deployed_current_rev)" --arg srev "$(basename "${SELF_DIR%/tools/shell}")" --argjson t "$(now_s)" \
+        '{version: 1, state: "running", started: $t, rev: $rev, supervisor_rev: $srev,
+          session: {sig: $sig, wayland: $wl, supervisor: {pid: $sp, start: $sps}, shell: null}}' > "$DEPLOY_RT" \
+        || die "start: could not write $DEPLOY_RT"
+    say "      supervisor pid $sp (snapshot $(deployed_current_rev | cut -c1-9)), started by the compositor"
+    start_geoclue      # AFTER the supervisor is on its way: the agent's wait (up to 5 s) was a serial wait in front of the shell's start
+    wait_ready "$off" || { warn "start: the shell did not say it is ready (lares log); its supervisor keeps trying"; return 1; }
+    p=$(shell_pid)
+    dr_put --argjson p "${p:-0}" --arg s "$(pid_start "${p:-0}")" '.session.shell = {pid: $p, start: $s}'
+    verify_shell "$off" || return 1
+    say "the shell runs (pid $p, $(deployed_current_rev | cut -c1-9))"
+}
+
+deployed_restart() {   # deployed_restart <force>: the supervisor stops the shell and starts it again from `current`
+    local off force=$1 p
+    SHELL_QML=$DEPLOYED_QML
+    guard_pacman "restart" "$force" || return 4
+    off=$(shell_log_size)
+    kill -USR1 "$(supervisor_pid)" || die "could not signal the supervisor"
+    say "restart asked of the supervisor (pid $(supervisor_pid))"
+    wait_ready "$off" || return 1
+    p=$(shell_pid)
+    dr_put --argjson p "${p:-0}" --arg s "$(pid_start "${p:-0}")" '.session.shell = {pid: $p, start: $s}'
+    verify_shell "$off" || return 1
+    say "the shell is back (pid $p)"
+}
+
+restart_cmd() {   # restart [--force]: the rescue key's command; with no supervisor in this session it starts one
+    local force=0 a
+    for a in "$@"; do
+        case $a in
+            --force) force=1 ;;
+            *) usage_error "restart [--force]" ;;
+        esac
+    done
+    trap '' PIPE   # a key runs this with whatever stdout the compositor gave it: a closed pipe must not end it half way
+    ensure_hypr_env
+    [ -e "$DEPLOYED_QML" ] || die "restart: nothing is deployed ($DEPLOYED_QML is not there): lares deploy first"
+    if supervisor_is_old; then   # its shell runs under the OLD path: quickshell would not list it under the new one; a deploy replaces the supervisor
+        warn "restart: the supervisor of this session runs under the old name: 'lares deploy' replaces it (a key that still runs the old qs-shell restarts it meanwhile)"
+        return 1
+    fi
+    if deployed_running; then deployed_restart "$force"; return; fi
+    guard_pacman "restart" "$force" || return 4
+    say "restart: no supervisor runs in this session: starting the shell"
+    if [ "$force" -eq 1 ]; then start_cmd --force; else start_cmd; fi
+}
+
+fallback_cmd() {   # FORMER COMMAND (the header): an older keybinds.lua runs it from Super+Shift+F12. The shell is restarted, and the line called stale
+    trap '' PIPE
+    warn "'lares fallback' is gone: the shell is restarted instead. The line that ran it is stale: 'lares binds' shows the one to use"
+    hypr_notice 0 "Super+Shift+F12 ran 'lares fallback', which is gone: the shell was restarted. Update the bind: lares binds"
+    restart_cmd
+}
+
+# ==================================================================================================
+# status, log, preview, apply
+# ==================================================================================================
+status_cmd() {
+    local bad=0 cur repo head pid owner listed lk upd at subject last
+    cur=$(deployed_current_rev)
+    if [ -z "$cur" ]; then
+        echo "nothing is deployed ($DEPLOY_DIR/current): lares deploy"
+        migration_pending > /dev/null && echo "            the project's name is Lares now and 'lares migrate-name' has not run: deploy refuses until it has"
+        return 3
+    fi
+    SHELL_QML=$DEPLOYED_QML
+    repo=$(snapshot_repo "$cur")
+    at=$(date -d "@$(stat -c %Y "$DEPLOY_DIR/current" 2> /dev/null || echo 0)" '+%F %T')
+    subject=$(git -C "$repo" log -1 --format=%s "$cur" 2> /dev/null)
+    echo "deployed    ${cur:0:9}${subject:+ \"$subject\"} since $at${repo:+ (from $repo)}"
+    if [ ! -e "$DEPLOY_DIR/$cur/.complete" ]; then echo "            $DEPLOY_DIR/current is BROKEN (-> ${cur})"; bad=1; fi
+    head=$(git -C "$repo" rev-parse -q --verify HEAD 2> /dev/null)
+    if [ -n "$head" ] && [ "$head" != "$cur" ]; then echo "            HEAD is ${head:0:9}: 'lares deploy' takes it"; fi
+    if deployed_running; then
+        pid=$(shell_pid)
+        if supervisor_is_old; then echo "supervisor  runs under the OLD name (qs-shell-supervise): 'lares deploy' replaces it"; fi
+        if [ -n "$pid" ] && pid_alive "$pid"; then echo "shell       pid $pid alive (supervisor $(supervisor_pid))"; else echo "shell       NOT RUNNING (the supervisor $(supervisor_pid) restarts it)"; bad=1; fi
+        listed=$(shell_instance_pids | paste -sd, -)
+        [[ ",$listed," == *",$pid,"* ]] || { echo "list        quickshell lists '${listed:-nothing}' for $SHELL_QML -- NOT the shell's pid"; bad=1; }
+        if [ "$(quickshell_cli ipc -p "$SHELL_QML" call shell ping 2> /dev/null)" = ok ]; then echo "ipc         shell.ping() -> ok"; else echo "ipc         no answer"; bad=1; fi
+        owner=$(name_owner_pid "$NOTIF_NAME")
+        if [ -n "$owner" ] && [ "$owner" = "$pid" ]; then echo "notify      $NOTIF_NAME is the shell's"; else echo "notify      $NOTIF_NAME owner: $(describe_pid "$owner") -- NOT the shell"; bad=1; fi
+    else
+        echo "shell       NOT RUNNING in this session ('lares start')"; bad=1
+    fi
+    lk=$(lock_current_rev)
+    if [ -z "$lk" ]; then echo "lock        NO SNAPSHOT: the lock cannot start ('lares deploy' makes it)"; bad=1
+    else echo "lock        snapshot ${lk:0:9}$(lock_held && echo ", a lock is UP")"; fi
+    upd=$(update_running_pid)
+    [ -z "$upd" ] || echo "update      system update running (pid $upd)"
+    marks_note
+    if [ -e "$RUN/shell.log" ]; then
+        echo "log         last 5 lines of $RUN/shell.log:"
+        tail -n 5 "$RUN/shell.log" 2> /dev/null | sed 's/\x1b\[[0-9;]*m//g; s/^/              /'
+    fi
+    last=$(ls -1dt "${PERSIST%/*}/stalls"/*/ 2> /dev/null | head -1)
+    [ -z "$last" ] || echo "stall       the watchdog restarted a frozen shell: last evidence ${last%/} ('lares log stalls')"
+    return "$bad"
+}
+
+show_log() {
+    local which=${1:-shell} f
+    case $which in
+        shell) f=$RUN/shell.log ;;
+        supervisor) f=$RUN/supervise.log ;;
+        tool) f=$PERSIST/lares.log ;;
+        last) f=${PERSIST%/*}/shell-last.log ;;
+        stalls) ls -1dt "${PERSIST%/*}/stalls"/*/ 2> /dev/null || die "no stalls: the watchdog never restarted a frozen shell"; return 0 ;;
+        *) usage_error "log: shell, supervisor, tool, last or stalls" ;;
+    esac
+    [ -e "$f" ] || die "no $f"
+    exec tail -n 40 -f "$f"
+}
+
+PV_LOCK="" PV_MOVED=0
+preview_cleanup() {   # the nested session goes down; a .qmlls.ini set aside for the preview goes back
+    [ -z "$PV_LOCK" ] || "$PV_LOCK" down
+    if [ "$PV_MOVED" -eq 1 ]; then
+        qmlls_restore "$REPO" "$QMLLS_DIR" || warn "the .qmlls.ini of $REPO is saved in $QMLLS_DIR: put it back by hand (or run any lares command)"
+    fi
+}
+
+preview() {
+    local dry=0 force=0 a lock=$REPO/tools/dev/lock_env.sh
+    for a in "$@"; do
+        case $a in
+            --dry-run) dry=1 ;;
+            --force) force=1 ;;
+            *) usage_error "preview [--dry-run] [--force]" ;;
+        esac
+    done
+    local -a cmds=(
+        "(the repo's .qmlls.ini is set aside while the preview runs: two quickshells in one root fight over it)"
+        "LOCK_ENV=$PREVIEW_ENV HOST=window $lock up"
+        "LOCK_ENV=$PREVIEW_ENV $lock hyprctl eval 'hl.config({ general = { gaps_out = 6 } })'"
+        "LOCK_ENV=$PREVIEW_ENV $lock run env SHELL_SERVICES=mock QS_DISABLE_FILE_WATCHER=1 quickshell -n -p $SHELL_QML"
+        "LOCK_ENV=$PREVIEW_ENV $lock down   (when the shell ends)"
+    )
+    if [ "$dry" -eq 1 ]; then printf '%s\n' "${cmds[@]}"; guard_plan "preview" "$force"; return; fi
+    guard_pacman "preview" "$force" || exit 4
+    [ -n "${WAYLAND_DISPLAY:-}" ] || die "preview needs the desktop's WAYLAND_DISPLAY: the nested Hyprland is a window on it"
+    [ -x "$lock" ] || die "no $lock"
+    [ ! -e "/tmp/lrlk-$PREVIEW_ENV/up" ] || die "the preview environment $PREVIEW_ENV is up already: LOCK_ENV=$PREVIEW_ENV $lock down"
+    export LOCK_ENV=$PREVIEW_ENV
+    trap preview_cleanup EXIT
+    if qmlls_present "$REPO"; then   # recorded as this preview's: another lares command leaves it alone while this process lives
+        qmlls_aside "$REPO" "$QMLLS_DIR" "preview:$$" || die "could not set $REPO/.qmlls.ini aside"
+        PV_MOVED=1
+    fi
+    HOST=window "$lock" up || die "the nested Hyprland did not come up"
+    PV_LOCK=$lock
+    "$lock" hyprctl eval 'hl.config({ general = { gaps_out = 6 } })' > /dev/null
+    say "preview: the shell runs with mock services in the window; Ctrl-C ends it"
+    "$lock" run env SHELL_SERVICES=mock QS_DISABLE_FILE_WATCHER=1 quickshell -n -p "$SHELL_QML"
+}
+
+apply_commit() {   # what a mockup's Save runs
+    local module="" f rel top title body head force=0
+    local -a rels=() added=()
+    [ "${1:-}" = --commit ] || usage_error "apply: apply --commit [--force] MODULE FILE..."
+    shift
+    if [ "${1:-}" = --force ]; then force=1; shift; fi
+    module=${1:-}; shift
+    [ -n "$module" ] && [ "$#" -gt 0 ] || usage_error "apply: apply --commit [--force] MODULE FILE..."
+    [[ $module != *$'\n'* ]] || usage_error "apply: the module name is one line"
+    top=$(git -C "$REPO" rev-parse --show-toplevel 2> /dev/null) && [ "$(cd "$top" && pwd -P)" = "$REPO" ] \
+        || die "apply: $REPO is not the top of a git work tree"
+    for f in "$@"; do
+        case $f in /*) ;; *) f=$REPO/$f ;; esac
+        [ -d "$f" ] && die "apply: $f is a directory: name the files"
+        rel=$(realpath -m --relative-to="$REPO" "$f")
+        case $rel in ../*|/*|.git|.git/*) die "apply: $f is not inside the repo $REPO" ;; esac
+        [ "$rel" = .qmlls.ini ] && die "apply: .qmlls.ini is rewritten by every quickshell and is never committed"
+        if [ ! -e "$REPO/$rel" ] && ! git -C "$REPO" ls-files --error-unmatch -- "$rel" > /dev/null 2>&1; then
+            die "apply: $rel does not exist and is not tracked"
+        fi
+        rels+=("$rel")
+    done
+    mapfile -t rels < <(printf '%s\n' "${rels[@]}" | awk '!seen[$0]++')
+    for rel in "${rels[@]}"; do   # a new file has to be in the index for `commit -- <paths>` to see it
+        git -C "$REPO" ls-files --error-unmatch -- "$rel" > /dev/null 2>&1 \
+            || { [ -e "$REPO/$rel" ] && git -C "$REPO" add -- "$rel" && added+=("$rel"); }
+    done
+    if [ -z "$(git -C "$REPO" status --porcelain -- "${rels[@]}")" ]; then
+        say "apply: nothing changed in ${rels[*]}: nothing committed, no restart"
+        return 0
+    fi
+    who=$(git -C "$REPO" config user.name 2> /dev/null); who=${who%% *}; who=${who^^}
+    title="${who:-LARES} - tuning: $module"
+    body=$(printf 'Saved from the %s mockup panel (lares apply):\n' "$module"; printf '  %s\n' "${rels[@]}")
+    if ! git -C "$REPO" commit -q -m "$title" -m "$body" -- "${rels[@]}"; then
+        [ "${#added[@]}" -gt 0 ] && git -C "$REPO" rm -q --cached -- "${added[@]}" 2> /dev/null
+        die "apply: git commit failed"
+    fi
+    head=$(git -C "$REPO" rev-parse --short HEAD)
+    say "apply: committed $head \"$title\" (${#rels[@]} file(s): ${rels[*]})"
+    if [ -e "$DEPLOYED_QML" ]; then
+        say "apply: the shell is deployed: it is deployed on that commit"
+        redeploy_cmd "$(git -C "$REPO" rev-parse HEAD)" "$force"
+    else
+        say "apply: nothing is deployed: committed only"
+    fi
+}
+
+redeploy_cmd() {   # redeploy_cmd <sha> <force>: apply's deploy -- the snapshots follow, the shell restarts on it
+    local sha=$1 force=$2 prev
+    if ! migration_gate "apply: the deploy"; then
+        say "apply: committed, but NOT deployed -- 'lares migrate-name' first, then 'lares deploy'"
+        exit 4
+    fi
+    if ! guard_pacman "apply: the deploy" "$force"; then
+        say "apply: committed, but NOT deployed -- 'lares deploy' when the transaction is over (or 'lares deploy --force')"
+        exit 4
+    fi
+    take_lock 120 || die "another lares command has held the lock ($PERSIST/lock) for 2 minutes"
+    deploy_snapshot "$sha" || die "apply: committed, but the snapshot of ${sha:0:9} failed: the deployed shell is unchanged"
+    lock_snapshot "$sha" || warn "the lock keeps its snapshot ($(lock_current_rev | cut -c1-9))"
+    prev=$(deployed_current_rev)
+    deploy_switch "$sha" || die "apply: committed and snapshotted, but the shell did not come back on ${sha:0:9} (lares status)"
+    deploy_prune "$sha" "$prev" "$(dr_get '.supervisor_rev // empty')"
+    if deployed_running; then say "apply: deployed ${sha:0:9}, the shell restarted on it (pid $(shell_pid))"
+    else say "apply: deployed ${sha:0:9}; no shell runs in this session (lares start)"; fi
+}
+
+oled_cmd() {   # oled shift|status|flourish: the shell's IPC (target `shell`: oledShift / oledStatus / oledFlourish)
+    local out fn rc=0
+    case ${1:-} in
+        shift) fn=oledShift ;;
+        status) fn=oledStatus ;;
+        flourish) fn=oledFlourish ;;
+        *) usage_error "oled shift | status | flourish" ;;
+    esac
+    [ -e "$DEPLOYED_QML" ] || { echo "lares: oled: nothing is deployed" >&2; return 3; }
+    out=$(quickshell_cli ipc -p "$DEPLOYED_QML" call shell "$fn" 2>&1) || rc=$?
+    [ -n "$out" ] && printf '%s\n' "$out"
+    [ "$rc" = 0 ] || { echo "lares: oled: the shell did not answer (is it running? 'lares status')" >&2; return 1; }
+}
+
+session_cmd() {   # session <sub> ...: tools/session/lares-session of this tree; `hook` prints the bashrc line (your file, your step)
+    local tool="$REPO/tools/session/lares-session" hook
+    case ${1:-} in
+        hook)
+            hook="${XDG_STATE_HOME:-$HOME/.local/state}/lares/shell/current/tools/session/session-hook.bash"
+            printf '%s\n' "# session restore: a restored terminal's command (typed or run), and the running line of each terminal." \
+                "# Put it LAST in ~/.bashrc (after starship's init):" \
+                "[ -f ${hook/#$HOME/\~} ] && . ${hook/#$HOME/\~}"
+            if grep -qs 'session-hook\.bash' "$HOME/.bashrc"; then echo "# (your ~/.bashrc already names session-hook.bash)"; fi
+            return 0 ;;
+        save|list|show|restore|reveal|forget|status|classify|preset) ;;
+        *) usage_error "session save | list | show [n] | restore [n] [--dry] [--type-all] | reveal | forget [n|--all] | status | classify -- <argv> | preset list|current|save|rename|delete|undelete|load ... | hook" ;;
+    esac
+    [ -x "$tool" ] || { echo "lares: session: $tool is missing" >&2; return 1; }
+    exec python3 "$tool" "$@"
+}
+
+# ==================================================================================================
+# binds and setup: your config, read (tools/shell/lares-config.py)
+# ==================================================================================================
+config_ctx() {   # config_ctx <out file>: what lares-config.py check needs -- the lines the shell needs, and where yours are
+    local snap=$DEPLOY_DIR/current lock=$LOCK_DIR/current binds layers globals autostart notes
+    binds=$(binds_rows | jq -R -s -c 'split("\n") | map(select(length > 0) | split("|") | {keys: .[0], what: .[1], opt: .[2]})') || return 1
+    layers=$(layer_rules_rows | jq -R -s -c 'split("\n") | map(select(length > 0) | split("|") | {name: .[0], ns: .[1]})') || return 1
+    globals=$(shell_globals | jq -R -s -c 'split("\n") | map(select(length > 0))') || return 1
+    autostart=$(
+        {
+            printf '%s\t%s\t%s\n' "the boot lock" "$lock/tools/lockscreen/lares-lock-session --boot" "the Lares lock, first: it does nothing when SDDM's boot lock locked already"
+            printf '%s\t%s\t%s\n' "the shell" "$snap/tools/shell/lares start" "the shell under its supervisor"
+            if [ "$(theme_apply)" = themectl ]; then
+                printf '%s\t%s\t%s\n' "the theme" "$snap/tools/theme/themectl apply" "shell.jsonc theme.apply is \"themectl\": the desktop's theme at login"
+            fi
+            printf '%s\t%s\t%s\n' "the lock's shaders" "$lock/tools/lockscreen/lares-lock-warm --if-stale" "the veils' shader cache, warmed when stale"
+        } | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {label: .[0], cmd: .[1], why: .[2]})') || return 1
+    notes=$(jq -n -c --arg p "$GEOCLUE_AGENT" --arg w "$(geoclue_wanted && echo yes || echo no)" '[{programs: [$p, "/usr/lib/geoclue-2.0/demos/agent"],
+        note: (if $w == "yes" then "starts the geoclue agent, which lares start starts too (shell.jsonc geoclueAgent): one of the two can go"
+               else "starts the geoclue agent (shell.jsonc does not ask lares start for it): fine" end)}]')
+    jq -n --arg hypr "$HYPR_CONF_DIR" --arg kb "$HYPR_CONF_DIR/config/keybinds.lua" --arg lr "$HYPR_CONF_DIR/config/layerrules.lua" \
+        --arg env "$HYPR_CONF_DIR/config/environment.lua" --arg au "$HYPR_CONF_DIR/config/autostart.lua" \
+        --arg snap "$snap" --arg snapreal "$(readlink -f "$snap" 2> /dev/null)" --arg lock "$lock" --arg lockreal "$(readlink -f "$lock" 2> /dev/null)" \
+        --argjson binds "$binds" --argjson layers "$layers" --argjson globals "$globals" --argjson autostart "$autostart" --argjson notes "$notes" \
+        --arg f_bind "$LUA_BIND" --arg f_global "$LUA_GLOBAL" --arg f_exec "$LUA_EXEC" --arg f_auto "$LUA_AUTOSTART_EXEC" \
+        --arg f_env "$LUA_ENV" --arg f_layer "$LUA_LAYER_RULE" --arg f_locked "$LUA_OPT_LOCKED" --arg f_nc "$LUA_OPT_NONCONSUMING" \
+        --argjson oldnames '{"qs-shell":"lares","qs-lock-session":"lares-lock-session","qs-lock-held":"lares-lock-held","qs-lock-warm":"lares-lock-warm","qs-lock":"lares-lock","qs-boot-lock":"lares-boot-lock"}' \
+        --argjson oldroots "$(jq -n -c --arg s "${XDG_STATE_HOME:-$HOME/.local/state}" '[$s + "/quickshell/shell", $s + "/quickshell/lock"]')" \
+        --arg newstate "${XDG_STATE_HOME:-$HOME/.local/state}/lares" \
+        --argjson oldns '{"^qs-bar$":"^lares-bar$","^qs-curtain$":"^lares-curtain$","^qs-lock-cover$":"^lares-lock-cover$"}' \
+        '{hypr_dir: $hypr, files: {keybinds: $kb, layerrules: $lr, environment: $env, autostart: $au},
+          binds: $binds, layer_rules: $layers, globals: $globals, autostart: $autostart, notes: $notes,
+          env: {name: "QS_CONFIG_PATH", value: ($snap + "/shell.qml")},
+          old: {names: $oldnames, roots: $oldroots, new_state: $newstate, namespaces: $oldns},
+          snapshots: {($snap): $snapreal, ($lock): $lockreal},
+          removed_commands: {trial: "the shell is the desktop", fallback: "Super+Shift+F12 runs lares restart",
+                             revert: "nothing to revert: lares edits no config", "root-steps": "lares setup prints them"},
+          forms: {bind: $f_bind, global: $f_global, exec: $f_exec, autostart_exec: $f_auto, env: $f_env, layer_rule: $f_layer,
+                  opt_locked: $f_locked, opt_nonconsuming: $f_nc}}' > "$1"
+}
+
+config_check() {   # config_check [--summary]: lares-config.py's report; its exit status (0 nothing to change)
+    local tmp rc
+    tmp=$(mktemp) || return 1
+    if ! config_ctx "$tmp"; then rm -f "$tmp"; warn "binds: the table could not be read"; return 1; fi
+    python3 "$SELF_DIR/lares-config.py" check --ctx "$tmp" "$@"; rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+binds_cmd() {
+    case ${1:-} in
+        ""|list) ;;
+        apply|check) die "binds $1 is gone: the shell binds nothing at run time; your config holds its keys ('lares binds' checks them)" ;;
+        *) usage_error "binds" ;;
+    esac
+    echo "lares binds -- the lines the shell needs in your Hyprland config ($HYPR_CONF_DIR), and yours beside them"
+    echo
+    config_check
+}
+
+# ---- setup: the root steps (printed, never run) ----------------------------------------------------------------------
+ROOT_SESSION=/usr/local/share/wayland-sessions/hyprland-lares.desktop
+ROOT_BOOTLOCK=/usr/local/bin/lares-boot-lock
+ROOT_AUTOLOGIN=/etc/sddm.conf.d/autologin.conf
+ROOT_PAM=/etc/pam.d/lares-lock
+ROOT_PAM_FACE=/etc/pam.d/lares-lock-face
+ROOT_POLICY=/usr/share/polkit-1/actions/org.lares.silicon.helper.policy
+ROOT_RULE=/etc/polkit-1/rules.d/50-lares-silicon-helper.rules
+snapshot_cmd() {   # snapshot <verb> ...: tools/snapshot/lares-snapshot of this tree; `offsite ...` is tools/snapshot/lares-offsite
+    local tool="$REPO/tools/snapshot/lares-snapshot"
+    case ${1:-} in
+        offsite) tool="$REPO/tools/snapshot/lares-offsite"; shift ;;
+        status|list|show|create|keep|delete|undo-plan|files|undo|rescue) ;;
+        *) usage_error "snapshot status|list|show <short>|create [--note T]|keep <short> on|off|delete <short>|undo-plan <short>|files <short>|undo <short>|rescue status | offsite status|sync|verify|fetch <dir>|try" ;;
+    esac
+    [ -x "$tool" ] || [ -f "$tool" ] || { echo "lares: snapshot: $tool is missing" >&2; return 1; }
+    exec python3 "$tool" "$@"
+}
+
+OLD_BOOTLOCK=/usr/local/bin/qs-boot-lock                      # the files of the OLD name: they stay installed beside the new ones until `cleanup-old-name`
+OLD_SESSION=/usr/local/share/wayland-sessions/hyprland-qslock.desktop
+OLD_PAM=/etc/pam.d/qs-lock
+OLD_PAM_FACE=/etc/pam.d/qs-lock-face
+OLD_POLICY=/usr/share/polkit-1/actions/org.quickshell.silicon.helper.policy
+SILICON_HELPER=/usr/local/libexec/silicon-helper
+ROOT_RIG=/usr/local/lib/lares/aerial-rig/rig                  # the aerial test bed (tools/aerial/rig): optional, installed by ONE command, never a TO DO
+ROOT_RIG_UNIT=/etc/systemd/system/lares-aerial-rig.service
+ROOT_RIG_RULE=/etc/polkit-1/rules.d/49-lares-aerial-rig.rules
+ROOT_RIG_NMCONF=/etc/NetworkManager/conf.d/90-lares-aerial-rig.conf
+root_autologin() {   # the SDDM config file that logs a user in by itself ([Autologin] with a User), as a path on the machine; 1 when a greeter asks (or there is no SDDM)
+    local f
+    for f in "$ROOT_PREFIX$ROOT_AUTOLOGIN" "$ROOT_PREFIX"/etc/sddm.conf.d/*.conf "$ROOT_PREFIX/etc/sddm.conf"; do
+        [ -f "$f" ] || continue
+        awk '/^[[:space:]]*\[/ { s = $0 } s ~ /\[Autologin\]/ && /^[[:space:]]*User[[:space:]]*=[[:space:]]*[^[:space:]]/ { found = 1 } END { exit !found }' "$f" || continue
+        printf '%s' "${f#"$ROOT_PREFIX"}"; return 0
+    done
+    return 1
+}
+root_boot_needed() { root_autologin > /dev/null; }   # a greeter that asks for the password IS the boot's lock: R1 is for an autologin
+root_boot_all() { [ -x "$ROOT_PREFIX$ROOT_BOOTLOCK" ] && [ -e "$ROOT_PREFIX$ROOT_SESSION" ] && grep -qx 'Session=hyprland-lares' "$ROOT_PREFIX$(root_autologin)" 2> /dev/null; }
+root_keyring_in() { grep -Eq '^auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so' "$ROOT_PREFIX$ROOT_PAM" 2> /dev/null; }
+root_pam_all() {   # the Lares PAM files are there: the password service always, the face service when the old one was
+    [ -f "$ROOT_PREFIX$ROOT_PAM" ] && { [ ! -e "$ROOT_PREFIX$OLD_PAM_FACE" ] || [ -f "$ROOT_PREFIX$ROOT_PAM_FACE" ]; }
+}
+root_polkit_needed() { [ -e "$ROOT_PREFIX$SILICON_HELPER" ] || [ -e "$ROOT_PREFIX$OLD_POLICY" ]; }   # silicon's helper is installed on this machine
+root_polkit_rule_in() {   # the rule is there. /etc/polkit-1/rules.d is root:polkitd 0750: a user's test of the file is always false, so
+    # on the real root polkit is asked whether the action is allowed with no password (pkcheck: 0 yes, 2 a challenge; nothing is asked of you)
+    [ -f "$ROOT_PREFIX$ROOT_RULE" ] && return 0
+    [ -z "$ROOT_PREFIX" ] && [ ! -x "${ROOT_RULE%/*}" ] && command -v pkcheck > /dev/null || return 1
+    pkcheck --action-id org.lares.silicon.helper --process $$ > /dev/null 2>&1
+}
+root_polkit_all() { ! root_polkit_needed || { [ -f "$ROOT_PREFIX$ROOT_POLICY" ] && root_polkit_rule_in; }; }
+root_helper_here() { [ -x "$ROOT_PREFIX$SILICON_HELPER" ]; }   # silicon's helper is installed (the program itself, not only its policy)
+root_helper_wifi_in() {   # the INSTALLED helper has the wifi-powersave verb: asked of it as a plain user (`capabilities` reads nothing and needs no root; a helper that predates it says "unknown command")
+    timeout 5 "$ROOT_PREFIX$SILICON_HELPER" capabilities 2> /dev/null | grep -q '"wifi-powersave"'
+}
+root_helper_all() { ! root_helper_here || root_helper_wifi_in; }
+# THE INTERACTION BOOST (R6, optional: docs/silicon.md). A root unit that serves silicon's helper's boost-serve to your uid; a TO DO only
+# when silicon.jsonc asks for it ("interactionBoost": true) or the unit is there and does not fit (another uid, a helper without the verb).
+ROOT_BOOST_UNIT=/etc/systemd/system/lares-boost.service
+root_boost_wanted() { [ "$(jsonc_get "$SILICON_JSON" interactionBoost)" = true ]; }
+root_boost_unit_in() { [ -f "$ROOT_PREFIX$ROOT_BOOST_UNIT" ]; }
+root_boost_verb_in() {   # the INSTALLED helper has boost-serve (asked as a plain user: `capabilities` reads nothing)
+    timeout 5 "$ROOT_PREFIX$SILICON_HELPER" capabilities 2> /dev/null | grep -q '"boost-serve"'
+}
+root_boost_state() {   # nohelper | oldhelper | none | stale | fine
+    root_helper_here || { echo nohelper; return; }
+    root_boost_verb_in || { echo oldhelper; return; }
+    root_boost_unit_in || { echo none; return; }
+    grep -q "boost-serve uid=$(id -u) " "$ROOT_PREFIX$ROOT_BOOST_UNIT" 2> /dev/null || { echo stale; return; }
+    echo fine
+}
+root_boost_steps_wanted() { case $(root_boost_state) in none|stale|oldhelper) return 0 ;; *) return 1 ;; esac; }
+setup_boost_row() {
+    local st what todo=0
+    st=$(root_boost_state)
+    root_boost_wanted && todo=1
+    case $st in
+        nohelper) what="silicon's helper is not installed here (helpers/silicon_helper/install.sh first)" ;;
+        oldhelper) what="the installed helper predates boost-serve: below" ;;
+        none) what="not installed (optional; a GPU / CPU floor while a shell motion runs, for silicon.jsonc \"interactionBoost\"): below" ;;
+        stale) what="$ROOT_BOOST_UNIT serves another uid than yours ($(id -u)): below"; todo=1 ;;
+        fine) what="installed ($ROOT_BOOST_UNIT); the shell asks it $(root_boost_wanted && echo now: silicon.jsonc interactionBoost is true || echo 'only once silicon.jsonc says "interactionBoost": true')" ;;
+    esac
+    if [ "$st" = fine ]; then setup_row ok "R6 interaction boost" "$what"
+    elif [ "$todo" -eq 1 ]; then setup_row "TO DO" "R6 interaction boost" "$what"
+    else printf '  %-6s %-22s %s\n' "-" "R6 interaction boost" "$what"; fi
+}
+root_step_boost() {   # root_step_boost <the snapshot>: R6, the unit installed from the deployed snapshot with your uid
+    local snap=$1 h=$REPO/helpers/silicon_helper st
+    st=$(root_boost_state)
+    cat << EOF
+
+R6  THE INTERACTION BOOST (optional). While a motion of the shell runs (a popup opening, the island moving: a few hundred ms) the shell
+    asks a root service to hold the Intel GPU's minimum frequency at 1600 MHz and intel_pstate's min_perf_pct at 30, and the service
+    puts both back by itself the moment the time is over (or the shell's connection closes, or the unit stops). A motion otherwise ends
+    before the hardware has woken from its rest. The shell asks only while silicon.jsonc says "interactionBoost": true; measure before
+    and after (docs/silicon.md "The interaction boost"). The unit is silicon's helper (boost-serve) on a socket only your uid may use.
+EOF
+    if [ "$st" = oldhelper ]; then
+        cat << EOF
+    The helper installed here predates boost-serve: rebuild it as yourself and install it first (the same install as before).
+      (cd '$h' && cargo build --release) && sudo '$h/install.sh'
+EOF
+    fi
+    if [ -e "$snap/tools/shell/root/lares-boost.service.in" ]; then
+        cat << EOF
+      sed "s/@UID@/$(id -u)/" $snap/tools/shell/root/lares-boost.service.in | sudo tee $ROOT_BOOST_UNIT > /dev/null
+      sudo systemctl daemon-reload && sudo systemctl enable --now lares-boost.service && sudo systemctl restart lares-boost.service
+      systemctl is-active lares-boost.service      # must print active; then set "interactionBoost": true in silicon.jsonc
+EOF
+    else
+        echo "      (after 'lares deploy': the unit comes from the deployed Lares snapshot ($snap), which does not hold it yet)"
+    fi
+    cat << EOF
+    undo (the service puts every floor back as it stops):
+      sudo systemctl disable --now lares-boost.service
+      sudo rm -f $ROOT_BOOST_UNIT && sudo systemctl daemon-reload
+EOF
+}
+
+# A DISPLAYLINK DOCK'S BRIGHTNESS (R7, only on a machine with evdi). evdi's I2C adapter is a platform device, so ddcutil's uaccess rule
+# (PCI graphics cards only) leaves its /dev/i2c-N to root and the shell cannot step a dock display's brightness (docs/panorama.md).
+ROOT_DLDDC_RULE=/etc/udev/rules.d/61-lares-displaylink-ddc.rules
+root_dlddc_here() { [ -d "$ROOT_PREFIX/sys/module/evdi" ]; }
+root_dlddc_in() { [ -f "$ROOT_PREFIX$ROOT_DLDDC_RULE" ]; }
+setup_dlddc_row() {
+    root_dlddc_here || return 0
+    if root_dlddc_in; then setup_row ok "R7 dock brightness" "installed ($ROOT_DLDDC_RULE): a DisplayLink display's brightness bus is yours"
+    else setup_row "TO DO" "R7 dock brightness" "a DisplayLink dock's display takes no brightness key until its I2C bus is yours: below"; fi
+}
+root_step_dlddc() {   # root_step_dlddc <the snapshot>: R7, one udev rule
+    local snap=$1
+    cat << EOF
+
+R7  A DISPLAYLINK DOCK'S BRIGHTNESS. The dock's display answers brightness (DDC/CI) on evdi's own I2C bus, and that device node is
+    root's: ddcutil's rule opens only the buses of PCI graphics cards. One udev rule gives the bus to whoever sits at the machine
+    (uaccess, like the other display buses). Keep the dock plugged in, or plug it again after.
+      sudo install -m644 $snap/tools/shell/root/61-lares-displaylink-ddc.rules $ROOT_DLDDC_RULE && sudo udevadm control --reload && sudo udevadm trigger -s i2c-dev
+    undo of R7:
+      sudo rm -f $ROOT_DLDDC_RULE && sudo udevadm control --reload && sudo udevadm trigger -s i2c-dev
+EOF
+}
+
+root_rig_in() {   # the aerial test bed is installed: the runner, the unit and the NetworkManager line (the polkit rule is in a root-only folder: only a fake root can be asked)
+    [ -x "$ROOT_PREFIX$ROOT_RIG" ] && [ -f "$ROOT_PREFIX$ROOT_RIG_UNIT" ] && [ -f "$ROOT_PREFIX$ROOT_RIG_NMCONF" ] || return 1
+    [ -n "$ROOT_PREFIX" ] || [ ! -x "${ROOT_RIG_RULE%/*}" ] || [ -f "$ROOT_RIG_RULE" ]
+}
+root_rig_installer() {   # the installer to run: the deployed snapshot's copy when there is one (it does not move under your hands), else the repo's
+    if [ -f "$DEPLOY_DIR/current/tools/aerial/rig/install.sh" ]; then printf '%s\n' "$DEPLOY_DIR/current/tools/aerial/rig/install.sh"; else printf '%s\n' "$REPO/tools/aerial/rig/install.sh"; fi
+}
+
+# THE SYSTEM SNAPSHOTS (R5, optional: docs/snapshots.md). Never a TO DO unless config/snapshots.jsonc exists or the tool is half installed.
+SNAP_LIB=/usr/local/lib/lares/snapshot
+SNAP_HOOK_PRE=/etc/pacman.d/hooks/00-lares-snapshot.hook
+SNAP_HOOK_POST=/etc/pacman.d/hooks/zz-lares-snapshot-done.hook
+SNAP_STATE=/.lares-snapshots
+SNAP_RESCUE_IMG=/boot/lares/rescue.img
+SNAP_RESCUE_ENTRY=/etc/grub.d/45_lares_rescue
+SYS_BLOCK=${LARES_SYS_BLOCK:-/sys/block}
+snap_tool_in() { [ -f "$ROOT_PREFIX$SNAP_LIB/lares-snapshot-root" ]; }
+snap_hooks_in() { [ -f "$ROOT_PREFIX$SNAP_HOOK_PRE" ] && [ -f "$ROOT_PREFIX$SNAP_HOOK_POST" ]; }
+snap_config_in() {   # you wrote config/snapshots.jsonc: you want them
+    local f
+    for f in config/snapshots.jsonc config/snapshots.json snapshots.jsonc snapshots.json; do [ -f "$LARES_CONFIG_DIR/$f" ] && return 0; done
+    return 1
+}
+snap_count() { [ -f "$ROOT_PREFIX$SNAP_STATE/index.tsv" ] && wc -l < "$ROOT_PREFIX$SNAP_STATE/index.tsv" || echo 0; }
+snap_state() {   # none | halftool | halfhooks | halfrepo | nosnap | norescue | fine
+    if ! snap_tool_in; then snap_hooks_in && echo halftool || echo none; return; fi
+    snap_hooks_in || { echo halfhooks; return; }
+    [ -d "$ROOT_PREFIX$SNAP_STATE/repo" ] || { echo halfrepo; return; }
+    [ "$(snap_count)" -gt 0 ] || { echo nosnap; return; }
+    { [ -f "$ROOT_PREFIX$SNAP_RESCUE_IMG" ] && [ -f "$ROOT_PREFIX$SNAP_RESCUE_ENTRY" ]; } || { echo norescue; return; }
+    echo fine
+}
+snap_installer() {   # the deployed snapshot's copy of a root script (it does not move under your hands); nothing, exit 1, before a deploy holds it
+    [ -f "$DEPLOY_DIR/current/tools/snapshot/root/$1" ] && printf '%s\n' "$DEPLOY_DIR/current/tools/snapshot/root/$1"
+}
+snap_timeshift_in() { [ -e "$ROOT_PREFIX/usr/bin/timeshift" ] || [ -d "$ROOT_PREFIX/timeshift" ]; }
+snap_newest() {   # "<n> snapshots, the newest <date>"
+    local n t
+    n=$(snap_count); t=$(head -1 "$ROOT_PREFIX$SNAP_STATE/index.tsv" 2> /dev/null | cut -f2)
+    printf '%s snapshot(s)' "$n"
+    case $t in ''|*[!0-9]*) ;; *) printf ', the newest %s' "$(date -d "@$t" '+%Y-%m-%d %H:%M' 2> /dev/null)" ;; esac
+}
+snap_ssd_discard() {   # a non-rotating disk that takes discards (not a loop, zram or ram device)
+    local d
+    for d in "$SYS_BLOCK"/*; do
+        case ${d##*/} in loop*|zram*|ram*|dm-*|sr*) continue ;; esac
+        [ "$(cat "$d/queue/rotational" 2> /dev/null)" = 0 ] && [ "$(cat "$d/queue/discard_max_bytes" 2> /dev/null || echo 0)" -gt 0 ] 2> /dev/null && return 0
+    done
+    return 1
+}
+setup_snapshots_rows() {   # the R5 row and the TRIM row: never a TO DO unless you asked for snapshots (a config) or the install is half done
+    local st todo=0 what
+    st=$(snap_state)
+    snap_config_in && todo=1
+    case $st in halftool|halfhooks|halfrepo) todo=1 ;; esac
+    case $st in
+        none) what="not installed (optional; a snapshot before each large or important update, and a rescue that works without the system): below" ;;
+        halftool) what="the hooks are in /etc/pacman.d/hooks but the tool is not (a hook with no tool lets pacman through): below" ;;
+        halfhooks) what="installed, the pacman hooks are missing (no update makes a snapshot): below" ;;
+        halfrepo) what="installed, the repository $SNAP_STATE/repo is missing: below" ;;
+        nosnap) what="installed, no snapshot yet: $(cmdc lares snapshot create) (the first one takes about 9 minutes)" ;;
+        norescue) what="installed, $(snap_newest); the rescue image or its GRUB entry is missing: below" ;;
+        fine) what="installed, $(snap_newest); the rescue is built" ;;
+    esac
+    if [ "$st" = fine ]; then setup_row ok "R5 system snapshots" "$what"
+    elif [ "$todo" -eq 1 ]; then setup_row "TO DO" "R5 system snapshots" "$what"
+    else printf '  %-6s %-22s %s\n' "-" "R5 system snapshots" "$what"; fi
+    if snap_ssd_discard; then
+        if [ "$(timeout 5 "$SYSTEMCTL" is-enabled fstrim.timer 2> /dev/null)" = enabled ]; then setup_row ok "SSD TRIM" "fstrim.timer is enabled"
+        else printf '  %-6s %-22s %s\n' "-" "SSD TRIM" "off (informational): $(cmdc sudo systemctl enable --now fstrim.timer). An SSD that is never told which blocks are free writes slowly once its fast cache is full: a laptop's disk wrote 30 MB/s before its first TRIM and 0.7 to 2.4 GB/s after it (2026-11-22; the first run took 200 s and prints nothing until it is done)"; fi
+    fi
+}
+snap_steps_wanted() { [ "$(snap_state)" != fine ] || snap_timeshift_in; }
+snap_steps_text() {   # R5: what it does, the commands in order, the undo (yours to run; lares never runs sudo)
+    local st inst un
+    st=$(snap_state); inst=$(snap_installer install.sh) || inst=; un=$(snap_installer uninstall.sh) || un=
+    if [ "$st" != fine ]; then
+        cat << EOF
+R5  SYSTEM SNAPSHOTS (optional). Before a large or important update, pacman's hook makes a snapshot of /usr, /opt, /etc, /srv, /root,
+    /var/lib and /boot's files into an encrypted restic repository in $SNAP_STATE (nothing of /home). The update popup shows it, can undo
+    an update with the old package files, and a rescue entry in the GRUB menu puts the whole system back from a snapshot without the
+    system running. The installer lists every change and waits for you to type yes; it installs restic, the tool in $SNAP_LIB,
+    the polkit rule (you may make and keep a snapshot without a password; deleting asks), the repository, the rescue image and its GRUB
+    entry (it runs grub-mkconfig itself), and the two pacman hooks last. It shows the repository's password once: put it in your password
+    manager now, or the snapshots cannot be read from another disk.
+EOF
+        if [ -n "$inst" ]; then
+            printf '      sudo %s\n' "$inst"
+        else
+            echo "      (after 'lares deploy': the installer comes from the deployed Lares snapshot ($DEPLOY_DIR/current), which does not hold it yet)"
+        fi
+        cat << 'EOF'
+    Then, one at a time and in this order:
+      lares snapshot create
+      lares snapshot rescue status
+    The first snapshot is slow (about 9 minutes on this laptop's disk); later ones read and compare in about 22 seconds. The second line must
+    say the rescue image is built. To boot the rescue once: restart, press an arrow key at the GRUB screen (GRUB_TIMEOUT is 1 second here, so
+    it passes by otherwise) and choose "Lares rescue"; docs/snapshots.md says what it asks.
+    The copy on Proton Drive (optional, after the first snapshot):
+      proton-drive auth login
+      lares snapshot offsite try
+    then put "offsite": { "enabled": true } in config/snapshots.jsonc (docs/snapshots.md).
+EOF
+    fi
+    if snap_timeshift_in; then
+        cat << 'EOF'
+    Timeshift, LAST, only after one real update made a snapshot (lares snapshot list shows it) and you have seen the rescue boot.
+    IRREVERSIBLE: these delete Timeshift's snapshots and the program.
+      sudo timeshift --delete-all
+      sudo rm -rf /timeshift
+      sudo pacman -Rns timeshift
+    (the second line removes a snapshot that was never finished, which Timeshift does not list)
+EOF
+    fi
+    if [ "$st" != fine ]; then
+        cat << EOF
+    undo of R5 (the hooks go first; your snapshots stay in $SNAP_STATE until you delete them):
+EOF
+        if [ -n "$un" ]; then printf '      sudo %s\n' "$un"; else echo "      (after 'lares deploy': the uninstaller comes from the deployed Lares snapshot)"; fi
+    fi
+}
+
+root_steps_text() {   # the root steps, each with its undo: yours to run in a terminal (lares never runs sudo); each is safe to run twice
+    local src=$DEPLOY_DIR/current user snap=$DEPLOY_DIR/current undo_sess=hyprland auto pamsrc
+    user=$(id -un)
+    src=$src/tools/shell/root
+    auto=$(root_autologin)
+    pamsrc=$src/lares-lock.pam
+    [ -e "$pamsrc" ] || pamsrc=$REPO/tools/shell/root/lares-lock.pam   # R2 may come before the first deploy: a lock wants its service
+    [ -e "$ROOT_PREFIX$OLD_SESSION" ] && undo_sess=hyprland-qslock
+    [ -z "$auto" ] || root_step_boot "$src" "$auto" "$undo_sess"
+    root_step_pam "$pamsrc"
+    root_steps_rest "$snap" "$user"
+    [ -z "$auto" ] || printf '\n%s\n' "If the first boot after R1 shows a black screen that never asks for anything: Ctrl+Alt+F3, log in, run R1's undo, reboot."
+}
+
+root_step_boot() {   # root_step_boot <the snapshot's root files> <the autologin file> <the session the undo goes back to>
+    local src=$1 auto=$2 undo_sess=$3
+    cat << EOF
+R1  THE BOOT LOCK. SDDM's autologin starts a Hyprland session whose --locked-cmd locks the session with the Lares lock before
+    anything starts. The session file names /usr/local/bin/lares-boot-lock, which starts the lock from its snapshot, and hyprlock when
+    that snapshot is not there: Hyprland holds a --locked-cmd session locked until a locker lands, so the command must never be
+    missing. The Lares files are installed BESIDE the old ones (qs-boot-lock and hyprland-qslock.desktop stay until
+    \`lares cleanup-old-name\`); SDDM is switched to the new session only once both files are in (one line joined by \`&&\`: a
+    session file that is not there is a boot that never starts). Without R1 the boot is still locked: autostart.lua's first line
+    starts the same lock, a frame later.
+EOF
+    if [ -e "$src/lares-boot-lock" ] && [ -e "$src/hyprland-lares.desktop" ]; then
+        cat << EOF
+      sudo install -D -m 0755 $src/lares-boot-lock $ROOT_BOOTLOCK && sudo install -D -m 0644 $src/hyprland-lares.desktop $ROOT_SESSION && sudo sed -i 's/^Session=hyprland\(-qslock\)\?\$/Session=hyprland-lares/' $auto
+      grep -x 'Session=hyprland-lares' $auto      # must print the line; nothing = the autologin file says something else: edit it by hand
+EOF
+    else
+        echo "      (after 'lares deploy': the files come from the deployed Lares snapshot ($src), which does not hold them yet)"
+    fi
+    cat << EOF
+    undo:
+      sudo sed -i 's/^Session=hyprland-lares\$/Session=$undo_sess/' $auto
+      sudo rm -f $ROOT_SESSION $ROOT_BOOTLOCK
+
+EOF
+}
+
+root_step_pam() {   # root_step_pam <the PAM file that ships here>
+    local pamsrc=$1
+    if [ ! -e "$ROOT_PREFIX$OLD_PAM" ] && [ ! -e "$ROOT_PREFIX$ROOT_PAM" ]; then   # a fresh machine
+        cat << EOF
+R2  THE PAM SERVICE. The lock asks PAM for the service lares-lock once that file is in /etc/pam.d. Until then it asks the machine's own
+    "login" stack: your password opens it, but three wrong ones lock the account for ten minutes (pam_faillock). The file that ships
+    here asks for the password alone, with no lockout, and opens the login keyring with it.
+      sudo install -m 0644 $pamsrc $ROOT_PAM
+      grep -n pam_gnome_keyring $ROOT_PAM                  # must print ONE line, right after pam_unix.so
+    undo:
+      sudo rm -f $ROOT_PAM
+EOF
+        return 0
+    fi
+    cat << EOF
+R2  THE PAM SERVICES, AND THE KEYRING ONCE PER BOOT. The lock asks PAM for the service lares-lock (the face: lares-lock-face) once that
+    file is in /etc/pam.d, and for qs-lock (qs-lock-face) before: the Lares files are COPIES of the old ones, beside them. The lock's
+    PASSWORD stack also unlocks the login keyring with the password you type (SDDM's autologin has no password to give it). The lock
+    asks for the password at the boot lock and takes the face for every lock after it (lockscreen.jsonc "bootPasswordOnly"). Works
+    when the login keyring's password is your login password.
+EOF
+    [ -e "$ROOT_PREFIX$OLD_PAM" ] && echo "      sudo install -m 0644 $OLD_PAM $ROOT_PAM"
+    [ -e "$ROOT_PREFIX$OLD_PAM_FACE" ] && echo "      sudo install -m 0644 $OLD_PAM_FACE $ROOT_PAM_FACE"
+    cat << EOF
+      grep -q pam_gnome_keyring $ROOT_PAM || sudo sed -i '/^auth[[:space:]]\+required[[:space:]]\+pam_unix\.so\$/a auth       optional   pam_gnome_keyring.so' $ROOT_PAM
+      grep -n pam_gnome_keyring $ROOT_PAM                  # must print ONE line, right after pam_unix.so
+    undo:
+      sudo sed -i '/^auth[[:space:]]\+optional[[:space:]]\+pam_gnome_keyring\.so\$/d' $ROOT_PAM
+EOF
+    if [ -e "$ROOT_PREFIX$OLD_PAM" ]; then echo "      sudo rm -f $ROOT_PAM $ROOT_PAM_FACE"; fi
+    return 0
+}
+
+root_steps_rest() {   # root_steps_rest <the snapshot> <the user>: silicon's polkit action and its helper's newest verb
+    local snap=$1 user=$2
+    if root_polkit_needed; then
+        cat << EOF
+
+R3  SILICON'S POLKIT ACTION. The helper's action id is org.lares.silicon.helper now. The new policy and rule are installed BESIDE the
+    old ones (org.quickshell.silicon.helper stays until \`lares cleanup-old-name\`): pkexec of the helper is allowed by either, for you only.
+EOF
+        if [ -e "$snap/helpers/silicon_helper/polkit/org.lares.silicon.helper.policy" ]; then
+            cat << EOF
+      sudo install -D -m 0644 $snap/helpers/silicon_helper/polkit/org.lares.silicon.helper.policy $ROOT_POLICY
+      sed "s/@USER@/$user/" $snap/helpers/silicon_helper/polkit/50-lares-silicon-helper.rules.in | sudo tee $ROOT_RULE > /dev/null
+      sudo grep -c org.lares.silicon.helper $ROOT_RULE     # must print 1 (only root can read that folder)
+EOF
+        else
+            echo "      (after 'lares deploy': the files come from the deployed Lares snapshot ($snap), which does not hold them yet)"
+        fi
+        cat << EOF
+    undo:
+      sudo rm -f $ROOT_POLICY $ROOT_RULE
+EOF
+    fi
+    if ! root_helper_all; then
+        local h=$REPO/helpers/silicon_helper
+        cat << EOF
+
+R4  SILICON'S WI-FI POWER SAVE. While sound goes to an AirPlay speaker the shell turns the Wi-Fi radio's power save off (it sleeps between
+    beacons and the stream drops out) and puts it back after: \`iw dev <interface> set power_save\` as root, through a verb of silicon's
+    helper (\`wifi-powersave\`; the polkit rule of R3 already lets you run the helper without a password). The helper installed here
+    predates the verb: rebuild it as yourself and install it (the same install as before; it records the firmware limits again and
+    applies nothing). Until then the shell leaves power save alone and says so once in its log.
+      (cd '$h' && cargo build --release) && sudo '$h/install.sh'
+      $SILICON_HELPER capabilities      # must list "wifi-powersave"
+    undo:
+      (nothing to undo: the verb does nothing unless the shell asks, and the shell asks only while AirPlay plays and config/airplay.jsonc says "powersave": true)
+EOF
+    fi
+    return 0
+}
+
+# THE COMMANDS YOU TYPE, IN COLOUR (the user's ask, 2026-11-23): `lares setup` prints what you must run or paste in bold and the
+# terminal's own blue (palette slot 4: the theme decides the shade) -- only on a terminal: a pipe, a file, NO_COLOR or TERM=dumb get the
+# same bytes as before, which every probe parses (lares_deploy_probe.sh `root_cmds`, snapshot_setup_probe.sh). `cmdc` wraps a command in
+# a row's words; `cmd_lines` colours the step texts' command lines (six spaces in, not a "(...)" note).
+CMD_ON="" CMD_OFF=""
+cmd_colour_init() {
+    CMD_ON="" CMD_OFF=""
+    if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then CMD_ON=$'\e[1;34m' CMD_OFF=$'\e[0m'; fi
+}
+cmdc() { printf '%s%s%s' "$CMD_ON" "$*" "$CMD_OFF"; }
+cmd_lines() {
+    if [ -n "$CMD_ON" ]; then sed -E "s/^(      )([^ (].*)\$/\\1${CMD_ON}\\2${CMD_OFF}/"; else cat; fi
+}
+
+setup_row() {   # setup_row ok|TO DO <what> <detail>
+    printf '  %-6s %-22s %s\n' "$1" "$2" "$3"
+    [ "$1" = ok ] || SETUP_TODO=$(( SETUP_TODO + 1 ))
+}
+
+# The folder opener: xdg-utils here is the "generic" kind (XDG_CURRENT_DESKTOP=Hyprland is unknown to it), which asks no desktop for a
+# folder and falls to the first registrant of inode/directory in mimeinfo.cache (easytag), and which ignores Terminal=true, so
+# yazi's own desktop file opens no window. The shell ships a desktop file that runs yazi in kitty like Super+E; lares prints the
+# line that installs it (COPIED from the snapshot, never linked: the snapshot moves at every deploy) and never writes it itself.
+FOLDER_OPENER=lares-yazi.desktop
+folder_opener_ok() {   # 0 when folders already open in it (or xdg-mime is not there to ask)
+    command -v xdg-mime > /dev/null || return 0
+    [ "$(xdg-mime query default inode/directory 2> /dev/null)" = "$FOLDER_OPENER" ]
+}
+folder_opener_line() {   # the one line (joined by &&) that installs the desktop file and makes it the folder default
+    local src=$DEPLOY_DIR/current/tools/shell/applications/$FOLDER_OPENER
+    local apps=${XDG_DATA_HOME:-$HOME/.local/share}/applications
+    local conf=${XDG_CONFIG_HOME:-$HOME/.config}
+    printf 'mkdir -p %q %q && cp %q %q && xdg-mime default %s inode/directory' "$apps" "$conf" "$src" "$apps/$FOLDER_OPENER" "$FOLDER_OPENER"
+}
+
+hypridle_line_has() {   # hypridle_line_has <key> <text>: an uncommented `<key> = ...` line of hypridle.conf holds the text
+    grep -E "^[[:space:]]*$1[[:space:]]*=" "$HYPRIDLE_CONF" 2> /dev/null | grep -qF -- "$2"
+}
+
+notification_activators() {   # the D-Bus services that would start a notification daemon while the shell is not up: "<unit or Exec>"
+    local d f unit
+    for d in $DBUS_SERVICES; do
+        for f in "$d"/*.service; do
+            [ -f "$f" ] && grep -qx 'Name=org.freedesktop.Notifications' "$f" || continue
+            unit=$(sed -n 's/^SystemdService=//p' "$f" | head -1)
+            if [ -n "$unit" ]; then
+                case $(timeout 5 "$SYSTEMCTL" --user is-enabled "$unit" 2> /dev/null) in masked|masked-runtime) continue ;; esac
+                printf '%s\n' "$unit"
+            else
+                printf '%s\n' "$(sed -n 's/^Exec=//p' "$f" | head -1) ($f)"
+            fi
+        done
+    done
+}
+
+# THE PORTAL UNITS NEED A SESSION (docs/shell.md, "The portals between two sessions"). Hyprland's exit stops graphical-session.target and
+# leaves the manager's environment on its dead socket (DISPLAY and HYPRLAND_INSTANCE_SIGNATURE unset, WAYLAND_DISPLAY and
+# XDG_CURRENT_DESKTOP put back); a client still dying then D-Bus-activates xdg-desktop-portal, which activates the backends, and the GTK
+# backend fails five times in 0.2 s ("cannot open display"): start-limit-hit, a failed unit, the units notifier's card, and a Settings
+# portal that answers nothing until the next login's start. A start request with the target down is refused by a drop-in
+# (`Requisite=graphical-session.target`): no process, no failed state, no start-limit.
+PORTAL_UNITS="xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-hyprland xdg-desktop-portal-termfilechooser"
+portal_units_open() {   # the INSTALLED portal units that a start request reaches with no session up, one per line (none: nothing to do; 1: the manager does not answer)
+    local u
+    timeout 5 "$SYSTEMCTL" --user show -p LoadState --value "${PORTAL_UNITS%% *}.service" > /dev/null 2>&1 || return 1
+    for u in $PORTAL_UNITS; do
+        [ "$(timeout 5 "$SYSTEMCTL" --user show -p LoadState --value "$u.service" 2> /dev/null)" = loaded ] || continue
+        case $(timeout 5 "$SYSTEMCTL" --user show -p Requisite --value "$u.service" 2> /dev/null) in
+            *graphical-session.target*) ;;
+            *) printf '%s\n' "$u" ;;
+        esac
+    done
+}
+portal_dropin_cmd() {   # portal_dropin_cmd <units>: the one line that writes the drop-ins (yours to run; lares writes nothing of yours)
+    printf '%s\n' "for u in $*; do d=\"\${XDG_CONFIG_HOME:-\$HOME/.config}/systemd/user/\$u.service.d\"; mkdir -p \"\$d\" && printf '[Unit]\\nRequisite=graphical-session.target\\n' > \"\$d/session.conf\"; done; systemctl --user daemon-reload"
+}
+
+# NVIDIA'S egl-wayland2 HOLDS EVERY FRAME ONE REFRESH LONGER (2026-11-15, dGPU-only, tools/dev/mux_bench.sh `latency`): a GL client that
+# paces by eglSwapBuffers (Qt -- the shell itself --, kitty, every EGL app) showed its frame 3.9 refreshes after deciding it on
+# egl-wayland2 1.0.2, 2.9 on egl-wayland 1.1.24 and on Mesa; the floor (a client pacing by its own frame callback) is 1.9 on both. When
+# both are installed NVIDIA's EGL takes the lower number (09_ wayland2) first; one environment line in the user's Hyprland config keeps
+# every NVIDIA client on egl-wayland. Mesa clients (Hybrid) never read it. It matters in dGPU-only, and for apps offloaded to the dGPU.
+egl_platform_line() {   # the hl.env line naming every installed NVIDIA platform but egl-wayland2; nothing when there is nothing to choose
+    local f list=()
+    [ -e "$EGL_PLATFORMS/09_nvidia_wayland2.json" ] && [ -e "$EGL_PLATFORMS/10_nvidia_wayland.json" ] || return 1
+    for f in "$EGL_PLATFORMS"/*.json; do
+        case ${f##*/} in *wayland2*) continue ;; esac
+        list+=("$f")
+    done
+    printf "$LUA_ENV\n" __EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES "$(IFS=:; echo "${list[*]}")"
+}
+egl_platform_set() {   # the user's Hyprland config already names a platform list without egl-wayland2
+    local l
+    l=$(grep -rhs --include='*.lua' -E '^[^-]*hl\.env\("__EGL_EXTERNAL_PLATFORM_CONFIG_FILENAMES"' "$HYPR_CONF_DIR" | tail -1)
+    [ -n "$l" ] && ! printf '%s' "$l" | grep -q wayland2
+}
+
+# What the modules use (tools/shell/needs.tsv): never a TO DO -- a missing program makes its feature absent and nothing else --, but a machine that is
+# set up for the first time gets ONE install line, of package names that exist (a program's name is often not its package's).
+NEEDS=$SELF_DIR/needs.tsv
+need_there() {   # need_there <what to look for>: 0 when it is on this machine (the python modules are asked once, all together: NEEDS_PY)
+    local v=${1#*:}
+    case $1 in
+        cmd:*)   command -v "$v" > /dev/null ;;
+        file:*)  [ -e "$v" ] ;;
+        py:*)    [[ " $NEEDS_PY " == *" $v "* ]] ;;
+        font:*)  fc-list ":family=$v" family 2> /dev/null | grep -q . ;;
+        icons:*) [ -d "/usr/share/icons/$v" ] || [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/icons/$v" ] || [ -d "$HOME/.icons/$v" ] ;;
+        *) return 1 ;;
+    esac
+}
+needs_report() {   # one row per part, then the install line(s)
+    local part="" p what pkg from why have=() miss=() repo=() aur=() n
+    NEEDS_PY=$(python3 -c 'import importlib.util as u, sys; print(*[m for m in sys.argv[1:] if u.find_spec(m)])' $(sed -n 's/^[^#	]*	py:\([^	]*\)	.*/\1/p' "$NEEDS") 2> /dev/null)
+    flush() {
+        [ -n "$part" ] || return 0
+        if [ "${#miss[@]}" -eq 0 ]; then setup_row ok "$part" "$(IFS=,; printf '%s' "${have[*]}" | sed 's/,/, /g')"
+        else n=$(IFS=';'; printf '%s' "${miss[*]}" | sed 's/;/; /g'); printf '  %-6s %-22s %s\n' "-" "$part" "not here: $n"; fi
+    }
+    while IFS=$'\t' read -r p what pkg from why; do
+        case $p in ""|"#"*) continue ;; esac
+        if [ "$p" != "$part" ]; then flush; part=$p; have=(); miss=(); fi
+        if need_there "$what"; then have+=("${what#*:}")
+        else
+            miss+=("${what#*:} ($why)")
+            if [ "$from" = aur ]; then aur+=("$pkg"); else repo+=("$pkg"); fi
+        fi
+    done < "$NEEDS"
+    flush
+    if [ "${#repo[@]}" -gt 0 ]; then echo "         all of them at once:  $(cmdc "sudo pacman -S --needed $(printf '%s\n' "${repo[@]}" | awk '!seen[$0]++' | paste -sd' ' -)")"; fi
+    if [ "${#aur[@]}" -gt 0 ]; then echo "         from the AUR:         $(cmdc "yay -S --needed $(printf '%s\n' "${aur[@]}" | awk '!seen[$0]++' | paste -sd' ' -)")"; fi
+    return 0
+}
+
+SETUP_TODO=0
+setup_cmd() {
+    local c miss=() cur lk out act why
+    cmd_colour_init
+    echo "lares setup -- what this machine needs for the shell, checked one by one (nothing is written or run)"
+    echo
+    echo "programs"
+    for c in quickshell:quickshell hyprctl:hyprland git:git jq:jq python3:python gdbus:glib2 flock:util-linux; do
+        command -v "${c%%:*}" > /dev/null || miss+=("${c##*:}")
+    done
+    if [ "${#miss[@]}" -eq 0 ]; then setup_row ok "programs" "quickshell, hyprctl, git, jq, python3, gdbus, flock"
+    else setup_row "TO DO" "programs" "missing: $(cmdc sudo pacman -S "${miss[*]}")"; fi
+    if [ -r "$NEEDS" ]; then
+        echo
+        echo "what the modules use (a missing one makes its feature absent; nothing else breaks)"
+        needs_report
+    fi
+    echo
+    echo "yours (no root)"
+    if [ -x "$BIN_DIR/lares" ]; then setup_row ok "the command" "$BIN_DIR/lares"
+    else setup_row "TO DO" "the command" "lares is not in $BIN_DIR: $(cmdc "mkdir -p $BIN_DIR && ln -s $REPO/tools/shell/lares $BIN_DIR/lares")"; fi
+    if [ "$(shell_json_get modules | jq -r '.screentime == false' 2> /dev/null)" = true ]; then setup_row ok "screen time" "the module is off (shell.jsonc modules)"
+    elif [ -x "$HOME/.local/bin/screentimed" ]; then setup_row ok "screen time" "$HOME/.local/bin/screentimed"
+    else setup_row "TO DO" "screen time" "its daemon is not built: $(cmdc "(cd $REPO/helpers/screentimed && cargo build --release && ./install.sh) && systemctl --user daemon-reload && systemctl --user enable --now screentimed")"; fi
+    echo
+    echo "the snapshots"
+    cur=$(deployed_current_rev)
+    if [ -n "$cur" ] && [ -e "$DEPLOY_DIR/$cur/.complete" ]; then setup_row ok "the shell" "$DEPLOY_DIR/current -> ${cur:0:9}"
+    else setup_row "TO DO" "the shell" "nothing is deployed: $(cmdc lares deploy)"; fi
+    lk=$(lock_current_rev)
+    if [ -n "$lk" ] && [ -e "$LOCK_DIR/$lk/.complete" ]; then setup_row ok "the lock" "$LOCK_DIR/current -> ${lk:0:9}"
+    else setup_row "TO DO" "the lock" "no snapshot: $(cmdc lares deploy)"; fi
+    echo
+    echo "your Hyprland config ($HYPR_CONF_DIR)"
+    if out=$(config_check --summary); then setup_row ok "the shell's lines" "$out"
+    else setup_row "TO DO" "the shell's lines" "$out"; fi
+    act=$LOCK_DIR/current/tools/lockscreen/lares-lock-session
+    if [ ! -f "$HYPRIDLE_CONF" ]; then setup_row "TO DO" "hypridle" "no $HYPRIDLE_CONF: idle and sleep lock nothing"
+    elif hypridle_line_has lock_cmd "$act" && hypridle_line_has before_sleep_cmd "$act" && hypridle_line_has inhibit_sleep 3; then
+        setup_row ok "hypridle" "lock_cmd and before_sleep_cmd run the Lares lock; inhibit_sleep = 3"
+    else
+        setup_row "TO DO" "hypridle" "in the general block of $HYPRIDLE_CONF:"
+        printf '  %-6s %-22s %s\n' "" "" "$(cmdc "lock_cmd = $act")" "" "" "$(cmdc "before_sleep_cmd = $act")" "" "" "$(cmdc "inhibit_sleep = 3")   (sleep waits until the session IS locked)"
+    fi
+    if out=$(egl_platform_line); then
+        if egl_platform_set; then setup_row ok "NVIDIA EGL platform" "NVIDIA clients use egl-wayland (egl-wayland2 holds every frame one refresh longer)"
+        else
+            setup_row "TO DO" "NVIDIA EGL platform" "egl-wayland2 is NVIDIA's first pick and shows every GL client's frame one refresh late (dGPU-only, offloaded apps); in $HYPR_CONF_DIR/config/environment.lua, then log in again:"
+            printf '  %-6s %-22s %s\n' "" "" "$(cmdc "$out")"
+        fi
+    fi
+    if folder_opener_ok; then setup_row ok "folders open in" "$FOLDER_OPENER (yazi in kitty), or xdg-mime is not installed"
+    elif [ -f "$DEPLOY_DIR/current/tools/shell/applications/$FOLDER_OPENER" ]; then
+        setup_row "TO DO" "folders open in" "$(xdg-mime query default inode/directory 2> /dev/null || true): a drive card's Open and every xdg-open of a folder start it, not yazi; run once:"
+        printf '  %-6s %-22s %s\n' "" "" "$(cmdc "$(folder_opener_line)")"
+    else setup_row "TO DO" "folders open in" "the shell's $FOLDER_OPENER is not in a deployed snapshot yet: $(cmdc lares deploy), then lares setup prints the line"; fi
+    echo
+    echo "the notification name ($NOTIF_NAME: the shell is the notification daemon)"
+    mapfile -t miss < <(notification_activators)
+    if [ "${#miss[@]}" -eq 0 ]; then setup_row ok "D-Bus activation" "no other daemon can be started for the name"
+    else
+        for c in "${miss[@]}"; do
+            case $c in
+                *.service) setup_row "TO DO" "D-Bus activation" "$c would start for a notification sent while the shell is down and keep the name: $(cmdc systemctl --user mask "$c") (or remove its package)" ;;
+                *) setup_row "TO DO" "D-Bus activation" "$c would start for a notification sent while the shell is down and keep the name" ;;
+            esac
+        done
+    fi
+    echo
+    echo "the portals (user units: between two sessions they must not start on the old session's environment)"
+    if out=$(portal_units_open); then
+        if [ -z "$out" ]; then setup_row ok "portals in a session" "every installed portal unit requires graphical-session.target"
+        else
+            # shellcheck disable=SC2086   # one word per unit
+            setup_row "TO DO" "portals in a session" "$(echo $out): a client of the dying session starts them between two logins and the GTK one ends in start-limit-hit"
+            # shellcheck disable=SC2086
+            printf '  %-6s %-22s %s\n' "" "" "your drop-ins, once (a start with no session up is then refused, not run):" "" "" "$(cmdc "$(portal_dropin_cmd $out)")"
+        fi
+    else setup_row ok "portals in a session" "the user manager does not answer: not checked"; fi
+    echo
+    echo "the name (the project is Lares; the old names work, through symlinks and shims, until \`lares cleanup-old-name\`)"
+    if why=$(migration_pending); then setup_row "TO DO" "migrate-name" "still only under the old name: $(printf '%s' "$why" | head -3 | tr '\n' ';'): $(cmdc lares migrate-name)"
+    else setup_row ok "migrate-name" "every directory of ours is under its Lares name"; fi
+    migrate_args
+    if out=$(python3 "$MIGRATE" scan "${MIGRATE_ARGS[@]}" 2>&1); then setup_row ok "your lines" "nothing of yours (Hyprland, hypridle, hyproled, ~/.bashrc, yazi, the configs) names an old name"
+    else
+        setup_row "TO DO" "your lines" "still name an old name ('lares binds' shows the Hyprland ones with the line to use):"
+        printf '%s\n' "$out" | sed 's/^/                                 /'
+    fi
+    echo
+    echo "the displays (Panorama: docs/panorama.md)"
+    # The engine's file: the import made it, the shell keeps it in step (its line is in 'the shell's lines' above).
+    if [ -f "$HYPR_CONF_DIR/config/panorama.lua" ]; then setup_row ok "panorama" "$HYPR_CONF_DIR/config/panorama.lua (generated)"
+    elif grep -rqsE 'require[^#]*config/panorama' "$HYPR_CONF_DIR" --include=*.lua; then
+        setup_row "TO DO" "panorama" "your config loads $HYPR_CONF_DIR/config/panorama.lua and it is not there yet (a clone never has it): the shell writes it at its next start"
+    else setup_row "TO DO" "panorama" "not imported yet: $(cmdc lares panorama-import) (once; a diff and a typed yes)"; fi
+    # never a TO DO from here on: a laptop without a dock or a DDC monitor is whole
+    if systemctl is-enabled displaylink.service > /dev/null 2>&1; then
+        if systemctl is-active displaylink.service > /dev/null 2>&1; then setup_row ok "DisplayLink" "displaylink.service runs (the dock's screens appear as DVI-I-N)"
+        else printf '  %-6s %-22s %s\n' "-" "DisplayLink" "displaylink.service is enabled but not running: $(cmdc sudo systemctl start displaylink.service)"; fi
+        if ! modinfo evdi > /dev/null 2>&1; then printf '  %-6s %-22s %s\n' "-" "evdi" "no evdi module for $(uname -r): $(cmdc sudo pacman -S evdi-dkms) (or rebuild it: $(cmdc sudo dkms autoinstall))"; fi
+    else printf '  %-6s %-22s %s\n' "-" "DisplayLink" "not set up (only for a DisplayLink dock): the displaylink package, then $(cmdc sudo systemctl enable --now displaylink.service)"; fi
+    if command -v ddcutil > /dev/null; then
+        if ls /dev/i2c-* > /dev/null 2>&1; then setup_row ok "monitor brightness" "ddcutil, and /dev/i2c-* is there (DDC/CI from the popup and the keys)"
+        else printf '  %-6s %-22s %s\n' "-" "monitor brightness" "no /dev/i2c-*: load i2c-dev ($(cmdc "echo i2c-dev | sudo tee /etc/modules-load.d/i2c-dev.conf; sudo modprobe i2c-dev"))"; fi
+    else printf '  %-6s %-22s %s\n' "-" "monitor brightness" "ddcutil is not installed (an external monitor's own brightness): $(cmdc sudo pacman -S ddcutil)"; fi
+    echo
+    echo "the root steps (yours to run in a terminal; lares never runs sudo; the Lares files go BESIDE the old ones)"
+    if ! root_boot_needed; then setup_row ok "R1 the boot lock" "no autologin here: the greeter asks for the password, and the boot lock's line does nothing behind it"
+    elif root_boot_all; then setup_row ok "R1 the boot lock" "SDDM's autologin starts hyprland-lares: the Lares lock from the first frame"
+    else setup_row "TO DO" "R1 the boot lock" "below"; fi
+    if root_pam_all && root_keyring_in; then setup_row ok "R2 PAM + keyring" "the lock asks lares-lock; its password unlocks the login keyring ($ROOT_PAM)"
+    elif root_pam_all; then setup_row "TO DO" "R2 PAM + keyring" "$ROOT_PAM is there, the keyring line is not: below"
+    elif [ -e "$ROOT_PREFIX$OLD_PAM" ]; then setup_row "TO DO" "R2 PAM + keyring" "$ROOT_PAM is not installed (the lock asks qs-lock until it is): below"
+    else setup_row "TO DO" "R2 PAM + keyring" "$ROOT_PAM is not installed (the lock asks the machine's login stack until it is): below"; fi
+    if ! root_polkit_needed; then setup_row ok "R3 silicon's polkit" "silicon's helper is not installed here: nothing to do"
+    elif root_polkit_all; then setup_row ok "R3 silicon's polkit" "org.lares.silicon.helper is installed beside the old action"
+    else setup_row "TO DO" "R3 silicon's polkit" "below"; fi
+    if ! root_helper_here; then setup_row ok "R4 Wi-Fi power save verb" "silicon's helper is not installed here: nothing to do"
+    elif root_helper_wifi_in; then setup_row ok "R4 Wi-Fi power save verb" "the installed helper has wifi-powersave (AirPlay keeps the radio awake)"
+    else setup_row "TO DO" "R4 Wi-Fi power save verb" "the installed helper predates it: below"; fi
+    # never a TO DO: the shell is whole without it. The aerial module's tests against a real NetworkManager need it (an agent runs tools/dev/aerial_rig_probe.sh after it)
+    if root_rig_in; then setup_row ok "aerial test bed" "installed (optional): $ROOT_RIG_UNIT; started only on demand: $(cmdc systemctl start lares-aerial-rig)"
+    else setup_row ok "aerial test bed" "not installed (optional; the module's tests against a real NetworkManager): $(cmdc sudo "$(root_rig_installer)")"; fi
+    setup_boost_row
+    setup_dlddc_row
+    setup_snapshots_rows
+    if { root_boot_needed && ! root_boot_all; } || ! root_pam_all || ! root_keyring_in || ! root_polkit_all || ! root_helper_all; then echo; root_steps_text | cmd_lines; fi
+    if snap_steps_wanted; then echo; snap_steps_text | cmd_lines; fi
+    if root_boost_steps_wanted; then root_step_boost "$DEPLOY_DIR/current" | cmd_lines; fi
+    if root_dlddc_here && ! root_dlddc_in; then root_step_dlddc "$DEPLOY_DIR/current" | cmd_lines; fi
+    echo
+    if [ "$SETUP_TODO" -eq 0 ]; then echo "everything is in place"; return 0; fi
+    echo "$SETUP_TODO thing(s) to do (above)"
+    return 1
+}
+
+migrate_name_cmd() {
+    local a rc dry=()
+    for a in "$@"; do
+        case $a in --dry-run) dry=(--dry-run) ;; *) usage_error "migrate-name [--dry-run]" ;; esac
+    done
+    [ -n "$RT" ] && [ -d "$RT" ] || die "XDG_RUNTIME_DIR is not set"
+    a=$(git -C "$REPO" rev-parse --show-toplevel 2> /dev/null) && [ "$(cd "$a" && pwd -P)" = "$REPO" ] \
+        || die "migrate-name: run the repo's lares ($REPO is not the top of a git work tree): ~/.local/bin/lares is linked to it"
+    migrate_args
+    python3 "$MIGRATE" migrate "${MIGRATE_ARGS[@]}" "${dry[@]}"; rc=$?
+    [ "$rc" -eq 0 ] && [ "${#dry[@]}" -eq 0 ] || return "$rc"
+    echo
+    echo "What is left, in this order (each step is safe to repeat; the old names keep working until the last one):"
+    echo "  1. lares deploy        (the first deploy after this replaces a supervisor of the old name, and places a shim at each old entry-point name your lines still run)"
+    echo "  2. your lines, right after it (until they say lares: the shell's global keys do nothing) -- each STALE row below has its new line in the MISSING row beside it:"
+    echo
+    config_check | sed 's/^/     /'
+    echo "     hypridle.conf, hyproled-toggle.sh, ~/.local/bin/hyprlock and ~/.bashrc are not Lua: \`lares setup\` lists their lines."
+    echo "  3. hyprctl reload, then restart hypridle (or log in again)"
+    echo "  4. the root steps (a terminal; the Lares files go BESIDE the old ones; skip one and the lock keeps asking the old name). R1 and R3 install"
+    echo "     files of the deployed snapshot, so they come after step 1: \`lares setup\` prints them then. As they stand now:"
+    echo
+    root_steps_text | sed 's/^/     /'
+    echo
+    echo "  5. rebuild screentimed (helpers/screentimed: cargo build --release, ./install.sh, then systemctl --user daemon-reload && systemctl --user restart"
+    echo "     screentimed: the unit file changed) and the dictation's venv (tools/stt/setup.sh) when \`lares setup\` asks"
+    echo "  6. later, once \`lares setup\` says nothing names an old name: lares cleanup-old-name"
+}
+
+cleanup_old_name_cmd() {
+    local a dry=()
+    for a in "$@"; do
+        case $a in --dry-run) dry=(--dry-run) ;; *) usage_error "cleanup-old-name [--dry-run]" ;; esac
+    done
+    migrate_args
+    python3 "$MIGRATE" cleanup "${MIGRATE_ARGS[@]}" "${dry[@]}"
+}
+
+panorama_import_cmd() {
+    local a dry=()
+    for a in "$@"; do
+        case $a in --dry-run) dry=(--dry-run) ;; *) usage_error "panorama-import [--dry-run]" ;; esac
+    done
+    python3 "$SELF_DIR/../panorama/panorama-import.py" "${dry[@]}"
+}
+
+cleanup_marks_cmd() {
+    local a dry=()
+    for a in "$@"; do
+        case $a in --dry-run) dry=(--dry-run) ;; *) usage_error "cleanup-marks [--dry-run]" ;; esac
+    done
+    python3 "$SELF_DIR/lares-config.py" cleanup-marks --state "$OLD_DEPLOY_STATE" --persist "$PERSIST" "${dry[@]}" \
+        --file "$HYPR_CONF_DIR/config/autostart.lua" --file "$HYPR_CONF_DIR/config/keybinds.lua" \
+        --file "$HYPR_CONF_DIR/config/layerrules.lua" --file "$HYPR_CONF_DIR/config/windowrules.lua" \
+        --file "$HYPR_CONF_DIR/config/environment.lua" --file "$HYPRIDLE_CONF" --file "$HOME/.local/bin/hyprlock" \
+        --file "$HYPR_CONF_DIR/scripts/hyproled/hyproled-toggle.sh" --file "$LARES_CONFIG_DIR/llm.jsonc" --file "$LARES_CONFIG_DIR/llm.json" \
+        --file "$LARES_CONFIG_DIR/config/llm.jsonc"
+}
+
+# ==================================================================================================
+usage_error() { printf 'lares: %s\n\n' "$1" >&2; usage >&2; exit 2; }
+
+need_runtime() { [ -n "$RT" ] && [ -d "$RT" ] || die "XDG_RUNTIME_DIR is not set"; }
+
+main() {
+    local cmd=${1:-help} upd mode=act a
+    [ "$#" -gt 0 ] && shift
+    case $cmd in
+        help|-h|--help|init|binds|config|setup|update-running|oled|cleanup-marks|panorama-import|migrate-name|cleanup-old-name|publish) ;;
+        *)
+            deployed_stale_recover "$@"
+            [ -n "$RT" ] && [ -d "$RT" ] && { for a in "$@"; do [ "$a" = --dry-run ] && mode=plan; done; qmlls_recover "$mode"; } ;;
+    esac
+    case $cmd in
+        deploy) need_runtime; deploy_cmd "$@" ;;
+        start) need_runtime; start_cmd "$@" ;;
+        restart) need_runtime; restart_cmd "$@" ;;
+        status) need_runtime; status_cmd ;;
+        log) need_runtime; show_log "$@" ;;
+        binds) binds_cmd "$@" ;;
+        setup) setup_cmd ;;
+        config) python3 -B "$SELF_DIR/lares-config-check.py" "$@" ;;
+        init) python3 -B "$SELF_DIR/lares-init.py" "$@" ;;
+        apply) need_runtime; apply_commit "$@" ;;
+        publish) exec python3 -B "$REPO/tools/publish/lares-publish" --repo "$REPO" "$@" ;;
+        preview) preview "$@" ;;
+        oled) oled_cmd "$@" ;;
+        perf) [ "${1:-}" = tour ] || usage_error "perf tour [--fresh] [--boost-ab] [--no-theme] [--list] [--dry] | perf tour compare A.json B.json"
+              shift; exec python3 -B "$SELF_DIR/lares-perf-tour" "$@" ;;
+        session) session_cmd "$@" ;;
+        snapshot) snapshot_cmd "$@" ;;
+        update-running) upd=$(update_running_pid); [ -n "$upd" ] && echo "$upd" ;;
+        cleanup-marks) cleanup_marks_cmd "$@" ;;
+        panorama-import) panorama_import_cmd "$@" ;;
+        migrate-name) migrate_name_cmd "$@" ;;
+        cleanup-old-name) cleanup_old_name_cmd "$@" ;;
+        fallback) need_runtime; fallback_cmd ;;
+        trial|revert|root-steps)
+            printf "lares: '%s' is gone: the shell is the desktop, and lares edits no config file.%s\n" "$cmd" \
+                "$([ "$cmd" = root-steps ] && echo " 'lares setup' prints the root steps.")" >&2
+            exit 2 ;;
+        help|-h|--help) usage ;;
+        *) usage_error "unknown command: $cmd" ;;
+    esac
+}
+main "$@"

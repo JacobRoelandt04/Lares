@@ -1,0 +1,371 @@
+#!/usr/bin/env bash
+# lares-supervise -- the shell's supervisor. `lares start` (what autostart.lua runs at login) starts it as a child of the
+# COMPOSITOR (hyprctl dispatch hl.dsp.exec_cmd), and nothing else should: it takes everything from <state dir>/supervise.env,
+# which `start` writes.
+#
+#   lares-supervise --run <state dir>
+#
+# It keeps these promises while it runs:
+#   1. THE SHELL STAYS UP. `quickshell -n -p <deploy dir>/current/shell.qml` runs with QS_DISABLE_FILE_WATCHER=1 (an edit never
+#      reloads it; a deploy restarts it) and QS_DISABLE_CRASH_HANDLER=1 (with the handler on, a crash re-execs the same pid,
+#      invisibly here, and dumps a core), its output appended to <state dir>/shell.log and its pid written to <state dir>/pid by
+#      the `sh` that then execs quickshell (exec keeps the pid). A shell that exits is started again after a backoff that doubles
+#      (BACKOFF, 2*BACKOFF, ...). Every exit counts: 139 / 134 are crashes, 255 is "does not load" OR "crashed within 10 s" (the
+#      status cannot tell).
+#   2. A CRASH LOOP IS SAID ONCE AND TRIED SLOWER. More than RESTART_LIMIT exits inside RESTART_WINDOW seconds are a crash loop:
+#      ONE notice through Hyprland's own notification (`hyprctl notify`, an error for 30 s: the shell IS the notification daemon,
+#      so notify-send would have nobody to show it) -- the shell keeps crashing, `lares log` says why, and a system update
+#      that is running has nobody to answer its sudo -- and from then on one try every SLOW_BACKOFF seconds, doubling up to
+#      SLOW_MAX. A shell that stays up STABLE seconds ends the loop (the next exits are counted afresh, and a new loop is said
+#      again); so does a restart asked by `lares restart` (Super+Shift+F12), which also cuts a slow wait short. Nothing else
+#      is started in the shell's place.
+#   3. THE LOG STAYS SMALL. The state dir is on /run/user, a small tmpfs, and a shell that floods its log (a warning per frame)
+#      must not fill it: over LOG_MAX bytes (100 MiB; LARES_LOG_MAX) shell.log is cut to its last tenth, checked every 10 s.
+#   4. IT STOPS WHEN ASKED: TERM (also the stop file <state dir>/stop, and the state dir gone) stops the shell it started --
+#      `quickshell kill --pid` first (the shell quits itself, status 0), SIGTERM (143) when it stays, KILL last -- and exits.
+#      USR1 restarts the shell the same way, not counted as a crash; when <state dir>/switch names a commit, the restart points
+#      <deploy dir>/current at it BETWEEN the stop and the start (`lares deploy` / `apply`): the shell is given the link's
+#      path, so its shellDir is the link, and a file read lazily across the switch would mix two commits.
+#   5. THE CACHES STAY SMALL. SWEEP_FIRST_MS (60 s) after it starts and then every 24 h it runs `lares-sweep --daily` (the retention
+#      sweep: tools/shell/lares-sweep, the table of what may age out; docs/shell.md "Retention"), niced and detached: one fork a
+#      day, no Timer in the shell. The tool is the supervisor's own commit's (`${SELF%/*}/lares-sweep`), else the deployed
+#      `current`'s. A running supervisor keeps its old bytes: a deploy restarts the shell, not the supervisor, so a change here
+#      first acts at the next login (or after the supervisor is stopped and `lares start` runs).
+#   6. A SHELL THAT STOPS ANSWERING IS RESTARTED (the liveness watchdog). Every WATCH_PING_S (15) seconds a background
+#      `quickshell ipc -p <shell.qml> call shell ping` (under a timeout) asks the shell; the IPC is answered by the GUI thread, so
+#      no answer is a blocked event loop, which no exit status ever shows (2026-11-17: frozen for good after a resume, no exit, no
+#      core). A stall is declared only when EVERY ping over WATCH_STALL_S (90) seconds failed -- the start-up prewarm blocks the GUI
+#      thread 7-12 s and a cold NVIDIA shader cache ~31 s: rests, not hangs -- and never within WATCH_GRACE_S (120) of the shell's
+#      start or of a RESUME (a suspend stops the clocks; the supervisor sees the gap between two of its own turns, and forgets
+#      the misses). On a stall the evidence is saved FIRST, under <state>/stalls/<time>/ (the tail of shell.log, every thread's
+#      comm / wchan / stat, a stack by eu-stack or gdb when installed, hyprctl layers / clients / activewindow; the last 5 dirs
+#      are kept), then the shell is killed (TERM, then KILL: nothing here asks the shell) and restarted as any exit, counted
+#      against the restart limit, with one `hyprctl notify`. LARES_WATCH_PING_S=0 turns it off. On every exit of the shell the
+#      tail of shell.log is copied to <state>/shell-last.log (the runtime log dies at reboot).
+#
+# It writes <state dir>/supervise.pid, takes <state dir>/supervise.lock (one supervisor), and logs to <state dir>/supervise.log
+# and ~/.local/state/lares/tool/lares.log. Core dumps are off.
+# shellcheck source-path=SCRIPTDIR
+set -u
+RUN=""
+while [ $# -gt 0 ]; do
+    case $1 in
+        --run) RUN=${2:-}; shift ;;
+        *) echo "lares-supervise: unknown argument $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+[ -n "$RUN" ] && [ -r "$RUN/supervise.env" ] || { echo "lares-supervise: no $RUN/supervise.env -- only 'lares start' starts this" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$RUN/supervise.env"
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+# shellcheck source=lares-lib.sh
+. "${SELF%/*}/lares-lib.sh"
+LOG_TAG=supervise
+LOG_FILES=("$RUN/supervise.log" "$PERSIST/lares.log")
+
+ulimit -c 0
+exec >> "$RUN/supervise.log" 2>&1
+exec 9> "$RUN/supervise.lock"
+flock -n 9 || exit 0
+echo $$ > "$RUN/supervise.pid"
+
+TICK=0.5
+# THE LOOP FORKS NOTHING AT REST. It turns every TICK for as long as the session lives, so what one turn costs is what the supervisor
+# costs: with an external `sleep` and a `$(...)` for the clock and for each "is it alive" it was 2 execs and 10 forks a second, 1 % of a
+# core with nothing happening (as much as the whole shell at rest). bash's own `sleep` (a loadable builtin, in the bash package) takes the
+# exec away (a trapped signal is still served when the tick ends, as before); where it cannot be loaded the external one still works. The clock is now_ms_into, the liveness pid_alive (lares-lib.sh). What still forks is what must: the ping every 15 s, `stat`
+# of the log every 10 s. tools/dev/lares_watchdog_probe.sh phase `rest` holds it (ARM forkloop).
+enable -f /usr/lib/bash/sleep sleep 2> /dev/null || true
+STOP=0 RESTART_REQ=0 SHELL_PID="" STARTED_MS=0 SLOW=0 SLOW_DELAY_MS=0
+CRASHES=()
+BACKOFF_MS=$(to_ms "$BACKOFF") SLOW_BACKOFF_MS=$(to_ms "$SLOW_BACKOFF") SLOW_MAX_MS=$(to_ms "$SLOW_MAX") STABLE_MS=$(to_ms "$STABLE")
+LOGCAP_EVERY_MS=$(to_ms "${LOGCAP_EVERY:-10}") LOG_MAX=${LOG_MAX:-104857600}
+NEXT_LOGCAP=$(( $(now_ms) + LOGCAP_EVERY_MS ))
+SWEEP_FIRST_MS=60000 SWEEP_EVERY_MS=86400000
+# the watchdog (6. above); every number can be shortened by a probe through LARES_WATCH_*
+WATCH_PING_MS=$(to_ms "${LARES_WATCH_PING_S:-15}") WATCH_STALL_MS=$(to_ms "${LARES_WATCH_STALL_S:-90}") WATCH_GRACE_MS=$(to_ms "${LARES_WATCH_GRACE_S:-120}")
+WATCH_TIMEOUT_S=${LARES_WATCH_TIMEOUT_S:-5} WATCH_GAP_MS=$(to_ms "${LARES_WATCH_GAP_S:-10}") STALL_KEEP=5
+STATE_DIR=${PERSIST%/*}   # ~/.local/state/lares
+PING_PID="" PING_STARTED=0 PING_OUT="$RUN/watch.ping" FIRST_MISS=0 GRACE_UNTIL=0 NEXT_PING=0 LAST_TURN_MS=$(now_ms) STALL_DIR=""
+NEXT_SWEEP=$(( $(now_ms) + SWEEP_FIRST_MS ))
+
+# ---- the shell --------------------------------------------------------------------------------------
+# The icon theme the desktop uses -- what GTK reports (gsettings, then settings.ini; themectl writes both, Papirus-Light / Papirus-Dark by
+# mode) -- the first of the two that is installed, else nothing (a stale gsettings can name a theme long gone, a Colloid pack). Quickshell
+# takes the icon theme once, at start, from QS_ICON_THEME (the shell has no static pragma, so there is one source), so this is the moment
+# the shell learns it. Papirus-Light and Papirus-Dark share every app icon, which is why a light/dark switch under a running shell moves none.
+shell_icon_theme() {
+    local t d
+    for t in "$(gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")" \
+        "$(sed -n 's/^gtk-icon-theme-name=//p' "${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/settings.ini" 2> /dev/null | head -1)"; do
+        [ -n "$t" ] || continue
+        for d in "${XDG_DATA_HOME:-$HOME/.local/share}/icons" "$HOME/.icons" /usr/local/share/icons /usr/share/icons; do
+            [ -f "$d/$t/index.theme" ] && { printf '%s' "$t"; return 0; }
+        done
+    done
+    return 0
+}
+
+# THE SHELL NAMES THIS SUPERVISOR ITS PTRACER (Yama, ptrace_scope 1 here): the watchdog's eu-stack / gdb are children of the supervisor, a
+# SIBLING of the shell, and are refused otherwise. PR_SET_PTRACER (0x59616d61) with the supervisor's pid lets it and its descendants attach, no
+# other process of the user (the shell serves sudo's askpass and the polkit agent); never PR_SET_PTRACER_ANY. The setting belongs to the task
+# and survives execve; python3 is the same process (same pid) when it execs env -> quickshell. Fails open: any error still starts the shell.
+PTRACER='import ctypes, os, sys
+try:
+    ctypes.CDLL(None, use_errno=True).prctl(0x59616d61, os.getppid(), 0, 0, 0)
+except Exception:
+    pass
+os.execvp(sys.argv[1], sys.argv[1:])'   # handed to the child as an argument: no variable of ours leaks into the shell's environment
+
+# THE BODY ON `qs:` (shell.jsonc `"workarounds": { "fileRoot": false }`): shell.qml's stub loads its body from a `file:` URL, which Qt's
+# disk cache serves; false loads it on Quickshell's `qs:` scheme as before. The stub cannot read the file early enough for Quickshell's
+# scanner (the scan that `qs:` needs runs before any QML), so the supervisor reads the key at every start and says LARES_FILE_ROOT=0.
+# One python per START, none in the loop; anything unreadable leaves the default (file). Prints "0" or nothing.
+file_root_off() {
+    python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import jsonc
+w = jsonc.load(sys.argv[2]).get("workarounds")
+print("0" if isinstance(w, dict) and w.get("fileRoot") is False else "")' \
+        "${SELF%/*}/../lib" "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/config/shell.jsonc" 2> /dev/null
+}
+
+start_shell() {   # `env` WITHOUT -i: the shell keeps XDG_RUNTIME_DIR (the system update's askpass socket lives in it)
+    local icons
+    local -a envs=(QS_DISABLE_FILE_WATCHER=1 QS_DISABLE_CRASH_HANDLER=1)
+    # THE QML DISK CACHE has a place of its own (shell.qml's stub loads the body from `file:`, which Qt caches; without this it would share
+    # Quickshell's default ~/.cache/quickshell/qmlcache with every mockup and harness). Keyed by the file's path: the deployed `current`
+    # link keeps one set, and a changed file is compiled again by Qt itself. A caller's own value wins.
+    envs+=("QML_DISK_CACHE_PATH=${QML_DISK_CACHE_PATH:-${XDG_CACHE_HOME:-$HOME/.cache}/lares/qmlcache}")
+    local qsroot=""
+    [ "$(file_root_off)" = 0 ] && qsroot=1 && envs+=(LARES_FILE_ROOT=0)
+    icons=$(shell_icon_theme)
+    if [ -n "$icons" ]; then envs+=("QS_ICON_THEME=$icons"); else log "gsettings names no installed icon theme: the shell starts without one (icons fall back)"; fi
+    sh -c 'echo $$ > "$1"; p=$2; shift 2; if command -v python3 > /dev/null 2>&1; then exec python3 -c "$p" env "$@"; fi; exec env "$@"' \
+        lares-child "$RUN/pid" "$PTRACER" "${envs[@]}" "$QUICKSHELL" -n -p "$SHELL_QML" >> "$RUN/shell.log" 2>&1 < /dev/null 7<&- 9>&- &
+    SHELL_PID=$!
+    STARTED_MS=$(now_ms)
+    watch_reset "$(( STARTED_MS + WATCH_GRACE_MS ))"
+    log "the shell started (pid $SHELL_PID${icons:+, icon theme $icons}${qsroot:+, its body on qs: (fileRoot false)})"
+}
+
+save_last_log() {   # the runtime log dies at reboot and was the only record of a freeze: its tail outlives it
+    mkdir -p "$STATE_DIR" 2> /dev/null && tail -n 400 "$RUN/shell.log" > "$STATE_DIR/shell-last.log.new" 2> /dev/null \
+        && mv -f "$STATE_DIR/shell-last.log.new" "$STATE_DIR/shell-last.log"
+    return 0
+}
+
+stop_child() {   # stop the shell this supervisor started: quickshell kill --pid, then TERM, then KILL
+    local rc
+    if pid_alive "$SHELL_PID"; then
+        stop_quickshell "$SHELL_PID" "$STOP_TIMEOUT"
+        wait "$SHELL_PID" 2> /dev/null; rc=$?
+        log "the shell (pid $SHELL_PID) was stopped (status $rc: 0 = quickshell kill, 143 = TERM)"
+    else
+        wait "$SHELL_PID" 2> /dev/null
+    fi
+    save_last_log
+    return 0
+}
+
+pause_ms() {   # pause_ms <ms>: a wait that a stop -- or a restart asked by `lares restart` -- ends
+    local now end
+    now_ms_into now
+    end=$(( now + $1 ))
+    while [ "$now" -lt "$end" ] && [ "$STOP" -eq 0 ] && [ "$RESTART_REQ" -eq 0 ] && [ ! -e "$RUN/stop" ]; do
+        sleep 0.1
+        now_ms_into now
+    done
+}
+
+crash_loop_notice() {   # crash_loop_notice <exits> : the one notice of a crash loop (2. above)
+    local upd text
+    upd=$("$TOOL" update-running 2> /dev/null)
+    text="The shell keeps crashing ($1 exits in ${RESTART_WINDOW} s): it is tried again in $(( SLOW_BACKOFF_MS / 1000 )) s, then less often. lares log shows why; Super+Shift+F12 tries now."
+    [ -z "$upd" ] || text="$text A SYSTEM UPDATE IS RUNNING (pid $upd): its next sudo has nobody to answer until the shell is back."
+    hypr_notice 3 "$text" 30000
+}
+
+on_shell_exit() {   # on_shell_exit <status>: start it again after the backoff -- or, in a crash loop, the slow one
+    local rc=$1 now t n delay_ms why=""
+    local -a kept=()
+    if [ "$rc" -gt 128 ] && [ "$rc" -le 192 ]; then why=" (signal $(kill -l $(( rc - 128 )) 2> /dev/null))"; fi
+    [ "$rc" -eq 255 ] && why=" (the configuration does not load, or quickshell crashed within 10 s of its start)"
+    log "the shell (pid $SHELL_PID) exited with status $rc$why"
+    save_last_log
+    if [ "$SLOW" -eq 0 ]; then
+        now=$(now_s)
+        for t in "${CRASHES[@]}"; do (( now - t < RESTART_WINDOW )) && kept+=("$t"); done
+        CRASHES=("${kept[@]}" "$now")
+        n=${#CRASHES[@]}
+        if (( n > RESTART_LIMIT )); then
+            SLOW=1 SLOW_DELAY_MS=$SLOW_BACKOFF_MS
+            log "the shell exited $n times within ${RESTART_WINDOW}s: a crash loop -- said once, tried every $(( SLOW_BACKOFF_MS / 1000 ))s and slower"
+            crash_loop_notice "$n"
+        else
+            delay_ms=$(( BACKOFF_MS << (n - 1) ))
+            log "restart $n of $RESTART_LIMIT in ${RESTART_WINDOW}s: in $(( delay_ms / 1000 )).$(( delay_ms % 1000 / 100 ))s"
+        fi
+    fi
+    if [ "$SLOW" -eq 1 ]; then
+        delay_ms=$SLOW_DELAY_MS
+        SLOW_DELAY_MS=$(( SLOW_DELAY_MS * 2 ))
+        (( SLOW_DELAY_MS > SLOW_MAX_MS )) && SLOW_DELAY_MS=$SLOW_MAX_MS
+        log "crash loop: the next try in $(( delay_ms / 1000 )).$(( delay_ms % 1000 / 100 ))s"
+    fi
+    pause_ms "$delay_ms"
+    [ "$RESTART_REQ" -eq 1 ] && return 0   # the asked restart starts it (do_restart)
+    [ "$STOP" -eq 0 ] && [ ! -e "$RUN/stop" ] && start_shell
+}
+
+check_shell() {
+    local rc
+    pid_alive "$SHELL_PID" && return 0
+    wait "$SHELL_PID" 2> /dev/null; rc=$?
+    on_shell_exit "$rc"
+}
+
+do_restart() {   # `lares restart` / deploy's switch: a deliberate stop is not a crash, and it ends a crash loop
+    local rev
+    RESTART_REQ=0
+    log "restart requested"
+    if [ "$SLOW" -eq 1 ] || [ "${#CRASHES[@]}" -gt 0 ]; then log "the crash count starts afresh"; fi
+    SLOW=0 CRASHES=()
+    stop_child
+    if [ -s "$RUN/switch" ]; then   # deploy's switch: current moves while no shell runs
+        read -r rev < "$RUN/switch"
+        if [[ $rev =~ ^[0-9a-f]{40}$ ]] && [ -e "$DEPLOY_DIR/$rev/.complete" ] \
+            && ln -sfn "$rev" "$DEPLOY_DIR/.current.new" && mv -T "$DEPLOY_DIR/.current.new" "$DEPLOY_DIR/current"; then
+            log "switched $DEPLOY_DIR/current to $rev"
+        else
+            log "could NOT switch to '$rev': the shell starts from the snapshot current names"
+        fi
+        rm -f "$RUN/switch"
+    fi
+    start_shell
+}
+
+# ---- the liveness watchdog (6. above) -------------------------------------------------------------------
+watch_reset() {   # watch_reset <grace until, ms>: forget the misses and any ping in the air; judge nothing before the grace ends
+    [ -z "$PING_PID" ] || kill "$PING_PID" 2> /dev/null
+    PING_PID="" FIRST_MISS=0 GRACE_UNTIL=$1 NEXT_PING=$1
+    rm -f "$PING_OUT"
+}
+
+save_stall_evidence() {   # save_stall_evidence <pid>: what a post-mortem needs, taken BEFORE the shell is killed
+    local pid=$1 d t f
+    printf -v t '%(%Y-%m-%d_%H-%M-%S)T' -1
+    d=$STATE_DIR/stalls/$t
+    mkdir -p "$d" 2> /dev/null || { log "stall: could not make $d"; return 0; }
+    STALL_DIR=$d
+    tail -n 400 "$RUN/shell.log" > "$d/shell.log" 2> /dev/null
+    tail -n 200 "$RUN/supervise.log" > "$d/supervise.log" 2> /dev/null
+    for f in "/proc/$pid/task"/*; do
+        [ -d "$f" ] || continue
+        printf '%s comm=%s wchan=%s\n  stat: %s\n' "${f##*/}" "$(cat "$f/comm" 2> /dev/null)" "$(cat "$f/wchan" 2> /dev/null)" "$(cat "$f/stat" 2> /dev/null)"
+    done > "$d/threads.txt" 2> /dev/null
+    if command -v eu-stack > /dev/null 2>&1; then DEBUGINFOD_URLS= timeout 20 eu-stack -p "$pid" > "$d/stack.txt" 2>&1 8>&- 9>&-
+    elif command -v gdb > /dev/null 2>&1; then DEBUGINFOD_URLS= timeout 30 gdb -batch -p "$pid" -ex 'thread apply all bt' > "$d/stack.txt" 2>&1 8>&- 9>&-
+    else echo "no eu-stack and no gdb installed" > "$d/stack.txt"; fi
+    for f in layers clients activewindow; do timeout 2 "${HYPRCTL:-hyprctl}" -j "$f" > "$d/hypr-$f.json" 2>&1 8>&- 9>&-; done
+    # shellcheck disable=SC2012
+    ls -1dt "$STATE_DIR/stalls"/*/ 2> /dev/null | tail -n +$(( STALL_KEEP + 1 )) | while read -r old; do rm -rf -- "$old"; done
+    log "stall: evidence saved in $d"
+}
+
+declare_stall() {   # declare_stall <silent ms>: evidence, then the same road as any exit (counted, backed off), with a KILL that asks nothing of the shell
+    local pid=$SHELL_PID rc=0
+    log "WATCHDOG: the shell (pid $pid) has not answered ipc ping for $(( $1 / 1000 )) s (its GUI thread is blocked): restarting it"
+    STALL_DIR=""
+    save_stall_evidence "$pid"
+    hypr_notice 0 "The shell stopped answering and was restarted. Evidence: ${STALL_DIR:-$STATE_DIR/stalls}" 20000
+    kill -TERM "$pid" 2> /dev/null
+    wait_until 2 pid_gone "$pid" || { log "stall: pid $pid ignored TERM: KILL"; kill -KILL "$pid" 2> /dev/null; wait_until 3 pid_gone "$pid"; }
+    wait "$pid" 2> /dev/null; rc=$?
+    watch_reset 0
+    on_shell_exit "$rc"
+}
+
+watchdog() {
+    local now res
+    [ "$WATCH_PING_MS" -gt 0 ] || return 0
+    now_ms_into now
+    if (( now - LAST_TURN_MS > WATCH_GAP_MS )); then   # this loop slept: a suspend (the clocks stop, the wall does not)
+        log "watchdog: $(( (now - LAST_TURN_MS) / 1000 )) s between two turns -- a resume: no judging for $(( WATCH_GRACE_MS / 1000 )) s"
+        watch_reset "$(( now + WATCH_GRACE_MS ))"
+    fi
+    LAST_TURN_MS=$now
+    pid_alive "$SHELL_PID" || return 0
+    if [ -n "$PING_PID" ]; then
+        pid_alive "$PING_PID" && return 0
+        wait "$PING_PID" 2> /dev/null
+        PING_PID=""
+        res=""
+        read -r res 2> /dev/null < "$PING_OUT"
+        if [ "$res" = ok ] || (( now < GRACE_UNTIL )); then
+            FIRST_MISS=0
+        else
+            [ "$FIRST_MISS" -gt 0 ] || FIRST_MISS=$PING_STARTED
+            if (( now - FIRST_MISS >= WATCH_STALL_MS )); then declare_stall "$(( now - FIRST_MISS ))"; return 0; fi
+        fi
+    fi
+    (( now >= NEXT_PING )) || return 0
+    PING_STARTED=$now
+    NEXT_PING=$(( now + WATCH_PING_MS ))
+    ( exec timeout "$WATCH_TIMEOUT_S" "$QUICKSHELL" ipc -p "$SHELL_QML" call shell ping > "$PING_OUT" 2> /dev/null < /dev/null 7<&- 8>&- 9>&- ) &
+    PING_PID=$!
+}
+
+# ---- the periodic work ------------------------------------------------------------------------------
+cap_log() {   # cap_log: cut shell.log to its last tenth when it is over LOG_MAX (the shell appends: its next write lands after the cut)
+    local f=$RUN/shell.log size keep
+    size=$(stat -c %s "$f" 2> /dev/null) || return 0
+    [ "$size" -gt "$LOG_MAX" ] || return 0
+    keep=$(( LOG_MAX / 10 ))
+    if tail -c "$keep" "$f" > "$f.cut" && cat "$f.cut" > "$f"; then log "shell.log was $size bytes: cut to its last $keep"; fi
+    rm -f "$f.cut"
+}
+
+run_sweep() {   # the retention sweep, once: detached, at the lowest CPU and IO priority; it logs its own lines to lares.log
+    local tool=${SELF%/*}/lares-sweep
+    [ -x "$tool" ] || tool=$DEPLOY_DIR/current/tools/shell/lares-sweep
+    if [ ! -x "$tool" ]; then log "no lares-sweep next to this supervisor: no retention sweep"; return 0; fi
+    log "retention sweep (lares-sweep --daily)"
+    ( exec nice -n 19 ionice -c3 "$tool" --daily > /dev/null 2>&1 < /dev/null 7<&- 9>&- ) &
+    return 0
+}
+
+periodic() {
+    local now
+    now_ms_into now
+    if { [ "$SLOW" -eq 1 ] || [ "${#CRASHES[@]}" -gt 0 ]; } && pid_alive "$SHELL_PID" && (( now - STARTED_MS >= STABLE_MS )); then
+        [ "$SLOW" -eq 1 ] && log "the shell has stayed up $(( STABLE_MS / 1000 ))s: the crash loop is over"
+        SLOW=0 CRASHES=()
+    fi
+    if [ "$now" -ge "$NEXT_LOGCAP" ]; then cap_log; NEXT_LOGCAP=$(( now + LOGCAP_EVERY_MS )); fi
+    if [ "$now" -ge "$NEXT_SWEEP" ]; then run_sweep; NEXT_SWEEP=$(( now + SWEEP_EVERY_MS )); fi
+}
+
+cleanup() {
+    stop_child
+    rm -f "$RUN/supervise.pid"
+    log "supervisor exits"
+}
+
+trap 'STOP=1' TERM INT HUP
+trap 'RESTART_REQ=1' USR1
+trap cleanup EXIT
+
+log "supervisor up (pid $$): shell $SHELL_QML, restart limit $RESTART_LIMIT in ${RESTART_WINDOW}s, then every $(( SLOW_BACKOFF_MS / 1000 ))s up to $(( SLOW_MAX_MS / 1000 ))s"
+start_shell
+while :; do
+    [ -e "$RUN/stop" ] && STOP=1
+    [ -d "$RUN" ] || STOP=1   # the state dir is gone: nobody is left to supervise for
+    [ "$STOP" -eq 1 ] && break
+    [ "$RESTART_REQ" -eq 1 ] && do_restart
+    check_shell
+    watchdog
+    sleep "$TICK"
+    periodic
+done

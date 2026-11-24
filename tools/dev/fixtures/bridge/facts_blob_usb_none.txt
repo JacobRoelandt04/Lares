@@ -1,0 +1,13 @@
+==model
+NX789J
+==android
+15
+==battery
+Current Battery Service state:
+  health: 2
+  level: 81
+  temperature: 287
+==df
+Filesystem       1K-blocks     Used Available Use% Mounted on
+/dev/block/dm-9  226455396 98213412 128102476  44% /data
+==usb

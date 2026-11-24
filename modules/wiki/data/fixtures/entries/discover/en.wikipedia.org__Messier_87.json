@@ -1,0 +1,101 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Messier_87",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Messier 87",
+  "url": "https://en.wikipedia.org/wiki/Messier_87",
+  "revid": 1373230499,
+  "license": "CC BY-SA 4.0",
+  "quality": "featured"
+ },
+ "title": "Messier 87",
+ "category": {
+  "family": "physical-sciences",
+  "topic": "space",
+  "via": "thompson",
+  "why": {
+   "p": 0.11,
+   "oneIn": 9,
+   "openRate": 0.4
+  }
+ },
+ "intro": {
+  "text": "Messier 87 is a supergiant elliptical galaxy in the constellation Virgo that contains several trillion stars. One of the largest and most massive galaxies in the local universe, it has a large population of globular clusters—about 15,000 compared with the 150–200 orbiting the Milky Way—and a jet of energetic plasma that originates at the core and extends at least 1,500 parsecs, traveling at a relativistic speed. It is one of the brightest radio sources in the sky and a popular target for both amateur and professional astronomers.",
+  "words": 87,
+  "provenance": "cleaned",
+  "stripped": [
+   "parentheticals"
+  ],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 27,
+    "e": 44,
+    "target": "Elliptical galaxy",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Elliptical_galaxy"
+   },
+   {
+    "s": 66,
+    "e": 71,
+    "target": "Virgo (constellation)",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Virgo_(constellation)"
+   },
+   {
+    "s": 207,
+    "e": 224,
+    "target": "Globular cluster",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Globular_cluster"
+   },
+   {
+    "s": 310,
+    "e": 316,
+    "target": "Plasma (physics)",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Plasma_(physics)"
+   }
+  ]
+ },
+ "images": [
+  {
+   "file": "img/en.wikipedia.org__Messier_87-0.jpg",
+   "thumb": "img/en.wikipedia.org__Messier_87-0-thumb.jpg",
+   "w": 960,
+   "h": 540,
+   "aspect": 1.29,
+   "kind": "photo",
+   "focusY": 0.5,
+   "credit": "R.-S. Lu (SHAO), E. Ros (MPIfR), S. Dagnello (NRAO/AUI/NSF); ESO",
+   "license": "CC BY 4.0",
+   "src": "page",
+   "fileTitle": "File:A view of the jet and shadow of M87’s black hole (eso2305a).jpg"
+  }
+ ],
+ "installed": null,
+ "popularity": {
+  "views60d": 152000,
+  "band": 0.78
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

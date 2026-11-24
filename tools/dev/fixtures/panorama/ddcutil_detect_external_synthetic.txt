@@ -1,0 +1,24 @@
+Display 1
+   I2C bus:          /dev/i2c-5
+   DRM connector:    card1-DP-1
+   Monitor:          DEL:DELL U2723QE:7ZQ4PX3
+
+Display 2
+   I2C bus:          /dev/i2c-9
+   DRM connector:    card2-DVI-I-1
+   Monitor:          LGD:ACME ULTRAWIDE:408NTBP1X123
+
+Display 3
+   I2C bus:          /dev/i2c-7
+   DRM connector:    card0-HDMI-A-1
+   Monitor:          ACR:Acer VG240Y:
+
+Phantom display
+   I2C bus:          /dev/i2c-11
+   DRM connector:    card1-DP-2
+
+Display 4
+   I2C bus:          /dev/i2c-3
+   DRM connector:    card1-eDP-1
+   Monitor:          SDC:::
+

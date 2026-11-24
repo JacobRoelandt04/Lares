@@ -1,0 +1,263 @@
+// notifications.jsonc -- the notification daemon, its toasts and its history (modules/notifications). The template of
+// ~/.config/quickshell/config/notifications.jsonc. Every key is optional: what you leave out keeps the value written here,
+// which is also the code's default (modules/notifications/data/NotifyPolicy.js, sources/SourceSettings.js). Keep only
+// what you change. The shell only READS the file and re-reads it the moment you save. A typo keeps the previous config
+// and the error names the line; `//` and `/* */` comments are allowed. Times are milliseconds; -1 in a timeout and in
+// "retention" means "never" (sticky, no limit). How the cards look and move (an image's sizes, the toasts' expiry stagger ...) is the module's own,
+// tuned in the notifications mockup.
+{
+    // Where the toasts appear: a screen corner, or a point along a bar:
+    //   "spot": { "bar": "<barId>", "along": 0.5 }
+    "spot": { "corner": "top-right" },
+    // Which display they come on: "focused" (the one you are on), or a connector's name ("DP-1"); while that one is not there, the focused one.
+    "screen": "focused",
+
+    // How long a toast stays, per urgency. A sender's own timeout is honoured
+    // but clamped to [clampMin, clampMax]; its "never" (0) is honoured for
+    // normal and critical only. Shell sources (timers, battery, ...) choose
+    // their own, or take a `sources` rule below.
+    "timeouts": { "low": 4000, "normal": 8000, "critical": -1,
+                  "clampMin": 3000, "clampMax": 60000 },
+
+    "toasts": {
+        "max": 5,                  // toasts at once; older ones file into the manager ("+N more")
+        "floodCount": 3,           // more than this many from one app inside floodWindowMs (0: no limit)...
+        "floodWindowMs": 10000,    // ...and the rest file silently ("<app> . +N more")
+        "hoverResumeMinMs": 2000,  // after a hover (or being away) a toast has at least this left
+        // What swiping a toast away does, to each side: "file" (it goes into the manager) | "delete".
+        "swipe": { "right": "file", "left": "delete" }
+    },
+
+    // The manager (the bell's popup).
+    "manager": {
+        // The group that is open when the manager opens: "latest" (of the newest notification) | "first" | "none" | "critical" | "system" |
+        // "normal" | "low".
+        "openGroup": "latest",
+        // What swiping a card does, to each side: "pin" | "delete".
+        "swipe": { "right": "pin", "left": "delete" }
+    },
+
+    // A click on a card that has no action of its own brings its app's window to the front (its workspace with it). true | false.
+    "clickFocus": true,
+
+    // The bell rings (its glyph moves) for a new notification: "always" | "notDnd" (not while do-not-disturb is on) | "never".
+    "bell": { "ring": "always" },
+
+    // History in the manager: the newest `count`, none older than `days`
+    // since its last update. Pinned notifications are never dropped.
+    "retention": { "count": 200, "days": 7 },
+
+    // How long "Undo" is offered after Clear / Clear all.
+    "undoMs": 10000,
+
+    // No input for this long = you are away: toast countdowns stop until you are back.
+    "idleMs": 60000,
+
+    // The sound per urgency: the FIRST file in the list that exists plays;
+    // none existing = silent. A sender's sound-file / sound-name hint comes
+    // first, its suppress-sound hint silences it, and nothing sounds under DND.
+    "sounds": {
+        "low": [],
+        "normal": ["~/.local/share/sounds/notification.mp3",
+                   "/usr/share/sounds/notification.mp3"],
+        "critical": ["~/.local/share/sounds/notification-critical.mp3",
+                     "~/.local/share/sounds/notification.mp3",
+                     "/usr/share/sounds/notification.mp3"]
+    },
+
+    // How loud they are, 0 .. 1; -1 plays them at the level of the sound server's stream.
+    "soundVolume": -1,
+
+    "dnd": {
+        // Do-not-disturb is kept across a restart of the shell. false: it starts off.
+        "remember": true,
+        // Quiet hours: do-not-disturb is on between these times ("22:30-07:00", several allowed), and off again at their end. You can still
+        // switch it by hand in between; the next start or end of an hour goes by the clock again. [] = none.
+        "hours": [],
+        // The summary toast ("4 while you were sharing") when a hold ends. true | false.
+        "summary": true,
+        // Window classes that hold toasts back while one of them has the focus (a game that is not fullscreen, a presentation).
+        "holdApps": [],
+        // Shell sources that still toast under Do Not Disturb (criticals always do).
+        "breakthroughSources": ["clock", "auth"],
+        // Hold toasts back while a window is fullscreen (on the display the toasts come on) / the screen is shared
+        // or recorded; one summary toast comes when it ends. A critical still
+        // shows during a share.
+        "holdFullscreen": true,
+        "holdScreencast": true
+    },
+
+    // Per-app rules, matched on the notification's desktop entry first, then
+    // its app name (case-insensitive, ".desktop" ignored). Keys:
+    //   "mute": true          no toast, no sound, still in the manager
+    //   "urgency": "low" | "normal" | "critical"
+    //   "group": "critical" | "system" | "normal" | "low"
+    //   "timeoutMs": 5000     overrides whatever the app asked for
+    //   "sound": "/path/to/file.oga" or "none"
+    //   "breakDnd": true      toasts under Do Not Disturb, whatever its urgency
+    //   "drop": true          no toast, no sound, NOTHING filed: the sender is told Dismissed at once
+    //                         (the OSD tells the network and bluetooth news, so the two applets are dropped)
+    //   "history": false      never written to the history file
+    //   "focusSuppress": true file silently while the app's own window is
+    //                         focused (the default; kitty is exempt so a
+    //                         terminal's notifications still show)
+    "apps": {
+        "kitty": { "focusSuppress": false },
+        // The OSD's network and bluetooth cards say it all: the applets' own toasts would be duplicates. nm-applet posts as
+        // desktop entry "org.freedesktop.network-manager-applet", app "NetworkManager Applet"; blueman as "Blueman".
+        // { "drop": false } brings one back.
+        "org.freedesktop.network-manager-applet": { "drop": true },
+        "NetworkManager Applet": { "drop": true },
+        "nm-applet": { "drop": true },
+        "blueman": { "drop": true },
+        "blueman-applet": { "drop": true }
+        // "discord": { "urgency": "low" },
+        // "spotify": { "mute": true }
+    },
+
+    // The shell's own sources. The nine below are services of their own with keys of their own:
+    // "update", "battery", "stocks", "screenshot", "usb", "calendar", "disk", "units", "thermal". Each has
+    //   "enabled": true       false switches the source off -- its card goes
+    //                         with it -- and true brings it back; the file is
+    //                         read hot
+    // The other names things are posted under: "clock", "launcher", "llm", "auth", "notifications", "aerial", "panorama",
+    // "silicon", "wiki", "weather", "bridge", "dictation", "shell", "session", "theme", "osd", "config" (a mistake in one of these
+    // files). They have no switch: "mute": true keeps one quiet.
+    // Every block takes the rule keys an app's takes (mute, urgency, group, timeoutMs, sound, breakDnd, drop, history). "timeoutMs" counts
+    // where the post gives no time of its own; most are silent until "sound" names a file (the clock's alarms ring by themselves);
+    // "focusSuppress" is for apps alone (a source has no window).
+    // A key with the wrong type, or a number or word outside what it allows, is
+    // named in the shell's log and keeps the value written here.
+    "sources": {
+        // "stocks": { "timeoutMs": 12000 },
+
+        // THE SYSTEM UPDATE. A nudge once the machine has been up a while, and the update run's own
+        // cards while the update popup is shut.
+        "update": {
+            "enabled": true,
+            "nudge": {
+                "enabled": true,
+                "afterBootMin": 15,      // minutes after the BOOT the shell looks at what is waiting ...
+                "jitterMin": 4,          // ... plus up to this many more, at random
+                // It speaks when the updates number at least minCount and / or the last update
+                // is at least minDays old ("rule": "either" | "both" | "count" | "days").
+                "minCount": 20,
+                "minDays": 7,
+                "rule": "either",
+                "highlights": 3,         // the packages you favourited that are waiting, named on the card
+                "timeoutMs": 30000       // how long the card stays (-1: until you answer it)
+            },
+            // "Update started", the question a run waits at (a critical card; a plain yes / no is
+            // answered from it), and "Update complete" / "Update failed" -- only while the popup is shut.
+            "started": true,
+            "asks": true,
+            "finished": true,
+            // Updating one of these asks for a reboot ("linux" and the other kernels read as "kernel").
+            "rebootPackages": ["linux", "linux-lts", "linux-zen", "linux-hardened", "linux-rt", "linux-rt-lts", "systemd", "mesa"]
+        },
+
+        // THE BATTERY. Fed by silicon's battery (the one reader the shell has).
+        "battery": {
+            "enabled": true,
+            // The charge falling to one of these, while discharging, puts ONE card up; each deeper level replaces
+            // the one before; charging takes it away. The order here does not matter. A Critical card breaks
+            // do-not-disturb. "hibernate" puts the Hibernate button on the card; "timeoutMs" is how long the card
+            // stays (absent: the urgency's own; -1: until you act); "title" names the level yourself. A level is a share of the pack the
+            // charge limit leaves: with the 80 % limit on, 8 speaks at 6.
+            "levels": [
+                // 15 % is the OSD's battery card (osd.jsonc "battery"); put { "pct": 15, "urgency": "normal" } back to toast it too.
+                { "pct": 8,  "urgency": "critical", "hibernate": true,  "breakDnd": false, "timeoutMs": 60000 },
+                { "pct": 3,  "urgency": "critical", "hibernate": true,  "breakDnd": true,  "timeoutMs": -1 }
+            ],
+            // What the Hibernate button does: "dud" says hibernate is not set up yet (the machine has no resume
+            // device); "systemctl" runs `systemctl hibernate`, for the day it works.
+            "hibernate": "dud",
+            // "Charged to 80 %": the pack reached its charge limit (or 100). Off: the OSD's battery card says it.
+            "limitReached": false,
+            // A runaway process: the draw stays `factor` times above the usual (and over `minW` watts) for
+            // `minutes`. The usual is eased over `tauMin` minutes, kept across restarts, and not judged for the
+            // first `warmupMin` minutes of learning.
+            "fastDrain": { "enabled": true, "factor": 2, "minW": 15, "minutes": 5, "tauMin": 30, "warmupMin": 10 }
+        },
+
+        // THE STOCKS. The alerts of stocks.jsonc (a day move, a price above, a price below) are cards of a
+        // normal urgency like any other: they stay their 8 s ("timeoutMs" here gives them another time, -1
+        // keeps them until you answer) and wait in the manager. The sudden move is an alert kind of its own:
+        // a stock that moves at least X % within Y minutes while its market is open (X and Y, with numbers
+        // per symbol, are in stocks.jsonc under "sudden"), once per direction per day.
+        "stocks": {
+            "enabled": true,
+            "sudden": true,
+            // Which stocks: "portfolio" (held and watched), "holdings" (held only), "all" (every quote the
+            // stocks popup has; currency pairs are never judged).
+            "scope": "portfolio"
+        },
+
+        // A SCREENSHOT taken (tools/osd/shot.sh tells the OSD, which shows its capture card with the picture). This is
+        // the same shot as a card that WAITS in the manager: the picture, Open, Edit (swappy), Copy path.
+        "screenshot": {
+            "enabled": true,
+            // "auto": while the OSD shows its card, this one is filed silently (no second popup over the same
+            // picture); if the OSD posts a notification of its own it stays out; where the OSD says nothing it toasts.
+            // "always" toasts as well, "never" only files.
+            "toast": "auto"
+        },
+
+        // A USB DRIVE plugged in (udisks): Open (mounts it first if need be) and Eject; "can be removed" when the
+        // unmount and the power-off both worked. The card goes when the drive does.
+        "usb": {
+            "enabled": true,
+            "mount": true,            // the card's Mount button; false: no Mount button
+            "openAfterMount": true,   // Mount opens the drive too
+            "openCommand": ["kitty", "-o", "background_opacity=0.75", "--title", "yazi", "yazi", "{path}"],  // what Open runs, detached; {path} is the first mount point
+            "unsafeWarn": true,       // a card when a drive vanishes while it was still mounted
+            "safeSec": 10,            // how long "can be removed" stays once the drive has gone (0: it goes with the drive)
+            "debounceMs": 600         // how long the devices must be quiet after udisks speaks
+        },
+
+        // CALENDAR reminders, from the clock's calendar.
+        "calendar": {
+            "enabled": true,
+            "leadMin": 10,            // minutes before an appointment; several: [60, 10] (1 .. 1440 each)
+            "allDayAt": "",           // an all-day appointment is announced at this time of its day ("09:00"); "" = not at all
+            "calendars": [],          // only these calendars' ids (calendars.jsonc "id"); [] = all of them
+            "timeoutMs": 30000        // how long the card stays (-1: until you act)
+        },
+
+        // The DISK running low. Paths that are on one filesystem make one card ("/ and /home": /home that is no mount of
+        // its own is on /). df is asked once per path.
+        "disk": {
+            "enabled": true,
+            "mounts": ["/", "/home"],
+            "minFreeGB": 5,           // free space under this is a Normal card ...
+            "criticalGB": 1,          // ... under this a Critical one (GB of 1024^3 bytes, as `df -h` prints them)
+            "perMount": {},           // a mount of its own: { "/home": 20 }
+            "pollMin": 5,
+            "recover": 0.15           // a level is left when the free space is this share above its line
+        },
+
+        // A systemd UNIT failed: "Show log" puts the journal's tail on the card ("Hide log" takes it off), and "Copy log"
+        // copies the WHOLE journal, not the few lines the card has room for.
+        "units": {
+            "enabled": true,
+            "system": true,
+            "user": true,
+            "pollSec": 60,
+            "ignore": ["geoclue.service"], // units not to hear about: names or * globs ("sddm.service", "user@*"). geoclue is started on demand by the weather and often times out: nothing to act on. Your list replaces this one ([] = hear about every unit)
+            "logLines": 8,            // lines of the journal "Show log" puts on the card (the newest at the foot)
+            "copyLines": 2000         // what "Copy log" copies: the last this many lines of the unit's journal
+        },
+
+        // The CPU too hot to run at full speed, for a long while (the kernel's own throttled time; a power profile's or a
+        // charger's ceiling is not heat and says nothing here).
+        "thermal": {
+            "enabled": true,
+            "pollSec": 15,
+            "minFraction": 0.25,      // a poll is hot when the CPU spent this share of it throttled by heat ...
+            "sustainSec": 60,         // ... and hot in every poll for this many seconds says it ...
+            "cooldownMin": 15,        // ... at most one card per this many minutes ...
+            "quietMin": 2,            // ... taken away after this many minutes that were not hot
+            "root": "/sys/devices/system/cpu"
+        }
+    }
+}

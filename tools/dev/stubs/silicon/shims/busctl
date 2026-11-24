@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# busctl / gdbus GUARD (this file is both: it answers to the name it is called by).
+#
+# The silicon probes talk to a cardwire stand-in on a PRIVATE session bus. This guard logs every call
+# and REFUSES (exit 99, a `REFUSED` line the runner fails on) anything that could reach another bus:
+# the system bus (--system, -s), an explicit address or host or machine, and any call made without the
+# private bus's address in the environment. What passes is exec'd to the real tool.
+NAME="$(basename "$0")"
+D="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}"
+LOG="$D/$NAME.log"
+ARGS="$*"
+now() { date +%s%3N; }
+refuse() { printf '%s REFUSED (%s) %s\n' "$(now)" "$1" "$ARGS" >> "$LOG"; echo "$NAME guard: refused ($1)" >&2; exit 99; }
+for a in "$@"; do
+    case "$a" in
+        --system|-s|--address|--address=*|-H|--host|--host=*|-M|--machine|--machine=*|--user=*) refuse "names a bus other than the private session bus" ;;
+    esac
+done
+case "${DBUS_SESSION_BUS_ADDRESS:-}" in
+    unix:path=/tmp/dbus-*) ;;
+    *) refuse "no private bus in the environment" ;;
+esac
+printf '%s %s\n' "$(now)" "$*" >> "$LOG"
+REAL="$(PATH="${PATH#"${SILICON_STUB_DIR:-/nonexistent}":}" command -v "$NAME")"
+[ -n "$REAL" ] && [ "$REAL" != "$0" ] || refuse "no real $NAME to run"
+exec "$REAL" "$@"

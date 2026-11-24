@@ -1,0 +1,18 @@
+[
+ {"id":0,"name":"eDP-1","description":"Samsung Display Corp. 0x4180","make":"Samsung Display Corp.","model":"0x4180","serial":"","width":2880,"height":1620,"physicalWidth":340,"physicalHeight":190,"refreshRate":120.00200,"x":0,"y":0,
+  "activeWorkspace":{"id":1,"name":"1"},"specialWorkspace":{"address":"","type":"","name":""},"reserved":[9,43,9,9],"scale":1.25,"transform":0,"focused":true,"vrr":false,"disabled":false,"currentFormat":"XRGB2101010","mirrorOf":"none",
+  "availableModes":["2880x1620@120.00Hz","2880x1620@60.00Hz"],"colorManagementPreset":"srgb","sdrBrightness":1,"sdrSaturation":1,
+  "hardwareDetails":{"backend":"drm","hdr":true,"chroma":true,"bt2020":true,"vrrCapable":false}},
+ {"id":1,"name":"DP-2","description":"Acme Displays ACME ULTRAWIDE 0x0005C1A2","make":"Acme Displays","model":"ACME ULTRAWIDE","serial":"0x0005C1A2","width":3440,"height":1440,"physicalWidth":800,"physicalHeight":340,"refreshRate":99.98200,"x":2304,"y":0,
+  "activeWorkspace":{"id":3,"name":"3"},"specialWorkspace":{"address":"","type":"","name":""},"reserved":[0,0,0,0],"scale":1.0,"transform":0,"focused":false,"vrr":true,"disabled":false,"currentFormat":"XRGB8888","mirrorOf":"none",
+  "availableModes":["3440x1440@99.98Hz","3440x1440@59.99Hz","2560x1440@59.95Hz"],"colorManagementPreset":"srgb","sdrBrightness":1,"sdrSaturation":1,
+  "hardwareDetails":{"backend":"drm","hdr":false,"chroma":false,"bt2020":false,"vrrCapable":true}},
+ {"id":2,"name":"HDMI-A-1","description":"Dell Inc. DELL U2412M 0x00001234","make":"Dell Inc.","model":"DELL U2412M","serial":"0x00001234","width":1920,"height":1200,"physicalWidth":518,"physicalHeight":324,"refreshRate":59.95000,"x":0,"y":0,
+  "activeWorkspace":{"id":-1,"name":""},"specialWorkspace":{"address":"","type":"","name":""},"reserved":[0,0,0,0],"scale":1.0,"transform":1,"focused":false,"vrr":false,"disabled":true,"currentFormat":"Invalid","mirrorOf":"none",
+  "availableModes":["1920x1200@59.95Hz"],"colorManagementPreset":"srgb","sdrBrightness":1,"sdrSaturation":1,
+  "hardwareDetails":{"backend":"drm","hdr":false,"chroma":false,"bt2020":false,"vrrCapable":false}},
+ {"id":3,"name":"DVI-I-1","description":"Acer Technologies VG240Y 0x0000AAAA","make":"Acer Technologies","model":"VG240Y","serial":"0x0000AAAA","width":1920,"height":1080,"physicalWidth":530,"physicalHeight":300,"refreshRate":60.00000,"x":2304,"y":1440,
+  "activeWorkspace":{"id":-1,"name":""},"specialWorkspace":{"address":"","type":"","name":""},"reserved":[0,0,0,0],"scale":1.0,"transform":0,"focused":false,"vrr":false,"disabled":false,"currentFormat":"XRGB8888","mirrorOf":"1",
+  "availableModes":["1920x1080@60.00Hz","1920x1080@50.00Hz"],"colorManagementPreset":"srgb","sdrBrightness":1,"sdrSaturation":1,
+  "hardwareDetails":{"backend":"drm","hdr":false,"chroma":false,"bt2020":false,"vrrCapable":false}}
+]

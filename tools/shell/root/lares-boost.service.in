@@ -1,0 +1,35 @@
+# lares-boost.service -- the interaction boost (docs/silicon.md "The interaction boost"). Installed by `lares setup`'s root
+# step R6, which writes this file with @UID@ made your uid; R6's undo takes it out again.
+#
+# silicon's root helper serves one unix socket, /run/lares-boost/sock, owned by that uid alone (0600), and also checks the
+# peer's uid at every connection (SO_PEERCRED). The one thing it can be asked is `boost <ms>` (50 .. 2000): for that long it
+# holds the Intel GPU's minimum frequency at gpuMhz (clamped to the card's [RPn, max]) and intel_pstate's min_perf_pct at
+# cpuPct (at most 60), then puts back what it found -- on time, when the shell's connection closes, when this unit stops
+# (and, if it was killed, at ExecStopPost and at the next start, from its record in /run/lares-boost). A value another
+# program changed meanwhile is left as that program left it. The shell asks only while silicon.jsonc says
+# "interactionBoost": true. gpuMhz=0 or cpuPct=0 leaves that one alone; change them here and `systemctl restart lares-boost`.
+[Unit]
+Description=Lares: the interaction boost (a GPU / CPU floor while a shell motion runs)
+After=silicon-boot.service powertop.service
+ConditionPathExists=/usr/local/libexec/silicon-helper
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/silicon-helper boost-serve uid=@UID@ gpuMhz=1600 cpuPct=30
+ExecStopPost=/usr/local/libexec/silicon-helper boost-restore
+Restart=on-failure
+RestartSec=2
+# /run/lares-boost, root 0755, kept when the unit stops: a record a killed server left is still there for the next start
+RuntimeDirectory=lares-boost
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_CHOWN
+
+[Install]
+WantedBy=multi-user.target

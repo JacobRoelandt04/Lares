@@ -1,0 +1,36 @@
+// aerial.jsonc -- the network popup (modules/aerial). The template of ~/.config/quickshell/config/aerial.jsonc.
+//
+// The shell reads that file and takes an edit within a moment (no restart). Every key is optional and every value below IS the
+// default, so deleting any line changes nothing. `//` and `/* */` comments are allowed. A value out of range is ignored with ONE
+// warning in the log; the default stands for it. The VPN popup's auto-tunnel switch rewrites only the `"autoTunnel"` line.
+{
+    // Raise the ProtonVPN tunnel by itself when you join a Public (not marked Trusted) network. It waits for a login page
+    // (the NET pad) and rises once the network passes. Every new network is Public until you mark it Trusted.
+    "autoTunnel": true,
+    // Where that tunnel goes: "fastest", or a country by its two-letter code ("BE").
+    "autoTunnelTo": "fastest",
+    // Which networks count for it: "any" | "wifi" (a cable never raises it).
+    "autoTunnelOn": "any",
+    // What a network is the first time you join it: "public" | "trusted". (Mark one the other way in the popup.)
+    "newNetworks": "public",
+    // How long a Bluetooth search runs (the BT SCAN button), seconds, 5..600.
+    "searchSeconds": 30,
+    // How long the laptop is visible to other Bluetooth devices (the beacon LED), seconds, 10..3600.
+    "visibleSeconds": 180,
+    // The speed test (Cloudflare): the most it may transfer, in MB, 1..5000.
+    "speedTest": { "capMB": 200 },
+    // The page the NET pad fetches to tell a login page from the internet (the body must be "NetworkManager is online").
+    "portalCheckUrl": "http://ping.archlinux.org/nm-check.txt",
+    // Count the data used per network (today / month), in ~/.local/state/lares/aerial/usage.json. Off keeps the file as it is.
+    "usage": { "enabled": true },
+    // The figures on the bar's network half: whether they come at all, and from how many megabits a second (they stay until half of it).
+    // With "traffic": false the traffic is not read at all while the popup is shut. 1 .. 999.
+    "bar": { "traffic": true, "trafficFromMbps": 10 },
+    // A Bluetooth device's battery is told at these percentages (at most four, 1 .. 50 each; [] = never), once each on the way down.
+    "btLow": [20, 10],
+    // The popup's sounds (the globe, the drawers). How loud they are is the mockup's.
+    "sounds": true,
+    // Which side of the popup the detail panels open on: "start" (the LEFT of a top bar's popup, joined along the panel's long edge, as the
+    // stocks' detail is), "end" (the right) or "far" (below it). A panel never goes off screen.
+    "look": { "secondarySide": "start" }
+}

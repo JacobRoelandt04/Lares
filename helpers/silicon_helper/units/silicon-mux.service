@@ -1,0 +1,28 @@
+# silicon: a GPU MUX change the user queued is written to the firmware at SHUTDOWN (the way
+# asusctl 6.5 does it), never while the desktop is using the GPU. A switch TO dGPU-only is written
+# with the NVIDIA stack down, or not at all; the way BACK to hybrid is written whatever state the
+# stack is in (src/mux.rs, needs_stack_down: staying stuck in dGPU-only is the unsafe outcome).
+# Installed by install.sh. The unit does nothing while the system runs: it only has to be
+# ACTIVE so that stopping it -- which systemd does at shutdown -- runs `mux-apply`.
+#
+# Ordering: it must stop AFTER everything that holds the GPU. Stop order is the reverse of
+# start order, so it starts BEFORE basic.target (every ordinary service, the NVIDIA daemons,
+# the display manager start after that) and BEFORE user.slice (the user's sessions, which
+# hold /dev/nvidia* and the DRM nodes, live in it).
+[Unit]
+Description=silicon: write a queued GPU MUX change at shutdown
+DefaultDependencies=no
+After=local-fs.target
+Before=basic.target user.slice shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+ExecStop=/usr/local/libexec/silicon-helper mux-apply
+TimeoutStopSec=120
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

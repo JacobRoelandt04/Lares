@@ -1,0 +1,54 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "privacy.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "replace": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": {},
+   "x-wants": "an object",
+   "x-secret": true,
+   "description": "Real value -> the stand-in a scrubber writes for it (\"my-home-wifi\": \"HomeNet\"). Every real value here is also forbidden: the\nleak check fails on it anywhere in the published tree, any case, with spaces, `-` and `_` interchangeable, and a MAC address in\nevery spelling (aa:bb.., AA-BB.., aabb..).\n\nDefault: {}."
+  },
+  "forbid": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "x-secret": true,
+   "description": "Values that are forbidden with no stand-in: an e-mail address, a serial number, a disk's UUID, a street, a town.\n\nTakes a list of texts. Default: []."
+  },
+  "publish": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "x-secret": true,
+     "description": "The name and e-mail address an exported commit carries (lares publish refuses without them). Use GitHub's no-reply address\n(Settings > Emails), not your own: a public commit shows it to everyone.\n\nTakes a text. Default: \"\"."
+    },
+    "email": {
+     "type": "string",
+     "pattern": "^$|^[^@\\s]+@[^@\\s]+$",
+     "default": "",
+     "x-wants": "a text like 12345678+name@users.noreply.github.com",
+     "x-secret": true,
+     "description": "Takes a text like 12345678+name@users.noreply.github.com. Default: \"\"."
+    }
+   }
+  }
+ }
+}

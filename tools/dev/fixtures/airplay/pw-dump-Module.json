@@ -1,0 +1,308 @@
+[
+  {
+    "id": 1,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-rt",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-rt.so",
+      "args": "{\n            nice.level    = -11\n            rt.prio       = 88\n            #rt.time.soft = -1\n            #rt.time.hard = -1\n            #rlimits.enabled = true\n            rtportal.enabled = false\n            #rtkit.enabled = true\n            #uclamp.min = 0\n            #uclamp.max = 1024\n        }",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Use realtime thread scheduling, falling back to RTKit",
+        "module.name": "libpipewire-module-rt",
+        "module.usage": "( nice.level=<priority: default 20(don't change)> ) ( rt.prio=<priority: default 83> ) ( rt.time.soft=<in usec: default -1> ) ( rt.time.hard=<in usec: default -1> ) ( rlimits.enabled=<default true> ) ( rtportal.enabled=<default true> ) ( rtkit.enabled=<default true> ) ( uclamp.min=<default 0> ) ( uclamp.max=<default 1024> )",
+        "module.version": "1.6.11",
+        "nice.level": -11,
+        "object.id": 1,
+        "object.serial": 1,
+        "rt.prio": 88,
+        "rtportal.enabled": false
+      }
+    }
+  },
+  {
+    "id": 2,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-protocol-native",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-protocol-native.so",
+      "args": "{\n            # List of server Unix sockets, and optionally permissions\n            #sockets = [ { name = \"pipewire-0\" }, { name = \"pipewire-0-manager\" } ]\n        }",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Native protocol using unix sockets",
+        "module.name": "libpipewire-module-protocol-native",
+        "module.version": "1.6.11",
+        "object.id": 2,
+        "object.serial": 2
+      }
+    }
+  },
+  {
+    "id": 4,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-profiler",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-profiler.so",
+      "args": "{\n            #profile.interval.ms = 0\n        }",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Generate Profiling data",
+        "module.name": "libpipewire-module-profiler",
+        "module.usage": "( profile.interval.ms=<minimum interval for sampling data (in ms) ) ",
+        "module.version": "1.6.11",
+        "object.id": 4,
+        "object.serial": 4
+      }
+    }
+  },
+  {
+    "id": 6,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-metadata",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-metadata.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Allow clients to create metadata store",
+        "module.name": "libpipewire-module-metadata",
+        "module.version": "1.6.11",
+        "object.id": 6,
+        "object.serial": 6
+      }
+    }
+  },
+  {
+    "id": 8,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-spa-device-factory",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-spa-device-factory.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Provide a factory to make SPA devices",
+        "module.name": "libpipewire-module-spa-device-factory",
+        "module.version": "1.6.11",
+        "object.id": 8,
+        "object.serial": 8
+      }
+    }
+  },
+  {
+    "id": 10,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-spa-node-factory",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-spa-node-factory.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Provide a factory to make SPA nodes",
+        "module.name": "libpipewire-module-spa-node-factory",
+        "module.version": "1.6.11",
+        "object.id": 10,
+        "object.serial": 10
+      }
+    }
+  },
+  {
+    "id": 12,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-client-node",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-client-node.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Allow clients to create and control remote nodes",
+        "module.name": "libpipewire-module-client-node",
+        "module.version": "1.6.11",
+        "object.id": 12,
+        "object.serial": 12
+      }
+    }
+  },
+  {
+    "id": 14,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-client-device",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-client-device.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Allow clients to create and control remote devices",
+        "module.name": "libpipewire-module-client-device",
+        "module.version": "1.6.11",
+        "object.id": 14,
+        "object.serial": 14
+      }
+    }
+  },
+  {
+    "id": 16,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-portal",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-portal.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.name": "libpipewire-module-portal",
+        "object.id": 16,
+        "object.serial": 16
+      }
+    }
+  },
+  {
+    "id": 17,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-access",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-access.so",
+      "args": "{\n            # Socket-specific access permissions\n            #access.socket = { pipewire-0 = \"default\", pipewire-0-manager = \"unrestricted\" }\n\n            # Deprecated legacy mode (not socket-based),\n            # for now enabled by default if access.socket is not specified\n            #access.legacy = true\n        }",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Perform access check",
+        "module.name": "libpipewire-module-access",
+        "module.usage": "( access.socket={ <socket>=<access>, ... } ) ( access.legacy=true ) ",
+        "module.version": "1.6.11",
+        "object.id": 17,
+        "object.serial": 17
+      }
+    }
+  },
+  {
+    "id": 18,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-adapter",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-adapter.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Manage adapter nodes",
+        "module.name": "libpipewire-module-adapter",
+        "module.version": "1.6.11",
+        "object.id": 18,
+        "object.serial": 18
+      }
+    }
+  },
+  {
+    "id": 20,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-link-factory",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-link-factory.so",
+      "args": "{\n            #allow.link.passive = false\n\t}",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Allow clients to create links",
+        "module.name": "libpipewire-module-link-factory",
+        "module.usage": "( allow.link.passive=<bool, default false> ) ",
+        "module.version": "1.6.11",
+        "object.id": 20,
+        "object.serial": 20
+      }
+    }
+  },
+  {
+    "id": 22,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-session-manager",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-session-manager.so",
+      "args": null,
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "George Kiagiadakis <george.kiagiadakis@collabora.com>",
+        "module.description": "Implements objects for session management",
+        "module.name": "libpipewire-module-session-manager",
+        "module.version": "1.6.11",
+        "object.id": 22,
+        "object.serial": 22
+      }
+    }
+  },
+  {
+    "id": 29,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-raop-discover",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-raop-discover.so",
+      "args": "{\n      stream.rules = [\n        { matches = [ { raop.ip = \"192.168.0.103\" } ]\n          actions = { create-stream = {\n            raop.latency.ms   = 3000\n            sess.latency.msec = 479   # multiple of 7.98ms ptime → silences the warning\n          } } }\n      ]\n    }",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "Discover remote streams",
+        "module.name": "libpipewire-module-raop-discover",
+        "module.usage": "( stream.rules=<rules>, use create-stream actions )",
+        "module.version": "1.6.11",
+        "object.id": 29,
+        "object.serial": 29
+      }
+    }
+  },
+  {
+    "id": 90,
+    "type": "PipeWire:Interface:Module",
+    "version": 3,
+    "permissions": [ "r", "m" ],
+    "info": {
+      "name": "libpipewire-module-raop-sink",
+      "filename": "/usr/lib/pipewire-0.3/libpipewire-module-raop-sink.so",
+      "args": "{ \"raop.ip\": \"192.168.0.103\", \"raop.ifindex\": 3, \"raop.port\": 7000, \"raop.name\": \"02AE00000B01@Speaker - 0B01\", \"raop.hostname\": \"Speaker-0B01.local\", \"raop.domain\": \"local\", \"raop.transport\": \"udp\", \"device.model\": \"Speaker\", \"raop.encryption.type\": \"auth_setup\", \"raop.audio.codec\": \"PCM\", \"raop.latency.ms\": 3000, \"sess.latency.msec\": 479}",
+      "change-mask": [ "props" ],
+      "props": {
+        "module.author": "Wim Taymans <wim.taymans@gmail.com>",
+        "module.description": "An RAOP audio sink",
+        "module.name": "libpipewire-module-raop-sink",
+        "module.usage": "( raop.ip=<ip address of host> ) ( raop.port=<remote port> ) ( raop.name=<name of host> ) ( raop.hostname=<hostname of host> ) ( raop.transport=<transport, default:udp> ) ( raop.encryption.type=<encryption, default:none> ) ( raop.audio.codec=PCM ) ( raop.password=<password for auth> ) ( raop.latency.ms=<min latency in ms, default:1500> ) ( node.latency=<latency as fraction> ) ( node.name=<name of the nodes> ) ( node.description=<description of the nodes> ) ( audio.format=<format, default:S16LE> ) ( audio.rate=<sample rate, default: 44100> ) ( audio.channels=<number of channels, default:2> ) ( audio.position=<channel map, default:[ FL FR ]> ) ( stream.props=<properties> ) ",
+        "module.version": "1.6.11",
+        "object.id": 90,
+        "object.serial": 90
+      }
+    }
+  }
+]

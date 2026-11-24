@@ -1,0 +1,508 @@
+{
+ "v": 1,
+ "provisional": false,
+ "doc": "Who judges and who writes, and the thresholds they are trusted at. PROVISIONAL until the model evaluation has run on the labelled corpus: it overwrites this file with the measured winners, the fitted thresholds and the per-model table (`measured`). Until then the values are the hypotheses of docs/contracts/wiki_jev_api.md (a Jev 'no' sits near 0.5, so a rule passes at 0.6-0.7) and the model that fits the card with the most headroom. locate.thresholds is keyed by judge (\"jev\" or \"ollama:<model>\"): a local model's stated confidence and Jev's probability are different scales, so each judge has its own; \"default\" answers any judge not listed. `minPick` is the probability the judge must give its own pick; `minWords` the floor under the 80-150 word target below which a located paragraph is not an intro on its own (the writer runs instead).",
+ "locate": {
+  "judge": "jev",
+  "jevMode": "twopass",
+  "fallback": "ollama:ornith-1.5:9b",
+  "thresholds": {
+   "default": {
+    "defines": 0.7,
+    "hook": 0.6,
+    "selfContained": 0.7,
+    "noHowTo": 0.6,
+    "minPick": 0.5,
+    "minWords": 50
+   },
+   "jev": {
+    "defines": 0.51,
+    "hook": 0.255,
+    "selfContained": 0.81,
+    "noHowTo": 0.97,
+    "minPick": 0.53,
+    "minWords": 50
+   },
+   "ollama:gemma4:e2b": {
+    "defines": 0.7,
+    "hook": 0.4,
+    "selfContained": 0.5,
+    "noHowTo": 0.95,
+    "minPick": 0.925,
+    "minWords": 50
+   },
+   "ollama:granite4.2:3b": {
+    "defines": 0.7,
+    "hook": 0.65,
+    "selfContained": 0.85,
+    "noHowTo": 0.6,
+    "minPick": 0.75,
+    "minWords": 50
+   },
+   "ollama:gemma4:e4b": {
+    "defines": 0.7,
+    "hook": 0.75,
+    "selfContained": 0.75,
+    "noHowTo": 0.6,
+    "minPick": 0.75,
+    "minWords": 50
+   },
+   "ollama:granite4.2:8b": {
+    "defines": 0.7,
+    "hook": 0.75,
+    "selfContained": 0.85,
+    "noHowTo": 0.6,
+    "minPick": 0.8,
+    "minWords": 50
+   },
+   "ollama:ornith-1.5:9b": {
+    "defines": 0.7,
+    "hook": 0.3,
+    "selfContained": 0.825,
+    "noHowTo": 0.5,
+    "minPick": 0.65,
+    "minWords": 50
+   }
+  }
+ },
+ "write": {
+  "model": "gemma4:e4b",
+  "groundedMin": 0.7,
+  "scored": true,
+  "run": "stage1b-writer-20260930",
+  "why": "Writer-only re-run with the tightened prompt on the 28 pages that need a written intro: gemma4:e4b accepted 54 % (in range 79 %, Jev-grounded >= 0.7 on 18 of 22 written), ornith-1.5:9b 46 % (richer prose but it invents: 9 of 22 below the grounding floor), granite4.2:8b 14 %. The user's rule is that a written intro may not be transformed by hallucination, so the most grounded writer wins."
+ },
+ "measured": {
+  "jev:twopass": {
+   "kind": "jev",
+   "locate": {
+    "n": 50,
+    "exact": 0.82,
+    "errors": 0,
+    "predNone": 8,
+    "trueNone": 5,
+    "nonePrecision": 0.375,
+    "noneRecall": 0.6,
+    "meanMs": 1666.094,
+    "medianMs": 1543.4,
+    "meanTokens": 1756.5,
+    "costUsd": 0.007
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.78,
+    "accepted": 17,
+    "falseAccepts": 3,
+    "falseRejects": 8
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.78,
+    "accepted": 17,
+    "falseAccepts": 3,
+    "falseRejects": 8
+   },
+   "thresholds": {
+    "defines": 0.51,
+    "hook": 0.255,
+    "selfContained": 0.81,
+    "noHowTo": 0.97,
+    "minPick": 0.53,
+    "minWords": 50
+   },
+   "stopped": null
+  },
+  "jev:onepass": {
+   "kind": "jev",
+   "locate": {
+    "n": 50,
+    "exact": 0.84,
+    "errors": 0,
+    "predNone": 8,
+    "trueNone": 5,
+    "nonePrecision": 0.375,
+    "noneRecall": 0.6,
+    "meanMs": 798.484,
+    "medianMs": 753.45,
+    "meanTokens": 1251.52,
+    "costUsd": 0.004
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.74,
+    "accepted": 21,
+    "falseAccepts": 6,
+    "falseRejects": 7
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.74,
+    "accepted": 21,
+    "falseAccepts": 6,
+    "falseRejects": 7
+   },
+   "thresholds": {
+    "defines": 0.48,
+    "hook": 0.365,
+    "selfContained": 0.815,
+    "noHowTo": 0.855,
+    "minPick": 0.545,
+    "minWords": 50
+   },
+   "stopped": null
+  },
+  "ollama:gemma4:e2b": {
+   "kind": "ollama",
+   "locate": {
+    "n": 50,
+    "exact": 0.74,
+    "errors": 0,
+    "predNone": 0,
+    "trueNone": 5,
+    "nonePrecision": null,
+    "noneRecall": 0.0,
+    "meanMs": 695.598,
+    "medianMs": 624.4,
+    "meanTokens": 972.98,
+    "costUsd": 0.0
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.72,
+    "accepted": 24,
+    "falseAccepts": 8,
+    "falseRejects": 6
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.72,
+    "accepted": 24,
+    "falseAccepts": 8,
+    "falseRejects": 6
+   },
+   "thresholds": {
+    "defines": 0.7,
+    "hook": 0.4,
+    "selfContained": 0.5,
+    "noHowTo": 0.95,
+    "minPick": 0.925,
+    "minWords": 50
+   },
+   "tokps": 111.243,
+   "residency": {
+    "ok": true,
+    "reason": "ok",
+    "sizeMiB": 1633,
+    "vramMiB": 1633,
+    "usedMiB": 2852,
+    "usedBeforeMiB": 2,
+    "freeMiB": 5038,
+    "totalMiB": 8188,
+    "loadMs": 12023,
+    "detail": "",
+    "cardMiB": 2850
+   },
+   "excluded": null,
+   "write": {
+    "n": 9,
+    "inRange": 0.556,
+    "retried": 0.333,
+    "meanWords": 53.556,
+    "scored": 6,
+    "meanGrounded": 0.648,
+    "groundedPass": 0.5,
+    "meanRules": {
+     "defines": 0.945,
+     "hook": 0.763,
+     "selfContained": 0.85,
+     "noHowTo": 0.96
+    },
+    "acceptRate": 0.0,
+    "meanMs": 1019.603
+   }
+  },
+  "ollama:granite4.2:3b": {
+   "kind": "ollama",
+   "locate": {
+    "n": 50,
+    "exact": 0.5,
+    "errors": 0,
+    "predNone": 27,
+    "trueNone": 5,
+    "nonePrecision": 0.185,
+    "noneRecall": 1.0,
+    "meanMs": 1013.942,
+    "medianMs": 915.4,
+    "meanTokens": 1002.64,
+    "costUsd": 0.0
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.66,
+    "accepted": 16,
+    "falseAccepts": 6,
+    "falseRejects": 11
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.66,
+    "accepted": 16,
+    "falseAccepts": 6,
+    "falseRejects": 11
+   },
+   "thresholds": {
+    "defines": 0.7,
+    "hook": 0.65,
+    "selfContained": 0.85,
+    "noHowTo": 0.6,
+    "minPick": 0.75,
+    "minWords": 50
+   },
+   "tokps": 84.018,
+   "residency": {
+    "ok": true,
+    "reason": "ok",
+    "sizeMiB": 2781,
+    "vramMiB": 2781,
+    "usedMiB": 2906,
+    "usedBeforeMiB": 2,
+    "freeMiB": 4984,
+    "totalMiB": 8188,
+    "loadMs": 7328,
+    "detail": "",
+    "cardMiB": 2904
+   },
+   "excluded": null,
+   "write": {
+    "n": 9,
+    "inRange": 0.556,
+    "retried": 0.222,
+    "meanWords": 67.111,
+    "scored": 6,
+    "meanGrounded": 0.145,
+    "groundedPass": 0.0,
+    "meanRules": {
+     "defines": 0.957,
+     "hook": 0.957,
+     "selfContained": 0.88,
+     "noHowTo": 0.972
+    },
+    "acceptRate": 0.0,
+    "meanMs": 1359.534
+   }
+  },
+  "ollama:gemma4:e4b": {
+   "kind": "ollama",
+   "locate": {
+    "n": 50,
+    "exact": 0.7,
+    "errors": 0,
+    "predNone": 16,
+    "trueNone": 5,
+    "nonePrecision": 0.312,
+    "noneRecall": 1.0,
+    "meanMs": 1475.89,
+    "medianMs": 1387.85,
+    "meanTokens": 988.94,
+    "costUsd": 0.0
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.64,
+    "accepted": 16,
+    "falseAccepts": 6,
+    "falseRejects": 12
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.64,
+    "accepted": 16,
+    "falseAccepts": 6,
+    "falseRejects": 12
+   },
+   "thresholds": {
+    "defines": 0.7,
+    "hook": 0.75,
+    "selfContained": 0.75,
+    "noHowTo": 0.6,
+    "minPick": 0.75,
+    "minWords": 50
+   },
+   "tokps": 60.379,
+   "residency": {
+    "ok": true,
+    "reason": "ok",
+    "sizeMiB": 3081,
+    "vramMiB": 3081,
+    "usedMiB": 4386,
+    "usedBeforeMiB": 2,
+    "freeMiB": 3504,
+    "totalMiB": 8188,
+    "loadMs": 12844,
+    "detail": "",
+    "cardMiB": 4384
+   },
+   "excluded": null,
+   "write": {
+    "n": 9,
+    "inRange": 0.556,
+    "retried": 0.222,
+    "meanWords": 57.222,
+    "scored": 6,
+    "meanGrounded": 0.635,
+    "groundedPass": 0.5,
+    "meanRules": {
+     "defines": 0.947,
+     "hook": 0.782,
+     "selfContained": 0.877,
+     "noHowTo": 0.955
+    },
+    "acceptRate": 0.0,
+    "meanMs": 1780.453
+   }
+  },
+  "ollama:granite4.2:8b": {
+   "kind": "ollama",
+   "locate": {
+    "n": 50,
+    "exact": 0.66,
+    "errors": 0,
+    "predNone": 21,
+    "trueNone": 5,
+    "nonePrecision": 0.238,
+    "noneRecall": 1.0,
+    "meanMs": 2010.744,
+    "medianMs": 1864.35,
+    "meanTokens": 1002.32,
+    "costUsd": 0.0
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.76,
+    "accepted": 18,
+    "falseAccepts": 4,
+    "falseRejects": 8
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.76,
+    "accepted": 18,
+    "falseAccepts": 4,
+    "falseRejects": 8
+   },
+   "thresholds": {
+    "defines": 0.7,
+    "hook": 0.75,
+    "selfContained": 0.85,
+    "noHowTo": 0.6,
+    "minPick": 0.8,
+    "minWords": 50
+   },
+   "tokps": 41.784,
+   "residency": {
+    "ok": true,
+    "reason": "ok",
+    "sizeMiB": 6263,
+    "vramMiB": 6263,
+    "usedMiB": 6388,
+    "usedBeforeMiB": 2,
+    "freeMiB": 1502,
+    "totalMiB": 8188,
+    "loadMs": 20005,
+    "detail": "",
+    "cardMiB": 6386
+   },
+   "excluded": null,
+   "write": {
+    "n": 9,
+    "inRange": 0.444,
+    "retried": 0.444,
+    "meanWords": 54.778,
+    "scored": 6,
+    "meanGrounded": 0.713,
+    "groundedPass": 0.667,
+    "meanRules": {
+     "defines": 0.945,
+     "hook": 0.82,
+     "selfContained": 0.867,
+     "noHowTo": 0.955
+    },
+    "acceptRate": 0.0,
+    "meanMs": 4112.592
+   }
+  },
+  "ollama:ornith-1.5:9b": {
+   "kind": "ollama",
+   "locate": {
+    "n": 50,
+    "exact": 0.82,
+    "errors": 0,
+    "predNone": 11,
+    "trueNone": 5,
+    "nonePrecision": 0.455,
+    "noneRecall": 1.0,
+    "meanMs": 2346.586,
+    "medianMs": 2177.95,
+    "meanTokens": 984.44,
+    "costUsd": 0.0
+   },
+   "decision": {
+    "n": 50,
+    "acc": 0.76,
+    "accepted": 22,
+    "falseAccepts": 6,
+    "falseRejects": 6
+   },
+   "decisionCommon": {
+    "n": 50,
+    "acc": 0.76,
+    "accepted": 22,
+    "falseAccepts": 6,
+    "falseRejects": 6
+   },
+   "thresholds": {
+    "defines": 0.7,
+    "hook": 0.3,
+    "selfContained": 0.825,
+    "noHowTo": 0.5,
+    "minPick": 0.65,
+    "minWords": 50
+   },
+   "tokps": 39.009,
+   "residency": {
+    "ok": true,
+    "reason": "ok",
+    "sizeMiB": 5463,
+    "vramMiB": 5463,
+    "usedMiB": 6472,
+    "usedBeforeMiB": 2,
+    "freeMiB": 1418,
+    "totalMiB": 8188,
+    "loadMs": 21368,
+    "detail": "",
+    "cardMiB": 6470
+   },
+   "excluded": null,
+   "write": {
+    "n": 9,
+    "inRange": 0.667,
+    "retried": 0.0,
+    "meanWords": 71.333,
+    "scored": 6,
+    "meanGrounded": 0.467,
+    "groundedPass": 0.167,
+    "meanRules": {
+     "defines": 0.952,
+     "hook": 0.832,
+     "selfContained": 0.883,
+     "noHowTo": 0.965
+    },
+    "acceptRate": 0.111,
+    "meanMs": 2394.058
+   }
+  }
+ },
+ "measuredAt": "2026-09-30T13:24:59Z",
+ "run": "stage1-20260930",
+ "jevSpentUsd": 0.01562
+}

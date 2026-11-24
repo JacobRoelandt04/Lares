@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Not On Hyprland
+Comment=Excluded where XDG_CURRENT_DESKTOP is Hyprland
+Exec=not-on-hyprland
+Icon=preferences-system
+NotShowIn=Hyprland;

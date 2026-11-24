@@ -1,0 +1,23 @@
+# the desktop, 2025-12-10: it slept; spd5118 failed to resume
+Dec 10 14:29:24.333826 host kernel: PM: suspend entry (deep)
+Dec 10 15:02:50.346868 host kernel: Freezing user space processes
+Dec 10 15:02:50.346941 host kernel: Freezing user space processes completed (elapsed 0.001 seconds)
+Dec 10 15:02:50.346955 host kernel: OOM killer disabled.
+Dec 10 15:02:50.346967 host kernel: Freezing remaining freezable tasks
+Dec 10 15:02:50.346979 host kernel: Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+Dec 10 15:02:50.346992 host kernel: printk: Suspending console(s) (use no_console_suspend to debug)
+Dec 10 15:02:50.347252 host kernel: ACPI: PM: Preparing to enter system sleep state S3
+Dec 10 15:02:50.347340 host kernel: ACPI: PM: Saving platform NVS memory
+Dec 10 15:02:50.348055 host kernel: smpboot: CPU 15 is now offline
+Dec 10 15:02:50.348973 host kernel: ACPI: PM: Low-level resume complete
+Dec 10 15:02:50.350829 host kernel: ACPI: PM: Restoring platform NVS memory
+Dec 10 15:02:50.352734 host kernel: CPU15 is up
+Dec 10 15:02:50.352742 host kernel: ACPI: PM: Waking up from system sleep state S3
+Dec 10 15:02:50.352749 host kernel: spd5118 12-0053: Failed to write b = 0: -6
+Dec 10 15:02:50.352869 host kernel: spd5118 12-0053: PM: dpm_run_callback(): spd5118_resume [spd5118] returns -6
+Dec 10 15:02:50.352950 host kernel: spd5118 12-0053: PM: failed to resume async: error -6
+Dec 10 15:02:50.353033 host kernel: spd5118 12-0051: Failed to write b = 0: -6
+Dec 10 15:02:50.353112 host kernel: spd5118 12-0051: PM: dpm_run_callback(): spd5118_resume [spd5118] returns -6
+Dec 10 15:02:50.353183 host kernel: spd5118 12-0051: PM: failed to resume async: error -6
+Dec 10 15:02:50.353397 host kernel: OOM killer enabled.
+Dec 10 15:02:50.353429 host kernel: PM: suspend exit

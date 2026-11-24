@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# systemd-inhibit STAND-IN. helpers/update-run.sh (the system update's supervisor) wraps its run in one: a
+# `block` lock on sleep, idle, shutdown and the lid for the run's whole length. A probe that drives the real
+# supervisor must not take that on the real logind, so this logs the call and runs the command it wraps.
+printf '%s %s\n' "$(date +%s%3N)" "$*" >> "${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}/systemd-inhibit.log"
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+exec "$@"

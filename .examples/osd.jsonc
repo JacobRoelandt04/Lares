@@ -1,0 +1,127 @@
+// osd.jsonc -- the on-screen display (modules/osd). The template of ~/.config/quickshell/config/osd.jsonc.
+// Every key is optional and every value below IS the default: a missing key (or one with a bad value)
+// takes it, and the file is re-read when it is saved. Comments are allowed. Keep only what you change.
+// How the OSD looks and paces itself (an event's least time on screen, the cards' look) is the
+// module's own, tuned in the OSD mockup.
+{
+    // Where the OSD comes out: { "bar": "right", "along": 0.5 } (a bar edge and the
+    // fraction of its length) or { "corner": "right-bottom" }.
+    "spot": { "bar": "right", "along": 0.5 },
+
+    // Which display it comes on: "focused" (the one you are on), or a connector's name ("DP-1"); while that one is not there, the focused one.
+    "screen": "focused",
+
+    // Over a fullscreen window: "pill" (a click-through capsule at the top centre), "keys" (the capsule only for what a key or an action of
+    // yours did: no track, network or battery news over a film) or "suppress" (nothing).
+    "fullscreen": "pill",
+
+    // How long the card of a key stays (ms); a kind's own "ms" below wins.
+    "dismissMs": 2000,
+    // After the pointer leaves a hovered card it stays at least this long.
+    "resumeMinMs": 800,
+    // How many event cards (track, bluetooth, network, vpn, autoTunnel, btLow, capture, battery, power, caption,
+    // generic) wait their turn behind the one shown (one per kind+key; the oldest goes). 1 .. 20.
+    "queueCap": 3,
+
+    // A held volume / brightness key: "auto" reads the compositor's own
+    // input:repeat_delay / input:repeat_rate (hyprctl getoption); or numbers
+    // (delayMs 50..5000, rateHz 1..200).
+    "repeat": { "delayMs": "auto", "rateHz": "auto" },
+
+    // Volume keys step 2 %. A held key stops at 100 %; a fresh press at 100 % crosses
+    // into boost, up to boostMax.
+    "volume": { "step": 0.02, "boostMax": 1.5 },
+    "mic": { "step": 0.05 },
+
+    // Brightness steps are PERCEIVED: a key climbs a ladder of 1 / step rungs (twenty at
+    // 0.05) laid along the curve raw = max * (rung / rungs) ^ gamma, so the dim end gets
+    // fine steps and every press changes what you SEE by the same amount. The card shows
+    // the rung (5 %, 10 % ... 100 %), not the raw percentage. step is the key, fineStep
+    // the Shift key (a fraction of a rung). floorRaw is the bottom rung, the true minimum
+    // level (1): a held key stops there, and a FRESH press down at the bottom goes to true
+    // 0 (the screen off) -- like volume's boost gate, downwards; one press up leaves it.
+    // 0 asks for no stop (a plain press reaches 0). Written with `brightnessctl -d <device>`. "device": "" (or no key) is the PANEL's
+    // backlight, found by the shell: the one of the GPU that drives the eDP (intel_backlight in Hybrid, nvidia_0 in dGPU-only, where raw 0
+    // is not black and a key never writes it); a name here forces that device.
+    // "target" is the display the keys set: "pointer" (the one the pointer is on) | "focused" | "panel" (always the laptop's own).
+    "brightness": { "device": "", "step": 0.05, "fineStep": 0.01, "gamma": 2.0, "floorRaw": 1, "target": "pointer" },
+
+    // The media keys (play / pause, next, previous): "mpd" (the player) | "auto" (the player while it plays or is paused with a song; else
+    // whatever else plays -- a browser, a video -- through playerctl).
+    "media": { "keys": "mpd" },
+
+    // SCREENSHOTS (tools/osd/shot.sh and their card).
+    "capture": {
+        // The folder they go to, and their name (date's % codes).
+        "dir": "~/Pictures/Screenshots",
+        "name": "shot-%Y%m%d-%H%M%S.png",
+        // The picture is put on the clipboard.
+        "copy": true,
+        // What Open runs, and what Edit runs ({path} is the picture). An empty editCommand is the shell's own: swappy with a trash button.
+        "openCommand": ["xdg-open", "{path}"],
+        "editCommand": [],
+        // A click on the card: "edit" | "open" | "none".
+        "click": "edit"
+    },
+
+    // The keyboard backlight (4 stops on this laptop); the Fn key is watched too. "device": "" on a machine that has none (a desktop):
+    // nothing watches for one then.
+    "kbd": { "device": "asus::kbd_backlight" },
+
+    // The lock keys card: the keys it shows, in that order. ["caps"] on a keyboard with no number pad: no Num key on the card, and a Num Lock
+    // change (another keyboard's) shows nothing.
+    "lockkeys": { "keys": ["caps", "num"] },
+
+    // The layout card. "keyboard": "main" (the one hyprctl devices marks main) or a
+    // keyboard's name. "codes" names the short code per layout name Hyprland reports
+    // (added to the built-in table; an unlisted "English (US)" shows "US", an unlisted
+    // "Belgian" shows "BE").
+    "layout": { "keyboard": "main", "codes": { "English (US)": "US", "Belgian": "BE" } },
+
+    // Per kind: where it is shown and for how long.
+    //   route "osd"           the on-screen display
+    //   route "notification"  a desktop notification instead
+    //   route "off"           nowhere (the value still changes; nothing is shown)
+    //   ms                    its own time; 0 is dismissMs for what a key shows (the first seven) and 3 to 4 s for the others
+    // Kinds: volume mic brightness kbd lockkeys layout theme track bluetooth network
+    // vpn autoTunnel btLow capture battery power caption generic. Every kind is "osd" except generic ("off": other
+    // programs' toasts stay where they are until you decide). "network" says Wi-Fi, VPN, wired
+    // (cable in / out) and a connection that FAILED; the network and bluetooth applets' own
+    // toasts are dropped (notifications.jsonc "apps"), so the OSD is the one place they are told.
+    // "battery" is the OSD's at 15 % of the pack (12 with the 80 % limit on) and when the pack reaches its charge limit; the toasts
+    // (notifications.jsonc "battery") speak at 8 % and 3 % and for a runaway drain -- route it
+    // "off" here and put 15 % / limitReached back there to move it. "power" is silicon's: the CPU
+    // profile, the GPU mode and the charge limit changed outside its popup, and what the MUX
+    // flow has to tell you; "off" or "notification" here sends them to a desktop notification.
+    //
+    // "events" (some kinds) says which of its events are shown; left out, all of them:
+    //   volume, mic   "key" (a key of yours)  "external" (something else changed it)  "device" (another device became the default)
+    //   track         "key" (a media key)     "change" (the next song came by itself)
+    //   network       "connected" "lost" "failed" "wired"        vpn        "up" "down"
+    //   bluetooth     "connected" "disconnected"                 battery    "low" "full"
+    //   capture       "shot" "rec-start" "rec-stop" "copied"
+    // e.g. "track": { "events": ["key"] }: no card when a song ends and the next begins.
+    "kinds": {
+        "volume":     { "route": "osd", "ms": 0 },
+        "mic":        { "route": "osd", "ms": 0 },
+        "brightness": { "route": "osd", "ms": 0 },
+        "kbd":        { "route": "osd", "ms": 0 },
+        "lockkeys":   { "route": "osd", "ms": 0 },
+        "layout":     { "route": "osd", "ms": 0 },
+        "theme":      { "route": "osd", "ms": 0 },
+        "track":      { "route": "osd", "ms": 0 },
+        "bluetooth":  { "route": "osd", "ms": 0 },
+        "network":    { "route": "osd", "ms": 0 },
+        "vpn":        { "route": "osd", "ms": 0 },
+        // aerial's two cards: the tunnel it raised by itself on a Public network (auto-tunnel), and a Bluetooth device's battery at 20 % / 10 % (a card only: nothing is posted)
+        "autoTunnel": { "route": "osd", "ms": 0 },
+        "btLow":      { "route": "osd", "ms": 0 },
+        "capture":    { "route": "osd", "ms": 0 },
+        "battery":    { "route": "osd", "ms": 0 },
+        "power":      { "route": "osd", "ms": 0 },
+        // the dictation's live words (Ctrl+fn+F10: the focused window's sound; Alt+fn+F10: a question for the local model); "off" hides
+        // the card (the transcript still goes to the clipboard, the question still to the model)
+        "caption":    { "route": "osd", "ms": 0 },
+        "generic":    { "route": "off", "ms": 0 }
+    }
+}

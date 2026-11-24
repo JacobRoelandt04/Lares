@@ -1,0 +1,15 @@
+# Lares snapshots: a restic snapshot of the system before a large or important update (docs/snapshots.md).
+# Install and Upgrade only: a transaction that just removes packages never asks for one. AbortOnFail: a snapshot that failed on purpose
+# stops the transaction with nothing installed. The wrapper lets the update through whenever the tool itself cannot work.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Making a system snapshot if this update asks for one...
+When = PreTransaction
+Exec = /usr/local/lib/lares/snapshot/hook pre
+AbortOnFail
+NeedsTargets

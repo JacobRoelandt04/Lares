@@ -1,0 +1,960 @@
+#!/usr/bin/env python3
+"""lares-offsite -- the copy of the snapshot repository on Proton Drive (docs/contracts/snapshots.md section 9).
+
+    lares-offsite status --json           the state file as it is now; never touches the network
+    lares-offsite sync [--dry] [--json] [--verify] [--allow-shrink]
+    lares-offsite verify                  compare the remote listing with the local repository, change nothing
+    lares-offsite remotes                 the copies on Proton Drive, by machine and repository (reads only)
+    lares-offsite fetch <dir> [--from=<machine>/<repository>]
+                                          download a copy into an empty folder and check what restic names by content
+    lares-offsite try                     the recording of the proton-drive CLI (tools/dev/proton_cli_try.sh), by hand
+
+The repository /.lares-snapshots/repo is restic's own, encrypted: what is copied is ciphertext, and the repository's password is never read
+(it is root's). It runs as you. Every machine and every repository has its own place: `<folder>/<machine>/<repository>/`, the repository as
+it is. <machine> is the host's name (or `offsite.machine`), <repository> eight digits of the repository's own config file, which is random:
+two machines of one name, or a repository made anew on one machine, never share a place, and a copy whose config is another's is refused.
+Uploads go in the order config, keys, data, index, snapshots, so a snapshot file is never remote before the packs it needs; removals go the other way round (snapshots first).
+A manifest (offsite-manifest.json) says what is remote, so a run needs no listing but the folders it writes into; once a month, or with
+--verify, the whole remote tree is listed and the manifest corrected.
+
+Exit status: 0 done; 1 failed; 2 usage; 3 not now (off, or a condition: the state says why); 4 refused (a deletion that looks like a mistake).
+Overrides for tests: LARES_SNAPSHOT_DIR (default /.lares-snapshots), LARES_OFFSITE_STATE, LARES_OFFSITE_CONFIG, LARES_PROTON_DRIVE,
+LARES_POWER_SUPPLY_DIR, LARES_OFFSITE_LOCK_WAIT, LARES_OFFSITE_HOST, PATH (busctl).
+"""
+import fcntl
+import hashlib
+import json
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(ROOT, "tools", "lib"))
+import jsonc  # noqa: E402
+
+TOP = ("config", "keys", "data", "index", "snapshots")   # upload order; deletions run the other way, without config
+BATCH = 25                  # files per upload call: a run that dies loses at most one batch
+VERIFY_EVERY = 30 * 86400
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
+MACHINE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")     # a folder name on Proton Drive: no slash, no space to quote
+OURS = ("data", "index", "snapshots", "keys")   # the folders where restic's content-named files live: the only places a file may be removed
+EXIT_FAILED, EXIT_USAGE, EXIT_NOT_NOW, EXIT_REFUSED = 1, 2, 3, 4
+
+
+class Stop(BaseException):
+    """TERM arrived: leave cleanly."""
+
+
+class NotNow(Exception):
+    """A condition does not hold (battery, metered line, an update, a lock, throttling): state `waiting` with the reason, and `cause`, the
+    one word the shell acts on (docs/contracts/snapshots.md section 9)."""
+
+    def __init__(self, text, cause=""):
+        super().__init__(text)
+        self.cause = cause
+
+
+class Failed(Exception):
+    pass
+
+
+class Refused(Exception):
+    pass
+
+
+# ---------------------------------------------------------------- places and config
+
+def xdg_state():
+    return os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+
+
+def state_dir():
+    return os.environ.get("LARES_OFFSITE_STATE") or os.path.join(xdg_state(), "lares", "snapshots")
+
+
+def repo_root():
+    return os.environ.get("LARES_SNAPSHOT_DIR") or "/.lares-snapshots"
+
+
+def host():
+    return os.environ.get("LARES_OFFSITE_HOST") or socket.gethostname()
+
+
+def load_config():
+    """The `offsite` block of config/snapshots.jsonc with the contract's defaults; a wrong type is the default."""
+    path = os.environ.get("LARES_OFFSITE_CONFIG") or os.path.join(ROOT, "config", "snapshots.jsonc")
+    block = {}
+    for cand in jsonc.candidates(path):
+        if os.path.isfile(cand):
+            try:
+                with open(cand, encoding="utf-8") as f:
+                    block = json.loads(jsonc.strip(f.read())).get("offsite") or {}
+            except (OSError, ValueError, AttributeError):
+                block = {}
+            break
+    if not isinstance(block, dict):
+        block = {}
+
+    def pick(key, kind, default):
+        v = block.get(key, default)
+        return v if isinstance(v, kind) else default
+    folder = pick("folder", str, "/my-files/Lares snapshots")
+    if not folder.startswith("/my-files/"):
+        folder = "/my-files/Lares snapshots"
+    machine = pick("machine", str, "")
+    return {"enabled": block.get("enabled") is True, "folder": folder.rstrip("/"), "machine": machine if MACHINE.match(machine) else "",
+            "onBattery": block.get("onBattery") is True, "metered": block.get("metered") is True}
+
+
+def machine_name(cfg):
+    """The machine's folder: offsite.machine, else the host's name (what a folder cannot hold becomes a dash)."""
+    return cfg["machine"] or re.sub(r"[^A-Za-z0-9._-]", "-", host()).lstrip("-.")[:63] or "machine"
+
+
+def repository_id(repo):
+    """Eight digits of the repository's own config file (random bytes of its making, never rewritten): which repository this is. "" = none here."""
+    try:
+        with open(os.path.join(repo, "config"), "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:8]
+    except OSError:
+        return ""
+
+
+def remote_base(cfg):
+    """Where THIS machine's repository goes; a machine with no repository has no place ("")."""
+    rid = repository_id(os.path.join(repo_root(), "repo"))
+    return "%s/%s/%s" % (cfg["folder"], machine_name(cfg), rid) if rid else ""
+
+
+# ---------------------------------------------------------------- state files
+
+def write_json(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=1)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def read_json(path, default):
+    try:
+        with open(path, encoding="utf-8") as f:
+            v = json.load(f)
+        return v if isinstance(v, dict) else default
+    except (OSError, ValueError):
+        return default
+
+
+def state_path():
+    return os.path.join(state_dir(), "offsite.json")
+
+
+def manifest_path():
+    return os.path.join(state_dir(), "offsite-manifest.json")
+
+
+def blank_state():
+    return {"state": "off", "reason": "", "cause": "", "lastOk": 0, "pending": {"files": 0, "bytes": 0}, "done": {"files": 0, "bytes": 0},
+            "snapshots": [], "pid": 0}
+
+
+def load_manifest(base):
+    m = read_json(manifest_path(), {})
+    if m.get("version") != 1 or m.get("base") != base or not isinstance(m.get("files"), dict):
+        # another folder or host: what the old manifest says is somewhere else, so it says nothing about this place
+        return {"version": 1, "base": base, "files": {}, "trashed": [], "verified": 0}
+    m.setdefault("trashed", [])
+    m.setdefault("verified", 0)
+    return m
+
+
+# ---------------------------------------------------------------- the local repository
+
+def scan_local(repo):
+    """{relative path: size} of the repository's files that belong off site. restic's `locks/` are transient and stay home."""
+    out = {}
+    for top in TOP:
+        base = os.path.join(repo, top)
+        if os.path.isfile(base):
+            out[top] = os.path.getsize(base)
+            continue
+        for dirpath, _dirs, files in os.walk(base):
+            for name in files:
+                full = os.path.join(dirpath, name)
+                rel = os.path.relpath(full, repo).replace(os.sep, "/")
+                # restic writes a pack under a temporary name and renames it: only finished files are the repository
+                if ours(rel) and os.path.isfile(full) and not os.path.islink(full):
+                    out[rel] = os.path.getsize(full)
+    return out
+
+
+def rank(rel):
+    return TOP.index(rel.split("/", 1)[0])
+
+
+def ours(rel):
+    """True for what restic itself wrote and a prune may remove: a file named by its SHA-256 under data/, index/, snapshots/ or keys/.
+    Anything else in the user's Drive (a note dropped into the folder, `config`) is never trashed or deleted."""
+    return rel.split("/", 1)[0] in OURS and "/" in rel and bool(HEX64.match(rel.rsplit("/", 1)[1]))
+
+
+def snapshot_shorts(files):
+    return sorted(r.split("/", 1)[1][:8] for r in files if r.startswith("snapshots/") and HEX64.match(r.split("/", 1)[1]))
+
+
+# ---------------------------------------------------------------- conditions
+
+def on_ac():
+    """True when any mains supply is online, or when the machine has none to ask (a desktop)."""
+    base = os.environ.get("LARES_POWER_SUPPLY_DIR") or "/sys/class/power_supply"
+    seen = False
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return True
+    for n in names:
+        try:
+            with open(os.path.join(base, n, "type")) as f:
+                if f.read().strip() != "Mains":
+                    continue
+            seen = True
+            with open(os.path.join(base, n, "online")) as f:
+                if f.read().strip() == "1":
+                    return True
+        except OSError:
+            continue
+    return not seen
+
+
+def line_is_metered():
+    """NetworkManager's Metered property (1 yes, 3 guess-yes), read only. Unknown counts as not metered."""
+    try:
+        r = subprocess.run(["busctl", "--system", "get-property", "org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager",
+                            "org.freedesktop.NetworkManager", "Metered"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    m = re.match(r"^u\s+(\d+)", r.stdout.strip()) if r.returncode == 0 else None
+    return bool(m) and m.group(1) in ("1", "3")
+
+
+def keyring_locked():
+    """True when the login keyring holds back: the CLI's session is in it, and asking for it then opens a password window nobody called for.
+    Read only, and never starts the keyring; no answer counts as locked."""
+    try:
+        r = subprocess.run(["busctl", "--user", "--auto-start=no", "get-property", "org.freedesktop.secrets", "/org/freedesktop/secrets/aliases/default",
+                            "org.freedesktop.Secret.Collection", "Locked"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return True
+    return r.returncode != 0 or r.stdout.strip() != "b false"
+
+
+def update_running():
+    m = read_json(os.path.join(xdg_state(), "lares", "system-update", "last-run.json"), {})
+    pid = m.get("pid")
+    if m.get("state") != "running" or not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def check_conditions(cfg):
+    if not cfg["onBattery"] and not on_ac():
+        raise NotNow("The machine is on battery; the copy waits for the charger.", "battery")
+    if not cfg["metered"] and line_is_metered():
+        raise NotNow("The connection is metered; the copy waits for another one.", "metered")
+    if update_running():
+        raise NotNow("A system update is running; the copy waits until it ends.", "update")
+    if keyring_locked():
+        raise NotNow("The keyring is locked; the copy waits until it is open (it opens with your password, not with your face).", "keyring")
+
+
+# ---------------------------------------------------------------- the proton-drive CLI
+# Everything that depends on how the real CLI behaves sits in this block. RECORDED = seen from the real CLI (0.9.0, the user's try-out of
+# 2026-11-22: tools/dev/proton_cli_try.sh; the two sign-in texts from the CLI itself with no account). ASSUMPTION = never seen.
+# Also RECORDED: identical content is skipped under any strategy; an upload that is killed leaves nothing in the listing, and the same
+# upload then goes through; `fs trash` and `fs delete` print a check mark and the name; a missing node is exit 1, "Node not found: <name>".
+
+class CliError(Exception):
+    def __init__(self, kind, text):
+        super().__init__(text)
+        self.kind = kind    # "signed-out" | "keyring" | "throttled" | "missing" (no such node) | "failed"
+
+
+def classify_error(text):
+    """RECORDED: "You need to login first", "Failed to load session from secrets ...". ASSUMPTION: the words of a refusal for too many requests,
+    and of a session that ran out. Unknown wording is a plain failure, which stops the run with the CLI's own text."""
+    low = text.lower()
+    if re.search(r"failed to load session from secrets", low):
+        return "keyring"
+    if "node not found" in low:
+        return "missing"
+    if re.search(r"need to log ?in|not (signed|logged) in|sign[- ]?in required|log ?in required|unauthori[sz]ed|session (expired|has expired)", low):
+        return "signed-out"
+    if re.search(r"too many requests|rate.?limit|\b429\b|throttl", low):
+        return "throttled"
+    return "failed"
+
+
+def parse_entries(text):
+    """RECORDED: `fs list -j` prints a JSON array; an entry's `name` is {"ok", "value"}, `type` "file" or "folder", and a file's own size and SHA-1
+    are in `activeRevision` (claimedSize, claimedDigests.sha1). `totalStorageSize` is the ENCRYPTED size and never equals the file's.
+    Returns one {"name", "folder", "size", "sha1"} per entry, names repeated as they are. A name that could not be decrypted is None."""
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ValueError("not a list")
+    out = []
+    for e in data:
+        name = e["name"]
+        if e["type"] not in ("file", "folder"):
+            raise ValueError("an entry of type %r" % e["type"])
+        rev = e.get("activeRevision") or {}
+        size = rev.get("claimedSize")
+        out.append({"name": name["value"] if name["ok"] is True else None, "folder": e["type"] == "folder",
+                    "size": size if isinstance(size, int) and not isinstance(size, bool) else None,
+                    "sha1": (rev.get("claimedDigests") or {}).get("sha1")})
+    return out
+
+
+def parse_listing(text):
+    """{name: entry} of a folder's entries. One with no readable name is nobody's: it is neither counted nor touched."""
+    return {e["name"]: e for e in parse_entries(text) if e["name"] is not None}
+
+
+def trashed_path(remote_path):
+    """RECORDED: `fs delete` takes what `fs trash` left as /trash/<its own name>."""
+    return "/trash/" + remote_path.rsplit("/", 1)[1]
+
+
+class Proton:
+    def __init__(self, base):
+        self.base = base
+        self.binary = os.environ.get("LARES_PROTON_DRIVE") or "proton-drive"
+        self.cache = {}     # remote folder -> listing, dropped by every write into it
+        self.trash_names = None     # name -> how many items of /trash have it, read once and kept in step by our own calls
+        self.left_alone = set()     # remote paths a removal was asked for and refused: not ours
+
+    def run(self, args):
+        try:
+            r = subprocess.run([self.binary] + args, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        except OSError as e:
+            raise CliError("failed", "proton-drive cannot be started: %s" % e)
+        if r.returncode != 0:
+            text = (r.stderr.strip() or r.stdout.strip() or "exit status %d" % r.returncode)
+            raise CliError(classify_error(text), text)
+        return r.stdout
+
+    def list(self, path):
+        if path in self.cache:
+            return self.cache[path]
+        out = self.run(["fs", "list", "-j", path])
+        try:
+            self.cache[path] = parse_listing(out)
+        except (ValueError, KeyError, TypeError):
+            raise CliError("failed", "the listing of %s is not what was expected: %s" % (path, out.strip()[:200]))
+        return self.cache[path]
+
+    def ensure_folder(self, path):
+        parent, name = path.rsplit("/", 1)
+        if parent not in ("", "/my-files") and name:
+            self.ensure_folder(parent)
+        if path == "/my-files":
+            return
+        listing = self.list(parent or "/my-files")
+        if name not in listing:
+            self.run(["fs", "create-folder", parent, name])
+            # what we just made is empty: no listing is asked for it, nor for its parent again (a first copy makes 130 folders)
+            listing[name] = {"name": name, "folder": True, "size": None, "sha1": None}
+            self.cache[path] = {}
+
+    def upload(self, local_files, parent):
+        # A strategy is always given: without one the CLI asks, and nobody answers. Never `replace`: it leaves the old file in the
+        # trash under the same name, and /trash/<name> would then name two items. A wrong file is trashed and deleted first.
+        self.run(["fs", "upload", "-f", "skip", "-d", "skip", "-t"] + local_files + [parent])
+        self.cache.pop(parent, None)
+
+    def is_ours(self, path):
+        return bool(self.base) and path.startswith(self.base + "/") and ours(path[len(self.base) + 1:])
+
+    # trash() and delete_trashed() are the ONLY calls that remove anything, and both check the name here, right before the call.
+    def trash(self, path):
+        """Trashes one remote file. False (and nothing run) when it is not restic's own."""
+        if not self.is_ours(path):
+            self.left_alone.add(path)
+            return False
+        self.run(["fs", "trash", path])
+        self.cache.pop(path.rsplit("/", 1)[0], None)
+        if self.trash_names is not None:
+            name = path.rsplit("/", 1)[1]
+            self.trash_names[name] = self.trash_names.get(name, 0) + 1
+        return True
+
+    def delete_trashed(self, path):
+        """Deletes exactly the item `trash` left (never `empty-trash`: it takes everything of the user's). `fs delete` addresses an item
+        by its name under /trash, so with two items of that name it is left alone. Returns "deleted", "gone" (nothing of that name
+        in the trash), "ambiguous" or "foreign" (not ours)."""
+        if not self.is_ours(path):
+            self.left_alone.add(path)
+            return "foreign"
+        name = path.rsplit("/", 1)[1]
+        if self.trash_names is None:
+            self.trash_names = {}
+            try:
+                names = [e["name"] for e in parse_entries(self.run(["fs", "list", "-j", "/trash"])) if e["name"] is not None]
+            except (ValueError, KeyError, TypeError):
+                raise CliError("failed", "the listing of /trash is not what was expected")
+            for n in names:
+                self.trash_names[n] = self.trash_names.get(n, 0) + 1
+        count = self.trash_names.get(name, 0)
+        if count == 0:
+            return "gone"
+        if count > 1:
+            return "ambiguous"
+        self.run(["fs", "delete", trashed_path(path)])
+        del self.trash_names[name]
+        return "deleted"
+
+    def download(self, remote, local_dir):
+        self.run(["fs", "download", "-f", "skip", "-d", "merge", remote, local_dir])
+
+
+# ---------------------------------------------------------------- the sync
+
+class Sync:
+    def __init__(self, cfg, args):
+        self.cfg, self.args = cfg, args
+        self.repo = os.path.join(repo_root(), "repo")
+        self.base = remote_base(cfg)
+        self.cli = Proton(self.base)
+        self.manifest = load_manifest(self.base)
+        self.state = read_json(state_path(), blank_state())
+        self.done = {"files": 0, "bytes": 0}
+        self.local = {}
+
+    def say(self, state, reason, cause="", **extra):
+        s = blank_state()
+        s.update(self.state)
+        s.update(state=state, reason=reason, cause=cause, pid=os.getpid() if state == "running" else 0, done=dict(self.done), **extra)
+        s["pending"] = self.pending()
+        s["snapshots"] = snapshot_shorts(self.manifest["files"])
+        self.state = s
+        write_json(state_path(), s)
+
+    def pending(self):
+        files = [r for r, n in self.local.items() if self.manifest["files"].get(r) != n]
+        return {"files": len(files), "bytes": sum(self.local[r] for r in files)}
+
+    def save_manifest(self):
+        write_json(manifest_path(), self.manifest)
+
+    def ok(self):
+        notes = []
+        left = len(self.manifest["trashed"])
+        if left:
+            notes.append("%d old file%s still in Proton's trash" % (left, " is" if left == 1 else "s are"))
+        alone = len(self.cli.left_alone)
+        if alone:
+            notes.append("%d file%s in the folder not ours and left alone" % (alone, " is" if alone == 1 else "s are"))
+        text = "; ".join(notes)
+        self.say("idle", text[:1].upper() + text[1:] + "." if notes else "", lastOk=int(time.time()))
+
+    # --- plan
+
+    def uploads(self):
+        return sorted((r for r, n in self.local.items() if self.manifest["files"].get(r) != n), key=lambda r: (rank(r), r))
+
+    def removals(self):
+        gone = [r for r in self.manifest["files"] if r not in self.local]
+        return sorted(gone, key=lambda r: (-rank(r), r))
+
+    def guard_removals(self, removals):
+        """A deletion that looks like a mistake (an unmounted or emptied repository) is refused; --allow-shrink is for a hand."""
+        if not removals:
+            return
+        if not os.path.isfile(os.path.join(self.repo, "config")):
+            raise Refused("The local repository is missing (no config file), so nothing is removed from Proton Drive.")
+        if not snapshot_shorts(self.local):
+            raise Refused("The local repository holds no snapshots, so nothing is removed from Proton Drive.")
+        known = len(self.manifest["files"])
+        if not self.args.allow_shrink and len(removals) * 3 > known:
+            raise Refused("%d of the %d files on Proton Drive would be removed, more than a third. If that is right, run "
+                          "`lares-offsite sync --allow-shrink`." % (len(removals), known))
+
+    # --- remote
+
+    def remote_tree(self):
+        """{relative path: size or None} of everything under the remote base, by listing folders."""
+        out = {}
+
+        def walk(rel):
+            path = self.base + ("/" + rel if rel else "")
+            for name, e in self.cli.list(path).items():
+                r = rel + "/" + name if rel else name
+                if e["folder"]:
+                    walk(r)
+                elif r.split("/", 1)[0] in TOP:
+                    out[r] = e["size"]
+        try:
+            walk("")
+        except CliError as e:
+            if e.kind == "missing" and not self.base_exists():
+                return {}
+            raise
+        return out
+
+    def base_exists(self):
+        """Whether the place is there. Only "no such node" means it is not: any other refusal must stop the run, not read as an empty place."""
+        parent, name = self.base.rsplit("/", 1)
+        try:
+            return name in self.cli.list(parent)
+        except CliError as e:
+            if e.kind == "missing":
+                return False
+            raise
+
+    def reconcile(self, tree):
+        """Corrects the manifest by the remote tree: what is gone or the wrong size will be uploaded again. Returns (missing, wrong, extra)."""
+        files = self.manifest["files"]
+        missing = sorted(r for r in files if r not in tree)
+        wrong = sorted(r for r in files if r in tree and tree[r] is not None and tree[r] != files[r])
+        # a file that is neither restic's nor ours to touch is not "extra": it is left alone and said so
+        stray = [r for r in tree if r not in files and r not in self.local]
+        self.cli.left_alone.update(self.base + "/" + r for r in stray if not ours(r))
+        return missing, wrong, sorted(r for r in stray if ours(r))
+
+    # --- steps
+
+    def upload_all(self):
+        by_folder = {}
+        for rel in self.uploads():
+            by_folder.setdefault(rel.rsplit("/", 1)[0] if "/" in rel else "", []).append(rel)
+        for folder in sorted(by_folder, key=lambda f: (rank(by_folder[f][0]), f)):
+            remote = self.base + ("/" + folder if folder else "")
+            self.cli.ensure_folder(remote)
+            rels = by_folder[folder]
+            for i in range(0, len(rels), BATCH):
+                check_conditions(self.cfg)
+                self.upload_batch(remote, rels[i:i + BATCH])
+
+    def upload_batch(self, remote, rels):
+        listing = self.cli.list(remote)
+        # Files already there at the right size need no call (a run that died after a batch's last file); one of the wrong size is
+        # taken away first (a part an interrupted upload left), so the upload with `skip` puts the whole file there.
+        todo = [r for r in rels if listing.get(r.rsplit("/", 1)[-1], {}).get("size") != self.local[r]]
+        for r in todo:
+            if listing.get(r.rsplit("/", 1)[-1], {}).get("size") is not None:
+                self.take_away(r)
+        if todo:
+            self.cli.upload([os.path.join(self.repo, r) for r in todo], remote)
+        bad = self.bad_sizes(remote, rels)
+        if bad:
+            # one more try
+            for r in bad:
+                self.take_away(r)
+            self.cli.upload([os.path.join(self.repo, r) for r in bad], remote)
+            bad = self.bad_sizes(remote, bad)
+        if bad:
+            raise Failed("After uploading, %s is not the size it has here (%d bytes)." % (bad[0], self.local[bad[0]]))
+        for r in rels:
+            self.manifest["files"][r] = self.local[r]
+        for r in todo:
+            self.done["files"] += 1
+            self.done["bytes"] += self.local[r]
+        self.save_manifest()
+        self.say("running", "Copying to Proton Drive.")
+
+    def bad_sizes(self, remote, rels):
+        listing = self.cli.list(remote)
+        # A size the CLI does not give cannot be compared: the exit status was all there is.
+        return [r for r in rels if listing.get(r.rsplit("/", 1)[-1], {"size": -1})["size"] not in (self.local[r], None)]
+
+    def finish_delete(self, rel):
+        """Deletes a trashed file. A delete that fails (or is ambiguous) leaves it in manifest["trashed"] for a later run; a signed-out or
+        throttled CLI still stops the run."""
+        try:
+            res = self.cli.delete_trashed(self.base + "/" + rel)
+        except CliError as e:
+            if e.kind not in ("failed", "missing"):
+                raise
+            return
+        if res != "ambiguous":
+            self.manifest["trashed"].remove(rel)
+            self.save_manifest()
+
+    def discard(self, rel):
+        """Trash, then delete, exactly that remote file. False when it is not ours."""
+        if not self.cli.trash(self.base + "/" + rel):
+            return False
+        self.manifest["files"].pop(rel, None)
+        self.manifest["trashed"].append(rel)
+        self.save_manifest()
+        self.finish_delete(rel)
+        return True
+
+    def take_away(self, rel):
+        if not self.discard(rel):
+            raise Failed("%s on Proton Drive is not the file it should be and is not ours to remove; remove it by hand." % rel)
+
+    def retry_leftovers(self):
+        """What an earlier run trashed but could not delete: one more try each, once per sync."""
+        for rel in list(self.manifest["trashed"]):
+            self.finish_delete(rel)
+
+    def remove_all(self, removals):
+        for rel in removals:
+            check_conditions(self.cfg)
+            if not self.discard(rel):
+                self.manifest["files"].pop(rel, None)    # a name that is not ours: forgotten, never removed
+                self.save_manifest()
+
+    def check_identity(self):
+        """The place must hold THIS repository or nothing: its config file says whose it is. A second lock on the door beside the path."""
+        here = self.cli.list(self.base).get("config") if self.base_exists() else None
+        if here is None:
+            return
+        with open(os.path.join(self.repo, "config"), "rb") as f:
+            mine = f.read()
+        if here["folder"] or here["size"] != len(mine) or (here["sha1"] or "").lower() != hashlib.sha1(mine).hexdigest():
+            raise Refused("%s on Proton Drive holds another repository's copy. Nothing was changed there." % self.base)
+
+    def run(self):
+        if not self.cfg["enabled"]:
+            self.say("off", "The off-site copy is off (offsite.enabled in config/snapshots.jsonc).")
+            raise NotNow("The off-site copy is off (offsite.enabled in config/snapshots.jsonc).")
+        self.local = scan_local(self.repo) if os.path.isdir(self.repo) else {}
+        if self.args.dry:
+            return self.dry()
+        if not self.base:
+            raise NotNow("There is no snapshot repository on this machine yet.")
+        check_conditions(self.cfg)
+        verify = self.args.verify or (bool(self.manifest["files"]) and time.time() - self.manifest["verified"] > VERIFY_EVERY)
+        if not (verify or self.uploads() or self.removals() or self.manifest["trashed"]):
+            return self.ok()            # nothing to do: not one call
+        self.say("running", "Starting.")
+        self.check_identity()
+        if verify or not self.manifest["verified"]:
+            tree = self.remote_tree()
+            missing, wrong, extra = self.reconcile(tree)
+            for r in missing + wrong:
+                self.manifest["files"].pop(r, None)
+            for r in extra:
+                self.manifest["files"].setdefault(r, tree[r] if tree[r] is not None else 0)
+            self.manifest["verified"] = int(time.time())
+            self.save_manifest()
+        removals = self.removals()
+        self.guard_removals(removals)
+        self.retry_leftovers()
+        self.upload_all()
+        self.remove_all(removals)
+        self.ok()
+
+    def dry(self):
+        up, rm = self.uploads(), self.removals()
+        plan = {"upload": [{"path": r, "bytes": self.local[r]} for r in up], "remove": rm,
+                "refused": ""}
+        try:
+            self.guard_removals(rm)
+        except Refused as e:
+            plan["refused"] = str(e)
+        if self.args.json:
+            print(json.dumps(plan))
+        else:
+            print("Would upload %d files (%d bytes) and remove %d from %s" % (len(up), sum(self.local[r] for r in up), len(rm), self.base))
+            for r in up:
+                print("  upload", r)
+            for r in rm:
+                print("  remove", r)
+            if plan["refused"]:
+                print("Refused: " + plan["refused"])
+        return 4 if plan["refused"] else 0
+
+
+# ---------------------------------------------------------------- commands
+
+class Args:
+    def __init__(self, argv):
+        self.words = [a for a in argv if not a.startswith("--")]
+        self.flags = {a for a in argv if a.startswith("--")}
+        self.dry = "--dry" in self.flags
+        self.json = "--json" in self.flags
+        self.verify = "--verify" in self.flags
+        self.allow_shrink = "--allow-shrink" in self.flags
+        self.source = next((f[len("--from="):] for f in sorted(self.flags) if f.startswith("--from=")), "")
+
+
+def hold_instance():
+    """One run at a time: a lock on a file of its own (the state file is replaced by every write, so it cannot hold one)."""
+    os.makedirs(state_dir(), exist_ok=True)
+    fd = os.open(os.path.join(state_dir(), "offsite.lock"), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def hold_repo_shared():
+    """A shared lock on the repository's own lock file for the whole run, so root's prune (exclusive) waits for us. Read-only fd."""
+    path = os.path.join(repo_root(), "lock")
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return None     # no lock file: no root tool has run here, nothing to wait for
+    deadline = time.time() + float(os.environ.get("LARES_OFFSITE_LOCK_WAIT") or 10)
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.time() >= deadline:
+                os.close(fd)
+                raise NotNow("The snapshot tool is busy with the repository; the copy waits.", "busy")
+            time.sleep(0.2)
+
+
+def on_term(_sig, _frame):
+    raise Stop()
+
+
+def cmd_sync(args):
+    cfg = load_config()
+    if args.dry:
+        return Sync(cfg, args).run()
+    inst = hold_instance()
+    if inst is None:
+        print("lares-offsite: another run is going", file=sys.stderr)
+        return EXIT_NOT_NOW
+    signal.signal(signal.SIGTERM, on_term)
+    job = Sync(cfg, args)
+    lock = None
+    try:
+        lock = hold_repo_shared() if cfg["enabled"] else None
+        job.run()
+        code, msg = 0, ""
+    except NotNow as e:
+        if cfg["enabled"]:
+            job.say("waiting", str(e), e.cause)
+        code, msg = EXIT_NOT_NOW, str(e)
+    except Stop:
+        job.say("waiting" if job.state.get("pending", {}).get("files") else "idle", "Stopped; it continues at the next run.", "stopped")
+        code, msg = 0, "stopped"
+    except Refused as e:
+        job.say("error", str(e))
+        code, msg = EXIT_REFUSED, str(e)
+    except Failed as e:
+        job.say("error", str(e))
+        code, msg = EXIT_FAILED, str(e)
+    except CliError as e:
+        if e.kind == "signed-out":
+            job.say("error", "Proton Drive is signed out. Sign in with proton-drive auth login, then the copy continues.", "signin")
+            code, msg = EXIT_FAILED, "signed out"
+        elif e.kind == "keyring":
+            job.say("waiting", "Proton's session in the keyring cannot be read; the copy tries again later.", "keyring")
+            code, msg = EXIT_NOT_NOW, "keyring"
+        elif e.kind == "throttled":
+            job.say("waiting", "Proton Drive asked for a pause (too many requests); the copy tries again later.", "throttled")
+            code, msg = EXIT_NOT_NOW, "throttled"
+        else:
+            job.say("error", "proton-drive failed: %s" % str(e)[:300])
+            code, msg = EXIT_FAILED, str(e)
+    finally:
+        if lock is not None:
+            os.close(lock)
+        os.close(inst)
+    if args.json:
+        print(json.dumps({"ok": code == 0, "state": job.state.get("state"), "reason": job.state.get("reason", ""), "code": code}))
+    elif msg:
+        print("lares-offsite: " + msg, file=sys.stderr)
+    return code
+
+
+def cmd_status(args):
+    cfg = load_config()
+    s = blank_state()
+    s.update(read_json(state_path(), {}))
+    pid = s.get("pid") or 0
+    if s.get("state") == "running":
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, TypeError):
+            s.update(state="idle", reason="The last run ended without a word.", pid=0)
+        except PermissionError:
+            pass
+    if not cfg["enabled"]:
+        s.update(state="off", reason="")
+    elif s["state"] == "off":
+        s.update(state="idle")
+    if cfg["enabled"] and s["state"] != "running":
+        base = remote_base(cfg)
+        local = scan_local(os.path.join(repo_root(), "repo")) if os.path.isdir(os.path.join(repo_root(), "repo")) else {}
+        m = load_manifest(base)
+        files = [r for r, n in local.items() if m["files"].get(r) != n]
+        s["pending"] = {"files": len(files), "bytes": sum(local[r] for r in files)}
+    print(json.dumps(s) if args.json else "%s %s" % (s["state"], s["reason"]))
+    return 0
+
+
+def cmd_verify(args):
+    cfg = load_config()
+    if not cfg["enabled"]:
+        print("lares-offsite: the off-site copy is off", file=sys.stderr)
+        return EXIT_NOT_NOW
+    job = Sync(cfg, args)
+    if not job.base:
+        print("lares-offsite: there is no snapshot repository on this machine yet", file=sys.stderr)
+        return EXIT_NOT_NOW
+    job.local = scan_local(job.repo) if os.path.isdir(job.repo) else {}
+    try:
+        missing, wrong, extra = job.reconcile(job.remote_tree())
+        # what the manifest does not know yet counts as missing too
+        missing += [r for r in job.uploads() if r not in missing and r not in wrong]
+    except CliError as e:
+        print("lares-offsite: proton-drive failed: %s" % e, file=sys.stderr)
+        return EXIT_FAILED
+    for label, items in (("missing", missing), ("wrong size", wrong), ("only remote", extra)):
+        for r in items:
+            print("%s: %s" % (label, r))
+    print("%d missing, %d of the wrong size, %d only on Proton Drive" % (len(missing), len(wrong), len(extra)))
+    return 0 if not (missing or wrong or extra) else EXIT_FAILED
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def check_downloaded(folder):
+    """restic names every file but `config` by the SHA-256 of its bytes (packs, index and snapshot files, keys). Those are checked;
+    `config` has a fixed name and is only checked to be there. Returns (checked, bad, problems)."""
+    checked, bad = 0, []
+    for top in ("keys", "data", "index", "snapshots"):
+        for dirpath, _d, files in os.walk(os.path.join(folder, top)):
+            for name in files:
+                if not HEX64.match(name):
+                    continue
+                checked += 1
+                if sha256_of(os.path.join(dirpath, name)) != name:
+                    bad.append(os.path.relpath(os.path.join(dirpath, name), folder))
+    problems = [t for t in ("config", "keys", "snapshots") if not os.path.exists(os.path.join(folder, t))]
+    return checked, sorted(bad), problems
+
+
+PLACE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}/[0-9a-f]{8}$")
+
+
+def places(cli, cfg):
+    """Every copy on Proton Drive, as "<machine>/<repository>"."""
+    out = []
+    try:
+        machines = cli.list(cfg["folder"])
+    except CliError as e:
+        if e.kind == "missing":
+            return []
+        raise
+    for m in sorted(n for n, e in machines.items() if e["folder"]):
+        for r in sorted(n for n, e in cli.list(cfg["folder"] + "/" + m).items() if e["folder"]):
+            if PLACE.match(m + "/" + r):
+                out.append(m + "/" + r)
+    return out
+
+
+def cmd_remotes(_args):
+    cfg = load_config()
+    mine = remote_base(cfg)
+    cli = Proton("")
+    try:
+        found = places(cli, cfg)
+        for p in found:
+            # RECORDED: `fs size -j` prints {"size": encrypted bytes, "numberOfDescendants": n}
+            size = json.loads(cli.run(["fs", "size", "-j", cfg["folder"] + "/" + p]))
+            print("%-40s %6.1f GB%s" % (p, size["size"] / 1e9, "   this machine's" if mine == cfg["folder"] + "/" + p else ""))
+    except CliError as e:
+        print("lares-offsite: proton-drive failed: %s" % e, file=sys.stderr)
+        return EXIT_FAILED
+    if not found:
+        print("no copy in %s yet" % cfg["folder"])
+    return 0
+
+
+def cmd_fetch(args):
+    if len(args.words) < 2:
+        print("usage: lares-offsite fetch <dir> [--from=<machine>/<repository>]", file=sys.stderr)
+        return EXIT_USAGE
+    dest = args.words[1]
+    if os.path.exists(dest) and (not os.path.isdir(dest) or os.listdir(dest)):
+        print("lares-offsite: %s is not an empty folder" % dest, file=sys.stderr)
+        return EXIT_REFUSED
+    cfg = load_config()
+    base = remote_base(cfg)
+    cli = Proton("")
+    try:
+        if args.source:
+            if not PLACE.match(args.source):
+                print("lares-offsite: --from takes <machine>/<repository>, as `lares-offsite remotes` lists them", file=sys.stderr)
+                return EXIT_USAGE
+            base = cfg["folder"] + "/" + args.source
+        elif not base:
+            # a new disk: no repository here says which copy is meant
+            found = places(cli, cfg)
+            if len(found) != 1:
+                print("lares-offsite: say which copy with --from=<machine>/<repository>:" if found else "lares-offsite: no copy in " + cfg["folder"], file=sys.stderr)
+                for p in found:
+                    print("  " + p, file=sys.stderr)
+                return EXIT_USAGE
+            base = cfg["folder"] + "/" + found[0]
+        print("from %s" % base, flush=True)
+        os.makedirs(dest, exist_ok=True)
+        present = cli.list(base)
+        for top in TOP:
+            if top in present:
+                print("downloading %s" % top, flush=True)
+                cli.download(base + "/" + top, dest)
+    except CliError as e:
+        print("lares-offsite: proton-drive failed: %s" % e, file=sys.stderr)
+        return EXIT_FAILED
+    checked, bad, problems = check_downloaded(dest)
+    for r in bad:
+        print("WRONG CONTENT: " + r)
+    for t in problems:
+        print("MISSING: " + t)
+    print("%d files checked against their names (SHA-256); config has a fixed name and is not checked; %d wrong, %d missing"
+          % (checked, len(bad), len(problems)))
+    return 0 if not (bad or problems) else EXIT_FAILED
+
+
+def cmd_try(_args):
+    script = os.path.join(ROOT, "tools", "dev", "proton_cli_try.sh")
+    if not os.path.isfile(script):
+        print("lares-offsite: tools/dev/proton_cli_try.sh is not in this snapshot; run it from the repository", file=sys.stderr)
+        return EXIT_FAILED
+    os.execv("/bin/bash", ["bash", script])
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0 if argv else EXIT_USAGE
+    args = Args(argv)
+    cmd = {"status": cmd_status, "sync": cmd_sync, "verify": cmd_verify, "fetch": cmd_fetch, "remotes": cmd_remotes, "try": cmd_try}.get(args.words[0])
+    if cmd is None:
+        print("lares-offsite: unknown command %s" % args.words[0], file=sys.stderr)
+        return EXIT_USAGE
+    return cmd(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,72 @@
+// stocks.jsonc -- the stocks popup's portfolio, alerts and indices (modules/stocks). The template of ~/.config/quickshell/config/stocks.jsonc
+// (that file is git-ignored: it is your portfolio and never leaves this machine). Every key is optional and every value below IS the
+// default: a missing key takes it. The shell only READS the file and re-reads it the moment you save; a mistake shows up as a line in
+// the popup, never as a crash. `//` and `/* */` comments are allowed. Keep only what you change.
+{
+    // Totals are reported in this currency. Only "EUR" is supported; every stock is still SHOWN in the currency it trades in.
+    "currency": "EUR",
+
+    // Inflation: Eurostat's HICP for this country (a two-letter ISO code), monthly. Real figures are every cash flow re-expressed in
+    // today's euros with it.
+    "inflation": { "geo": "BE" },
+
+    // The share of every dividend kept back as tax, 0 up to (not including) 1 (0.30: the Belgian 30 % roerende voorheffing). Dividends are found
+    // automatically.
+    "dividendWithholding": 0.30,
+
+    // The summary card's cycling index cells, in any order (hovering them shows the biggest movers): Yahoo symbols, each a string or
+    // { "symbol": .., "alias": .. } (the alias is shown instead of the symbol).
+    "indices": [{ "symbol": "^BFX",      "alias": "BEL 20" },
+                { "symbol": "^AEX",      "alias": "AEX" },
+                { "symbol": "^STOXX50E", "alias": "Euro Stoxx 50" },
+                { "symbol": "^GSPC",     "alias": "S&P 500" },
+                { "symbol": "^IXIC",     "alias": "Nasdaq" },
+                { "symbol": "EURUSD=X",  "alias": "EUR/USD" }],
+
+    // The stock's detail comes back with the popup when it was on screen less than this many minutes ago. 0: never. 0 .. 1440.
+    "detailMemoryMin": 10,
+    // How often the quotes are fetched while a market is open, seconds: with the popup open, and with it shut (30 .. 3600, 60 .. 86400;
+    // Yahoo refuses a faster one). With every market closed they are fetched once after the close, then at the next open.
+    "refreshSec": { "open": 60, "closed": 300 },
+    // Prices before the opening and after the close are shown.
+    "extendedHours": true,
+    // The page a stock's link opens; {symbol} is its Yahoo symbol.
+    "quoteUrl": "https://finance.yahoo.com/quote/{symbol}",
+    // Where the detail opens beside the popup: "end" (the right of a top bar's popup) | "start" (the left) | "far" (below it).
+    "look": { "secondarySide": "end" },
+
+    // Desktop notifications, once per crossing, re-armed when the price has moved back by alertHysteresis (a fraction, 0 .. 1).
+    "alertHysteresis": 0.005,
+    // Each alert: a "symbol" ("*" is every stock you hold or watch) and at least one of "above" (a price), "below" (a price),
+    // "dayMove" (|day %|), each a positive number. For example:
+    //   [ { "symbol": "ASML.AS", "above": 1600 }, { "symbol": "AAPL", "below": 300 }, { "symbol": "*", "dayMove": 5 } ]
+    "alerts": [],
+
+    // Sudden moves: a stock you hold or watch that moves at least `pct` % (0 .. 100) within `minutes` minutes (1 .. 390, a trading day),
+    // while its market is open -- once per direction per day. A symbol may have thresholds of its own in "bySymbol", or `false` for
+    // none: { "NVDA": { "pct": 5, "minutes": 15 }, "KBC.BR": false }. (Which stocks, and whether it speaks at all: notifications.jsonc,
+    // sources.stocks.)
+    "sudden": { "pct": 3, "minutes": 30, "bySymbol": {} },
+
+    // What you hold, one entry per stock:
+    //   symbol   the Yahoo Finance symbol (search for it in the popup to find it: ASML.AS is Amsterdam, KBC.BR Brussels, VOD.L London,
+    //            AAPL NASDAQ)
+    //   alias    optional, shown instead of the symbol
+    //   image    optional, a local .svg / .png used instead of the fetched logo
+    //   isin     optional, lets the logo be found when the symbol is not
+    //   cnbc     optional, CNBC's symbol when the automatic one is wrong (the detail's market cap / P/E / EPS / yield / beta come from CNBC)
+    //   actions  every buy and sell, in any order:
+    //     type     "buy" | "sell"
+    //     date     "YYYY-MM-DD", the trade date
+    //     shares   as bought -- BEFORE any later split (splits are applied for you)
+    //     price    per share, in the currency the stock is QUOTED in. London quotes in PENCE (GBp): 93.30 means 93.30 p, not 93.30 pounds.
+    //     fees     optional, broker fee + stock-exchange tax, same unit as price
+    //     comment  optional, shown in the detail and on the chart marker
+    // For example:
+    //   [ { "symbol": "ASML.AS", "alias": "ASML", "actions": [
+    //         { "type": "buy",  "date": "2023-03-15", "shares": 8, "price": 568.00, "fees": 7.50, "comment": "first tranche" },
+    //         { "type": "sell", "date": "2025-06-02", "shares": 2, "price": 646.20, "fees": 7.50 } ] },
+    //     { "symbol": "IWDA.AS", "alias": "MSCI World", "isin": "IE00B4L5Y983", "actions": [
+    //         { "type": "buy", "date": "2021-06-07", "shares": 20, "price": 67.47, "fees": 2.00 } ] } ]
+    "holdings": []
+}

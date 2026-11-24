@@ -1,0 +1,30 @@
+# The tidy pass's test sentences (bench.py tidy): language, what the model wrote (fillers already gone), what a careful
+# typist would write. Written for this bench (2026-11-08): the false starts, repeats, stutters and corrections the user named,
+# shaped like their own takes (the take log), and clean sentences that must come through whole.
+en	I want to, I want to go home.	I want to go home.
+en	We should meet on Thursday, sorry, Friday.	We should meet on Friday.
+en	The the report is ready.	The report is ready.
+en	Let's go to the, let's meet at the station instead.	Let's meet at the station instead.
+en	Can you, can you send me the file?	Can you send me the file?
+en	It should correct that m more often.	It should correct that more often.
+en	I think that we, we need a bigger model.	I think that we need a bigger model.
+en	The meeting is at three, I mean four o'clock.	The meeting is at four o'clock.
+en	Please turn off the, the lights in the kitchen.	Please turn off the lights in the kitchen.
+en	He went to, he drove to Antwerp yesterday.	He drove to Antwerp yesterday.
+en	I I don't know what to do.	I don't know what to do.
+en	We need to buy milk, no wait, bread.	We need to buy bread.
+en	The function returns the the value and the error.	The function returns the value and the error.
+en	So the short package installs would not work.	So the short package installs would not work.
+en	The weather is nice today, so we will walk to the park.	The weather is nice today, so we will walk to the park.
+en	There is a grace period of something like two minutes.	There is a grace period of something like two minutes.
+en	The F ten key seems to be bound by firmware to mute the mic.	The F ten key seems to be bound by firmware to mute the mic.
+en	Models quality can vary, so perhaps we should let it run on the GPU.	Models quality can vary, so perhaps we should let it run on the GPU.
+nl	Ik wil, ik wil naar huis.	Ik wil naar huis.
+nl	We gaan morgen, nee, overmorgen naar Brussel.	We gaan overmorgen naar Brussel.
+nl	De de trein is te laat.	De trein is te laat.
+nl	Kan je, kan je me dat bestand sturen?	Kan je me dat bestand sturen?
+nl	Ik heb het, ik bedoel, we hebben het gisteren gedaan.	We hebben het gisteren gedaan.
+nl	Zet de, zet de verwarming wat hoger.	Zet de verwarming wat hoger.
+nl	Het weer is mooi vandaag.	Het weer is mooi vandaag.
+nl	Dat is een goed idee voor de volgende vergadering.	Dat is een goed idee voor de volgende vergadering.
+nl	Morgen ga ik met de fiets naar het werk.	Morgen ga ik met de fiets naar het werk.

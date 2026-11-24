@@ -1,0 +1,528 @@
+{
+ "note": "The veil bag's cases (modules/lockscreen/lock/VeilBag.js) and themectl's port of it (bag_draw / bag_parse) answer each the same: tools/dev/themectl_bag_parity.py B1. `in` is the call (draw: state, names, rnd -- the random numbers in the order they are asked for; parse: text), `want` the answer (draw: name, state, used = how many random numbers it took). The answers were VeilBag.js's when the table was written (2026-11-08).",
+ "cases": [
+  {
+   "id": "fresh-bag-three",
+   "why": "an empty bag: a new round is a Fisher-Yates shuffle, the first off the front",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [],
+     "remaining": [],
+     "last": ""
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png",
+     "/w/c.png"
+    ],
+    "rnd": [
+     0.9,
+     0.1,
+     0.5
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/c.png",
+      "/w/a.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "used": 3
+   }
+  },
+  {
+   "id": "mid-round",
+   "why": "a round in progress: the next of what remains, no random number used",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/c.png",
+      "/w/a.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png",
+     "/w/c.png"
+    ],
+    "rnd": [
+     0.3
+    ]
+   },
+   "want": {
+    "name": "/w/c.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/a.png"
+     ],
+     "last": "/w/c.png"
+    },
+    "used": 0
+   }
+  },
+  {
+   "id": "seam-avoids-last",
+   "why": "the round is done: the new shuffle starts with the last picture, which is swapped away from the front",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [],
+     "last": "/w/c.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png",
+     "/w/c.png"
+    ],
+    "rnd": [
+     0.99,
+     0.99,
+     0.2
+    ]
+   },
+   "want": {
+    "name": "/w/a.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "last": "/w/a.png"
+    },
+    "used": 2
+   }
+  },
+  {
+   "id": "seam-two-pictures",
+   "why": "two pictures: a new round never repeats the last",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png"
+    ],
+    "rnd": [
+     0.99,
+     0.0
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [
+      "/w/a.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "used": 2
+   }
+  },
+  {
+   "id": "taken-out-mid-round",
+   "why": "a picture taken out of the list leaves the round and what remains at once",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/c.png"
+    ],
+    "rnd": [
+     0.5
+    ]
+   },
+   "want": {
+    "name": "/w/c.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/c.png"
+     ],
+     "remaining": [],
+     "last": "/w/c.png"
+    },
+    "used": 0
+   }
+  },
+  {
+   "id": "put-in-mid-round",
+   "why": "a picture put into the list joins this round, at a random place among those to come",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png",
+     "/w/c.png",
+     "/w/d.png"
+    ],
+    "rnd": [
+     0.0,
+     0.5
+    ]
+   },
+   "want": {
+    "name": "/w/d.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png",
+      "/w/d.png"
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "last": "/w/d.png"
+    },
+    "used": 1
+   }
+  },
+  {
+   "id": "put-in-at-the-end",
+   "why": "the random place may be the end",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/c.png"
+     ],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png",
+     "/w/c.png",
+     "/w/d.png"
+    ],
+    "rnd": [
+     0.999
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png",
+      "/w/c.png",
+      "/w/d.png"
+     ],
+     "remaining": [
+      "/w/c.png",
+      "/w/d.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "used": 1
+   }
+  },
+  {
+   "id": "last-at-front-mid-round",
+   "why": "a reconciled round whose front is the last picture: swapped away from it",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png"
+    ],
+    "rnd": [
+     0.0
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [
+      "/w/a.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "used": 1
+   }
+  },
+  {
+   "id": "empty-list",
+   "why": "no picture at all: no name, the last kept",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png"
+     ],
+     "remaining": [],
+     "last": "/w/a.png"
+    },
+    "names": [],
+    "rnd": []
+   },
+   "want": {
+    "name": "",
+    "state": {
+     "round": [],
+     "remaining": [],
+     "last": "/w/a.png"
+    },
+    "used": 0
+   }
+  },
+  {
+   "id": "one-picture",
+   "why": "one picture: it every time, even after itself",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png"
+     ],
+     "remaining": [],
+     "last": "/w/a.png"
+    },
+    "names": [
+     "/w/a.png"
+    ],
+    "rnd": [
+     0.5,
+     0.5
+    ]
+   },
+   "want": {
+    "name": "/w/a.png",
+    "state": {
+     "round": [
+      "/w/a.png"
+     ],
+     "remaining": [],
+     "last": "/w/a.png"
+    },
+    "used": 0
+   }
+  },
+  {
+   "id": "junk-in-the-list",
+   "why": "repeats, empty and non-string names are dropped",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [],
+     "remaining": [],
+     "last": ""
+    },
+    "names": [
+     "/w/a.png",
+     "/w/a.png",
+     "",
+     7,
+     null,
+     "/w/b.png"
+    ],
+    "rnd": [
+     0.7,
+     0.2
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [
+      "/w/a.png"
+     ],
+     "last": "/w/b.png"
+    },
+    "used": 2
+   }
+  },
+  {
+   "id": "junk-in-the-state",
+   "why": "a state with repeats and foreign names reads as its clean self",
+   "in": {
+    "op": "draw",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/a.png",
+      "/w/b.png",
+      "x",
+      3
+     ],
+     "remaining": [
+      "/w/b.png",
+      "/w/b.png",
+      "x"
+     ],
+     "last": 5
+    },
+    "names": [
+     "/w/a.png",
+     "/w/b.png"
+    ],
+    "rnd": [
+     0.4,
+     0.4
+    ]
+   },
+   "want": {
+    "name": "/w/b.png",
+    "state": {
+     "round": [
+      "/w/a.png",
+      "/w/b.png"
+     ],
+     "remaining": [],
+     "last": "/w/b.png"
+    },
+    "used": 0
+   }
+  },
+  {
+   "id": "parse-good",
+   "why": "a kept state reads back",
+   "in": {
+    "op": "parse",
+    "text": "{\"round\": [\"/w/a.png\", \"/w/b.png\"], \"remaining\": [\"/w/b.png\"], \"last\": \"/w/a.png\"}"
+   },
+   "want": {
+    "round": [
+     "/w/a.png",
+     "/w/b.png"
+    ],
+    "remaining": [
+     "/w/b.png"
+    ],
+    "last": "/w/a.png"
+   }
+  },
+  {
+   "id": "parse-junk",
+   "why": "a half-written file is an empty bag",
+   "in": {
+    "op": "parse",
+    "text": "{\"round\": [\"/w/a.p"
+   },
+   "want": {
+    "round": [],
+    "remaining": [],
+    "last": ""
+   }
+  },
+  {
+   "id": "parse-not-an-object",
+   "why": "a list is an empty bag",
+   "in": {
+    "op": "parse",
+    "text": "[1, 2]"
+   },
+   "want": {
+    "round": [],
+    "remaining": [],
+    "last": ""
+   }
+  },
+  {
+   "id": "parse-wrong-types",
+   "why": "fields of the wrong type are empty",
+   "in": {
+    "op": "parse",
+    "text": "{\"round\": \"x\", \"remaining\": null, \"last\": [1]}"
+   },
+   "want": {
+    "round": [
+     "x"
+    ],
+    "remaining": [],
+    "last": ""
+   }
+  }
+ ]
+}

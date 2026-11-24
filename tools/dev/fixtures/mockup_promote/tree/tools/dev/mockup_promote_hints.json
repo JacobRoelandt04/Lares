@@ -1,0 +1,11 @@
+{
+  "protected": ["modules/battery"],
+  "dynamic": {},
+  "rows": {
+    "test_alpha.qml": {
+      "knobs.skipMe": { "skip": "stage placement" },
+      "knobs.sideIndex": { "to": "AlphaPopup.fontFamily", "map": ["Inter", "Audiowide", "Exo 2"] }
+    }
+  },
+  "dressing": {}
+}

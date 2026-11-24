@@ -1,0 +1,4 @@
+#!/bin/sh
+# Never the machine's: logs and does nothing.
+echo "systemctl $*" >> "${BRIDGE_STUB_LOG:-/dev/null}"
+exit 0

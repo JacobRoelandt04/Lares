@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# A stand-in for `systemctl --user`, for the lares probes -- NEVER the user's manager. lares only ASKS it
+# (`setup`: is a notification daemon's unit masked? do the portal units require a session?); a probe sets the answer the way the real command keeps it: a mask is the
+# link $XDG_CONFIG_HOME/systemd/user/<unit> -> /dev/null in the (fake) home, and `is-enabled` answers "masked" for it,
+# "disabled" (exit 1) otherwise. Every call is recorded in $LARES_FAKE/stub.log.
+LARES_FAKE=${LARES_FAKE:-}
+[ -n "$LARES_FAKE" ] && [ -d "$LARES_FAKE" ] || { echo "fake systemctl: refusing to run outside the lares probes" >&2; exit 2; }
+case $HOME in "${W:-/nonexistent}"/*) ;; *) echo "fake systemctl: HOME is not the probe's" >&2; exit 2 ;; esac
+echo "SYSTEMCTL $*" >> "$LARES_FAKE/stub.log"
+verb="" unit=""
+for a in "$@"; do
+    case $a in
+        --*) ;;
+        *) if [ -z "$verb" ]; then verb=$a; else unit=$a; fi ;;
+    esac
+done
+link=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit
+# `show -p <Property> --value <unit>`: the portal units' LoadState and Requisite, from the fake home's drop-ins
+# ($XDG_CONFIG_HOME/systemd/user/<unit>.d/*.conf, `Requisite=` lines); xdg-desktop-portal, -gtk and -hyprland are installed, the
+# termfilechooser one is not (a unit that is not installed is never asked for a drop-in).
+show_prop=""
+prev=""
+for a in "$@"; do [ "$prev" = -p ] && show_prop=$a; prev=$a; done
+if [ "$verb" = show ]; then
+    case $unit in
+        xdg-desktop-portal.service|xdg-desktop-portal-gtk.service|xdg-desktop-portal-hyprland.service) loaded=loaded ;;
+        *) loaded=not-found ;;
+    esac
+    case $show_prop in
+        LoadState) echo "$loaded" ;;
+        Requisite) cat "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit.d/"*.conf 2> /dev/null | sed -n 's/^Requisite=//p' | tr '\n' ' '; echo ;;
+    esac
+    exit 0
+fi
+case $verb in
+    mask) mkdir -p "${link%/*}" && ln -sfn /dev/null "$link" && echo "Created symlink '$link' -> '/dev/null'." ;;
+    unmask) [ "$(readlink "$link" 2> /dev/null)" = /dev/null ] && rm -f "$link" && echo "Removed '$link'." ;;
+    is-enabled) if [ "$(readlink "$link" 2> /dev/null)" = /dev/null ]; then echo masked; else echo disabled; fi; exit 1 ;;
+esac
+exit 0

@@ -1,0 +1,311 @@
+{
+ "version": "1.58.1",
+ "wirelessEnabled": true,
+ "timing": {
+  "step_ms": 120
+ },
+ "scanMs": 300,
+ "dnsmasq": true,
+ "ip": {
+  "address": "192.0.2.30",
+  "prefix": 24,
+  "gateway": "192.0.2.1",
+  "dns": [
+   "198.51.100.5",
+   "198.51.100.6"
+  ]
+ },
+ "devices": [
+  {
+   "iface": "wlp47s0",
+   "type": 2,
+   "driver": "iwlwifi",
+   "hw": "02:AE:00:00:00:06",
+   "perm": "02:AE:00:00:00:06",
+   "state": 100,
+   "active": "HomeNet-AP 1"
+  },
+  {
+   "iface": "enp46s0",
+   "type": 1,
+   "driver": "r8169",
+   "hw": "02:AE:00:00:00:07",
+   "perm": "02:AE:00:00:00:07",
+   "state": 20,
+   "carrier": false,
+   "speed": 0
+  },
+  {
+   "iface": "p2p-dev-wlp47s0",
+   "type": 30,
+   "state": 30
+  },
+  {
+   "iface": "lo",
+   "type": 32,
+   "state": 100
+  },
+  {
+   "iface": "docker0",
+   "type": 13,
+   "state": 100
+  }
+ ],
+ "aps": [
+  {
+   "ssid": "HomeNet-AP",
+   "bssid": "02:AE:00:00:01:01",
+   "freq": 5220,
+   "width": 40,
+   "strength": 62,
+   "maxBitrate": 1170000,
+   "security": "wpa2-wpa3",
+   "psk": "fake-home-psk-1"
+  },
+  {
+   "ssid": "HomeNet-AP",
+   "bssid": "02:AE:00:00:01:02",
+   "freq": 2437,
+   "width": 20,
+   "strength": 94,
+   "maxBitrate": 130000,
+   "security": "wpa2-wpa3",
+   "psk": "fake-home-psk-1"
+  },
+  {
+   "ssid": "DIRECT-99-Printer",
+   "bssid": "02:AE:00:00:01:03",
+   "freq": 2462,
+   "width": 20,
+   "strength": 55,
+   "maxBitrate": 65000,
+   "security": "wpa2",
+   "psk": "fake-printer-psk"
+  },
+  {
+   "ssid": "Neighbour-B",
+   "bssid": "02:AE:00:00:01:04",
+   "freq": 2462,
+   "width": 20,
+   "strength": 47,
+   "maxBitrate": 54000,
+   "security": "wpa2",
+   "psk": "fake-nb-psk"
+  },
+  {
+   "ssid": "Neighbour-A",
+   "bssid": "02:AE:00:00:01:05",
+   "freq": 5500,
+   "width": 80,
+   "strength": 34,
+   "maxBitrate": 1170000,
+   "security": "wpa2",
+   "psk": "fake-na-psk"
+  },
+  {
+   "ssid": "Hidden-Lab",
+   "bssid": "02:AE:00:00:01:06",
+   "freq": 5180,
+   "width": 40,
+   "strength": 40,
+   "maxBitrate": 866000,
+   "security": "wpa2",
+   "psk": "fake-hidden-psk",
+   "hidden": true
+  },
+  {
+   "ssid": "Campus-Open",
+   "bssid": "02:AE:00:00:01:07",
+   "freq": 2412,
+   "width": 20,
+   "strength": 70,
+   "maxBitrate": 130000,
+   "security": "open"
+  },
+  {
+   "ssid": "Cafe-WiFi",
+   "bssid": "02:AE:00:00:01:08",
+   "freq": 2437,
+   "width": 20,
+   "strength": 66,
+   "maxBitrate": 130000,
+   "security": "wpa2",
+   "psk": "fake-cafe-psk"
+  },
+  {
+   "ssid": "eduroam",
+   "bssid": "02:AE:00:00:01:09",
+   "freq": 5240,
+   "width": 80,
+   "strength": 58,
+   "maxBitrate": 866000,
+   "security": "eap",
+   "eapPassword": "fake-eap-pass"
+  },
+  {
+   "ssid": "SAE-Only",
+   "bssid": "02:AE:00:00:01:0A",
+   "freq": 5955,
+   "width": 80,
+   "strength": 45,
+   "maxBitrate": 1200000,
+   "security": "sae",
+   "psk": "fake-sae-psk"
+  },
+  {
+   "ssid": "Late-Arrival",
+   "bssid": "02:AE:00:00:01:0B",
+   "freq": 5745,
+   "width": 40,
+   "strength": 52,
+   "maxBitrate": 866000,
+   "security": "wpa2",
+   "psk": "fake-late-psk",
+   "appearsOnScan": true
+  }
+ ],
+ "profiles": [
+  {
+   "id": "HomeNet-AP 1",
+   "ssid": "HomeNet-AP",
+   "security": "wpa2-wpa3",
+   "timestamp": 1795106046,
+   "psk": "fake-home-psk-1",
+   "uuid": "a0ba3e32-ac3f-5cc1-81f5-29baedd38200"
+  },
+  {
+   "id": "HomeNet-AP",
+   "ssid": "HomeNet-AP",
+   "security": "wpa2-wpa3",
+   "timestamp": 1772362385,
+   "psk": "fake-home-psk-1"
+  },
+  {
+   "id": "HomeNet",
+   "ssid": "HomeNet",
+   "security": "wpa2",
+   "timestamp": 1787859430,
+   "psk": "fake-psk-03",
+   "autoconnect": false
+  },
+  {
+   "id": "HomeNet_5Ghz",
+   "ssid": "HomeNet_5Ghz",
+   "security": "wpa2",
+   "timestamp": 1794771305,
+   "psk": "fake-psk-04",
+   "autoconnect": false
+  },
+  {
+   "id": "Cafe-WiFi",
+   "ssid": "Cafe-WiFi",
+   "security": "wpa2",
+   "timestamp": 1762254565,
+   "psk": "fake-cafe-psk"
+  },
+  {
+   "id": "Office-Guest",
+   "ssid": "Office-Guest",
+   "security": "wpa2",
+   "timestamp": 1758100841,
+   "psk": "fake-psk-06"
+  },
+  {
+   "id": "Saved-A",
+   "ssid": "Saved-A",
+   "security": "wpa2",
+   "timestamp": 1761899665,
+   "psk": "fake-psk-07"
+  },
+  {
+   "id": "Saved-A 1",
+   "ssid": "Saved-A",
+   "security": "wpa2",
+   "timestamp": 1774547873,
+   "psk": "fake-psk-07"
+  },
+  {
+   "id": "Saved-B",
+   "ssid": "Saved-B",
+   "security": "wpa2",
+   "timestamp": 1767883311,
+   "psk": "fake-psk-08"
+  },
+  {
+   "id": "Saved-B 1",
+   "ssid": "Saved-B",
+   "security": "wpa2",
+   "timestamp": 1794066081,
+   "psk": "fake-psk-08"
+  },
+  {
+   "id": "Saved-C",
+   "ssid": "Saved-C",
+   "security": "wpa2",
+   "timestamp": 1771781094,
+   "psk": "fake-psk-09"
+  },
+  {
+   "id": "Phone-Hotspot",
+   "ssid": "Phone-Hotspot",
+   "security": "wpa2",
+   "timestamp": 1765619343,
+   "psk": "fake-psk-10"
+  },
+  {
+   "id": "Phone-Hotspot 1",
+   "ssid": "Phone-Hotspot",
+   "security": "wpa2",
+   "timestamp": 1795017545,
+   "psk": "fake-psk-10"
+  },
+  {
+   "id": "Campus-Open",
+   "ssid": "Campus-Open",
+   "security": "open",
+   "timestamp": 1762189046
+  },
+  {
+   "id": "Studio",
+   "ssid": "Studio",
+   "security": "wpa2",
+   "timestamp": 1760721730,
+   "psk": "fake-psk-12"
+  },
+  {
+   "id": "Spare-Router",
+   "ssid": "Spare-Router",
+   "security": "wpa2",
+   "timestamp": 0,
+   "psk": "fake-psk-13",
+   "autoconnect": false
+  },
+  {
+   "id": "eduroam",
+   "ssid": "eduroam",
+   "security": "eap",
+   "timestamp": 1795020071,
+   "psk": "fake-eap-pass",
+   "eap": "peap",
+   "phase2": "mschapv2",
+   "identity": "student@university.example",
+   "anonymousIdentity": "anonymous@university.example",
+   "password": "fake-eap-pass"
+  },
+  {
+   "id": "Hotspot",
+   "ssid": "laptop-hotspot",
+   "security": "wpa2",
+   "timestamp": 1772355563,
+   "psk": "fake-hotspot-psk",
+   "mode": "ap",
+   "autoconnect": false
+  },
+  {
+   "id": "Wired connection 1",
+   "type": "802-3-ethernet",
+   "priority": -999,
+   "timestamp": 0
+  }
+ ]
+}

@@ -1,0 +1,98 @@
+#!/usr/bin/python3
+"""A stand-in for hyprctl, for the lares probes (tools/dev/lares_tool_probe.sh, lares_deploy_probe.sh) -- NEVER the
+compositor. What lares asks of Hyprland, answered the way Hyprland answers it:
+    -j monitors                         one fake monitor (JSON)
+    dispatch 'hl.dsp.exec_cmd("CMD")'   CMD started as a DETACHED child (what the compositor does for an exec_cmd); only the
+                                        stubs of this world and the tool under test are started: anything else is refused
+    notify ICON MS COLOUR TEXT          recorded, "ok" (Hyprland's own notification: the supervisor's crash-loop notice)
+Every call is recorded in $LARES_FAKE/stub.log ("HYPRCTL <args>"). As measured on Hyprland 0.56.2 / 0.57.1: success is "ok"
+with exit 0, a failure "error: <message>" with EXIT 7.
+
+Fault injection, by files in $LARES_FAKE/ctl/:
+    hypr_fail        one rule per line, "err:<regex>": a call whose text matches answers like Hyprland does ("error: ..." and exit 7)
+    hypr_down        every call fails like a compositor that is gone
+    hypr_dead_sigs   Hyprland instance signatures (blank separated) that are gone: a call made with one of them in
+                     HYPRLAND_INSTANCE_SIGNATURE fails like a compositor that is gone (a record of an earlier session)
+Refuses to run when LARES_FAKE is not a directory, so it cannot be mistaken for the real thing.
+"""
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+
+W = os.environ.get("LARES_FAKE", "")
+if not W or not os.path.isdir(W):
+    sys.exit("fake hyprctl: refusing to run outside the lares probes (LARES_FAKE is not a directory)")
+CTL = os.path.join(W, "ctl")
+LOG = os.path.join(W, "stub.log")
+FIX = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # tools/dev/fixtures/lares
+TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(FIX)))), "tools", "shell")   # the tool under test
+STR = r'"((?:[^"\\]|\\.)*)"'
+
+
+def log(msg):
+    with open(LOG, "a") as f:
+        f.write(msg + "\n")
+
+
+def allowed_spawn(cmd):
+    """Only the world's own stubs and the tool under test are started: a command that names nothing of them is refused
+    (the real waybar, say, if a path were ever resolved to it)."""
+    if os.path.dirname(W) in cmd or FIX in cmd or TOOLS in cmd:   # the world's dir (an armed copy of the tool lives there too)
+        return True
+    try:
+        words = shlex.split(cmd)
+    except ValueError:
+        return False
+    found = shutil.which(words[0]) if words else None
+    return bool(found) and os.path.realpath(found).startswith(FIX)
+
+
+def failing(text):
+    path = os.path.join(CTL, "hypr_fail")
+    if not os.path.exists(path):
+        return False
+    return any(rule.startswith("err:") and re.search(rule[4:].strip(), text) for rule in open(path))
+
+
+def main(argv):
+    log("HYPRCTL " + " ".join(argv))
+    if os.path.exists(os.path.join(CTL, "hypr_down")):
+        print("Couldn't connect to the Hyprland socket (the fake compositor is down)", file=sys.stderr)
+        return 1
+    dead = os.path.join(CTL, "hypr_dead_sigs")
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    if sig and os.path.exists(dead) and sig in open(dead).read().split():
+        print("Couldn't connect to the Hyprland socket of instance %s (gone)" % sig, file=sys.stderr)
+        return 1
+    args = [a for a in argv if a != "-j"]
+    if not args:
+        print("ok")
+        return 0
+    if args[0] == "monitors" and "-j" in argv:
+        print(json.dumps([{"id": 0, "name": "FAKE-1", "focused": True, "width": 2880, "height": 1620}]))
+        return 0
+    if failing(" ".join(args)):
+        print("error: injected failure")
+        return 7
+    if args[0] == "dispatch":
+        m = re.match(r"^\s*hl\.dsp\.exec_cmd\(\s*" + STR + r"\s*\)\s*$", args[1] if len(args) > 1 else "")
+        if not m:
+            print("error: the fake hyprctl knows only hl.dsp.exec_cmd")
+            return 7
+        cmd = re.sub(r"\\(.)", r"\1", m.group(1))
+        if not allowed_spawn(cmd):
+            log("SPAWN-REFUSED " + cmd)
+            print("error: the fake hyprctl only starts the stubs of its own world")
+            return 7
+        log("SPAWN " + cmd)
+        subprocess.Popen(["setsid", "-f", "sh", "-c", cmd], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, close_fds=True).wait()
+    print("ok")
+    return 0
+
+
+sys.exit(main(sys.argv[1:]))

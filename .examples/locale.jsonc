@@ -1,0 +1,14 @@
+// locale.jsonc -- how the lock writes times and dates (modules/common/locale). The template of ~/.config/quickshell/config/locale.jsonc.
+// (The shell builds the reader too, but today only the lock follows it: the bar, timers, calendar and the rest write 24 h.)
+// The file sits in the shell's config/ folder: the shell and the lock read <repo>/config/locale.jsonc (~/.config/quickshell/config), and
+// when that file is absent, or a key is missing from it, THIS example is what they fall back to.
+// Every key is optional: the value written here IS the default (a missing key, an empty string or a non-string takes it).
+// Keep only what you change; comments are allowed. An edit is picked up without a restart.
+{
+  // The time, as a Qt format string (Qt.formatDateTime): HH / H hour 0-23, hh / h hour 1-12 (add AP for AM / PM),
+  // mm minutes, ss seconds. Default "HH:mm".
+  "timeFormat": "HH:mm",
+  // The date, as a Qt format string: d / dd day, ddd / dddd weekday (short / full), M / MM / MMM / MMMM month
+  // (number / short / full name), yy / yyyy year. Default "dddd d MMMM".
+  "dateFormat": "dddd d MMMM"
+}

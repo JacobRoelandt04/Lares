@@ -1,0 +1,24 @@
+GENERAL.DEVICE:wlp47s0
+GENERAL.TYPE:wifi
+GENERAL.HWADDR:02:AE:00:00:00:06
+GENERAL.MTU:1500
+GENERAL.STATE:100 (connected)
+GENERAL.CONNECTION:HomeNet-AP 1
+GENERAL.CON-PATH:/org/freedesktop/NetworkManager/ActiveConnection/2
+IP4.ADDRESS[1]:192.0.2.2/24
+IP4.GATEWAY:198.51.100.2
+IP4.ROUTE[1]:dst = 203.0.113.2/24, nh = 0.0.0.0, mt = 600
+IP4.ROUTE[2]:dst = 0.0.0.0/0, nh = 198.51.100.2, mt = 600
+IP4.DNS[1]:192.0.2.3
+IP4.DNS[2]:198.51.100.3
+IP4.DOMAIN[1]:home
+IP6.ADDRESS[1]:2001:db8::c/64
+IP6.ADDRESS[2]:fe80::d/64
+IP6.GATEWAY:fe80::e
+IP6.ROUTE[1]:dst = fe80::3/64, nh = 2001:db8::4, mt = 1024
+IP6.ROUTE[2]:dst = 2001:db8::5/64, nh = 2001:db8::4, mt = 600
+IP6.ROUTE[3]:dst = 2001:db8::5/64, nh = fe80::6, mt = 605
+IP6.ROUTE[4]:dst = 2001:db8::4/0, nh = fe80::6, mt = 600
+IP6.DNS[1]:2001:db8::f
+IP6.DNS[2]:2001:db8::10
+IP6.SEARCHES[1]:isp.example

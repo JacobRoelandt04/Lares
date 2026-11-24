@@ -1,0 +1,319 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "bridge.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "files": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "usbMount": {
+     "type": "string",
+     "default": "/mnt/android",
+     "x-wants": "a path",
+     "description": "Where the phone is mounted over the cable (aft-mtp-mount). The folder must exist and be yours:\n  sudo mkdir -p /mnt/android && sudo chown $USER /mnt/android\n\nTakes a path. Default: \"/mnt/android\"."
+    },
+    "open": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "default": [
+      "kitty",
+      "-o",
+      "background_opacity=0.75",
+      "--title",
+      "yazi",
+      "yazi",
+      "{path}"
+     ],
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "What opens a mounted phone. `{path}` is the mount point; with no `{path}` in the list it is added at the end.\n\nTakes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]. Default: [\"kitty\",\"-o\",\"background_opacity=0.75\",\"--title\",\"yazi\",\"yazi\",\"{path}\"]."
+    },
+    "sendDir": {
+     "type": "string",
+     "default": "/sdcard/Download",
+     "x-wants": "a path",
+     "description": "Where on the phone \"Send\" puts what you pick (adb push).\n\nTakes a path. Default: \"/sdcard/Download\"."
+    },
+    "pickDir": {
+     "type": "string",
+     "default": "~",
+     "x-wants": "a path",
+     "description": "The folder \"Send\" starts its file chooser in.\n\nTakes a path. Default: \"~\"."
+    }
+   }
+  },
+  "mirror": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "usb": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "maxSize": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 16384,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 16384",
+       "description": "Takes a whole number 0 .. 16384. Default: 0."
+      },
+      "bitRate": {
+       "type": "string",
+       "default": "",
+       "x-wants": "a text",
+       "description": "Takes a text. Default: \"\"."
+      },
+      "maxFps": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 480,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 480",
+       "description": "Takes a whole number 0 .. 480. Default: 0."
+      }
+     },
+     "description": "scrcpy over the cable: the phone's own resolution, scrcpy's own bit rate and frame rate. 0 / \"\" leave scrcpy's default."
+    },
+    "wifi": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "maxSize": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 16384,
+       "default": 1600,
+       "x-wants": "a whole number 0 .. 16384",
+       "description": "Takes a whole number 0 .. 16384. Default: 1600."
+      },
+      "bitRate": {
+       "type": "string",
+       "default": "6M",
+       "x-wants": "a text",
+       "description": "Takes a text. Default: \"6M\"."
+      },
+      "maxFps": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 480,
+       "default": 60,
+       "x-wants": "a whole number 0 .. 480",
+       "description": "Takes a whole number 0 .. 480. Default: 60."
+      }
+     },
+     "description": "scrcpy over Wi-Fi: lighter, so it stays smooth. maxSize is the longest side in pixels, bitRate e.g. \"6M\"."
+    },
+    "recordDir": {
+     "type": "string",
+     "default": "~/Videos",
+     "x-wants": "a path",
+     "description": "Where a recording goes (the Record switch): phone-<date>-<time>.mp4 here.\n\nTakes a path. Default: \"~/Videos\"."
+    },
+    "extraArgs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Any further scrcpy arguments, added last, e.g. [\"--window-borderless\"].\n\nTakes a list of texts. Default: []."
+    }
+   }
+  },
+  "adb": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "start": {
+     "enum": [
+      "onDemand",
+      "onPlug"
+     ],
+     "default": "onDemand",
+     "x-wants": "\"onDemand\" or \"onPlug\"",
+     "description": "When the adb server is started. \"onDemand\": when you ask for something that needs it. \"onPlug\": also when a phone with USB\ndebugging comes onto the cable. The tool stops a server it started itself after `idleKillS` seconds of no need.\n\nTakes \"onDemand\" or \"onPlug\". Default: \"onDemand\"."
+    },
+    "idleKillS": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 86400,
+     "default": 300,
+     "x-wants": "a whole number 5 .. 86400",
+     "description": "Takes a whole number 5 .. 86400. Default: 300."
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1024,
+     "maximum": 65535,
+     "default": 5555,
+     "x-wants": "a whole number 1024 .. 65535",
+     "description": "The port `arm` opens on the phone (adb tcpip). Wi-Fi mirroring tries each address KDE Connect reports with this port, so a\nchanged IP needs no setup: nothing here is an address, and no address is ever written down.\n\nTakes a whole number 1024 .. 65535. Default: 5555."
+    }
+   }
+  },
+  "shots": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "dir": {
+     "type": "string",
+     "default": "~/Pictures/Screenshots",
+     "x-wants": "a path",
+     "description": "Where \"Screenshot\" saves phone-<date>-<time>.png.\n\nTakes a path. Default: \"~/Pictures/Screenshots\"."
+    }
+   }
+  },
+  "flip": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "onOpen": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The phone turns once, front to front, every time the popup opens.\n\nTakes true or false. Default: true."
+    }
+   }
+  },
+  "cast": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "closeAfterS": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 86400,
+     "default": 120,
+     "x-wants": "a whole number 5 .. 86400",
+     "description": "The popup's cast (Mirror on the phone's own screen) keeps running this long after the popup closes, so a quick look\naway costs nothing; then it stops. Seconds.\n\nTakes a whole number 5 .. 86400. Default: 120."
+    },
+    "reloadOnResize": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "A resized Mirror restarts its stream at the new size, so the picture is sharp at every size; the last frame is held,\nblurred, while it does (a second or two). false: the stream keeps the size it started at and is scaled. A Desktop never\nrestarts for a size (its apps would go).\n\nTakes true or false. Default: true."
+    },
+    "desktopScale": {
+     "type": "number",
+     "minimum": 0.5,
+     "maximum": 3,
+     "default": 1,
+     "x-wants": "a number 0.5 .. 3",
+     "description": "The Desktop mode's virtual screen is laid out like a laptop's: `desktopScale` is how many pixels of THIS screen one Android dp\ngets (1.0: a dp is about a pixel of the picture; 2.0 makes everything on the phone's desktop half as big). 0.5 to 3.\n\nTakes a number 0.5 .. 3. Default: 1."
+    },
+    "desktopMinDp": {
+     "type": "integer",
+     "minimum": 240,
+     "maximum": 1200,
+     "default": 320,
+     "x-wants": "a whole number 240 .. 1200",
+     "description": "...but the virtual screen's short side is never fewer than this many dp (apps switch to their phone layouts below ~600 dp\nwide; 320 is a phone). 240 to 1200.\n\nTakes a whole number 240 .. 1200. Default: 320."
+    },
+    "desktopMinPx": {
+     "type": "integer",
+     "minimum": 320,
+     "maximum": 2400,
+     "default": 640,
+     "x-wants": "a whole number 320 .. 2400",
+     "description": "...and never fewer than this many PIXELS: the phone's own second launcher lays its icons out in pixels, ignores the screen's\ndensity, and its icons overlap below ~600 px of short side. 320 to 2400.\n\nTakes a whole number 320 .. 2400. Default: 640."
+    },
+    "unlock": {
+     "enum": [
+      "start+touch",
+      "start",
+      "touch",
+      "never"
+     ],
+     "default": "start+touch",
+     "x-wants": "\"start+touch\", \"start\", \"touch\" or \"never\"",
+     "description": "When the kept PIN unlocks a locked phone: \"start+touch\" (as you start a cast, and as you touch the picture of a locked phone) | \"start\" |\n\"touch\" | \"never\".\n\nTakes \"start+touch\", \"start\", \"touch\" or \"never\". Default: \"start+touch\"."
+    },
+    "keys": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "back": {
+       "type": "string",
+       "default": "Left",
+       "x-wants": "a text",
+       "description": "Takes a text. Default: \"Left\"."
+      },
+      "home": {
+       "type": "string",
+       "default": "Down",
+       "x-wants": "a text",
+       "description": "Takes a text. Default: \"Down\"."
+      },
+      "recents": {
+       "type": "string",
+       "default": "Right",
+       "x-wants": "a text",
+       "description": "Takes a text. Default: \"Right\"."
+      }
+     },
+     "description": "The keys that are the phone's Back, Home and Recents while the picture has the keyboard (Qt's key names: \"Left\", \"F1\", \"PageUp\" ...). \"\" =\nnone: that key goes to the phone as it is."
+    },
+    "sleepAtEnd": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The phone's screen goes off when a cast ends (only if the cast lit it).\n\nTakes true or false. Default: true."
+    },
+    "holdMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 240,
+     "default": 30,
+     "x-wants": "a number 1 .. 240",
+     "description": "How long a cast may keep the phone awake on the charger without being renewed, minutes. 1 to 240.\n\nTakes a number 1 .. 240. Default: 30."
+    }
+   }
+  },
+  "relight": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "The body's highlights follow the light of the room (the shell's relight of the phone's frame).\n\nTakes true or false. Default: true."
+  },
+  "lookKey": {
+   "enum": [
+    "alt",
+    "ctrl",
+    "shift",
+    "off"
+   ],
+   "default": "alt",
+   "x-wants": "\"alt\", \"ctrl\", \"shift\" or \"off\"",
+   "description": "The key that is held for the free look (the phone turns with the pointer): \"alt\" | \"ctrl\" | \"shift\" | \"off\".\n\nTakes \"alt\", \"ctrl\", \"shift\" or \"off\". Default: \"alt\"."
+  },
+  "devices": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "skin": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "hidden": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     }
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "Per device, by its name or its key (kdc:<id> / adb:<serial>): a skin to draw (\"redmagic-10s-pro-moonlight\" or \"generic\"; the\nname decides when this says nothing), and `hidden` to keep a device out of the list.\n  \"devices\": { \"REDMAGIC 10S Pro\": { \"skin\": \"redmagic-10s-pro-moonlight\" }, \"kdc:abc123\": { \"hidden\": true } }\n\nDefault: {}."
+  }
+ }
+}

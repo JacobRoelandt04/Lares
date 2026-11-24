@@ -1,0 +1,198 @@
+{
+ "0P00019W7U.F": {
+  "bakedAt": 1790243427619,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "0P0001RMOC.F": {
+  "bakedAt": 1790243428363,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "0P0001SDZY.F": {
+  "bakedAt": 1790243426856,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "AAPL": {
+  "bakedAt": 1790241521138,
+  "brand": "#000000",
+  "mono": true,
+  "src": "parqet-svg",
+  "wide": false
+ },
+ "ABI.BR": {
+  "bakedAt": 1790243416798,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASMG": {
+  "bakedAt": 1790243421670,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASMH": {
+  "bakedAt": 1790243423207,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASML": {
+  "bakedAt": 1790243420943,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASML.AS": {
+  "bakedAt": 1790241520058,
+  "brand": "#0F238C",
+  "mono": true,
+  "src": "parqet-svg",
+  "wide": true
+ },
+ "ASML.TO": {
+  "bakedAt": 1790243423953,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASMLF": {
+  "bakedAt": 1790243424720,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "ASMU": {
+  "bakedAt": 1790243422453,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "CFQ0.MU": {
+  "bakedAt": 1790243429090,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "EURUSD_X": {
+  "bakedAt": 1790243420214,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "IWDA.AS": {
+  "bakedAt": 1790241523126,
+  "brand": "#00A9E0",
+  "mono": true,
+  "src": "parqet-isin",
+  "wide": true
+ },
+ "KBC.BR": {
+  "bakedAt": 1790241522131,
+  "brand": "#FFFFFF",
+  "mono": true,
+  "src": "parqet-png",
+  "wide": false
+ },
+ "KBCA.BR": {
+  "bakedAt": 1790243425415,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "KBCSY": {
+  "bakedAt": 1790243426117,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "MSFT": {
+  "bakedAt": 1790243416096,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "NOPE_XYZ123": {
+  "bakedAt": 1790241524854,
+  "brand": "",
+  "mono": true,
+  "src": "none",
+  "wide": false
+ },
+ "NVDA": {
+  "bakedAt": 1790243413920,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "UCB.BR": {
+  "bakedAt": 1790243415391,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "VOD.L": {
+  "bakedAt": 1790243414646,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "_AEX": {
+  "bakedAt": 1790243418146,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "_BFX": {
+  "bakedAt": 1790243417484,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "_GSPC": {
+  "bakedAt": 1790241524187,
+  "brand": "#808080",
+  "mono": true,
+  "src": "parqet-svg",
+  "wide": true
+ },
+ "_IXIC": {
+  "bakedAt": 1790243419556,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ },
+ "_STOXX50E": {
+  "bakedAt": 1790243418853,
+  "brand": "",
+  "mono": true,
+  "src": "mono",
+  "wide": false
+ }
+}

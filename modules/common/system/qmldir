@@ -1,0 +1,15 @@
+singleton Sleep 1.0 Sleep.qml
+FullscreenWatch 1.0 FullscreenWatch.qml
+LockKeys 1.0 LockKeys.qml
+FocusedScreen 1.0 FocusedScreen.qml
+OllamaGpu 1.0 OllamaGpu.qml
+singleton MathRender 1.0 MathRender.qml
+singleton RepoRoot 1.0 RepoRoot.qml
+BatteryData 1.0 BatteryData.qml
+ScreenShareWatch 1.0 ScreenShareWatch.qml
+DownloadWatch 1.0 DownloadWatch.qml
+PackageJobWatch 1.0 PackageJobWatch.qml
+singleton PanelBacklight 1.0 PanelBacklight.qml
+DrmWatch 1.0 DrmWatch.qml
+ProcLane 1.0 ProcLane.qml
+singleton InkWhole 1.0 InkWhole.qml

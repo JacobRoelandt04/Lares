@@ -1,0 +1,228 @@
+{
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "/config/aerial.jsonc",
+                "/.examples/aerial.jsonc"
+            ],
+            "url": "./.examples/schema/aerial.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/airplay.jsonc",
+                "/.examples/airplay.jsonc"
+            ],
+            "url": "./.examples/schema/airplay.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/audio.jsonc",
+                "/.examples/audio.jsonc"
+            ],
+            "url": "./.examples/schema/audio.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/breaks.jsonc",
+                "/.examples/breaks.jsonc"
+            ],
+            "url": "./.examples/schema/breaks.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/bridge.jsonc",
+                "/.examples/bridge.jsonc"
+            ],
+            "url": "./.examples/schema/bridge.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/calendars.jsonc",
+                "/.examples/calendars.jsonc"
+            ],
+            "url": "./.examples/schema/calendars.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/clipboard.jsonc",
+                "/.examples/clipboard.jsonc"
+            ],
+            "url": "./.examples/schema/clipboard.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/clock.jsonc",
+                "/.examples/clock.jsonc"
+            ],
+            "url": "./.examples/schema/clock.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/idle.jsonc",
+                "/.examples/idle.jsonc"
+            ],
+            "url": "./.examples/schema/idle.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/launcher.jsonc",
+                "/.examples/launcher.jsonc"
+            ],
+            "url": "./.examples/schema/launcher.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/llm.jsonc",
+                "/.examples/llm.jsonc"
+            ],
+            "url": "./.examples/schema/llm.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/locale.jsonc",
+                "/.examples/locale.jsonc"
+            ],
+            "url": "./.examples/schema/locale.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/lockscreen.jsonc",
+                "/.examples/lockscreen.jsonc"
+            ],
+            "url": "./.examples/schema/lockscreen.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/notes.jsonc",
+                "/.examples/notes.jsonc"
+            ],
+            "url": "./.examples/schema/notes.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/notifications.jsonc",
+                "/.examples/notifications.jsonc"
+            ],
+            "url": "./.examples/schema/notifications.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/osd.jsonc",
+                "/.examples/osd.jsonc"
+            ],
+            "url": "./.examples/schema/osd.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/panorama.jsonc",
+                "/.examples/panorama.jsonc"
+            ],
+            "url": "./.examples/schema/panorama.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/picker.jsonc",
+                "/.examples/picker.jsonc"
+            ],
+            "url": "./.examples/schema/picker.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/player.jsonc",
+                "/.examples/player.jsonc"
+            ],
+            "url": "./.examples/schema/player.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/power.jsonc",
+                "/.examples/power.jsonc"
+            ],
+            "url": "./.examples/schema/power.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/privacy.jsonc",
+                "/.examples/privacy.jsonc"
+            ],
+            "url": "./.examples/schema/privacy.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/screentime.jsonc",
+                "/.examples/screentime.jsonc"
+            ],
+            "url": "./.examples/schema/screentime.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/session.jsonc",
+                "/.examples/session.jsonc"
+            ],
+            "url": "./.examples/schema/session.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/shell.jsonc",
+                "/.examples/shell.jsonc"
+            ],
+            "url": "./.examples/schema/shell.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/silicon.jsonc",
+                "/.examples/silicon.jsonc"
+            ],
+            "url": "./.examples/schema/silicon.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/snapshots.jsonc",
+                "/.examples/snapshots.jsonc"
+            ],
+            "url": "./.examples/schema/snapshots.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/stocks.jsonc",
+                "/.examples/stocks.jsonc"
+            ],
+            "url": "./.examples/schema/stocks.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/system_update.jsonc",
+                "/.examples/system_update.jsonc"
+            ],
+            "url": "./.examples/schema/system_update.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/weather.jsonc",
+                "/.examples/weather.jsonc"
+            ],
+            "url": "./.examples/schema/weather.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/wiki.jsonc",
+                "/.examples/wiki.jsonc"
+            ],
+            "url": "./.examples/schema/wiki.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/windowtray.jsonc",
+                "/.examples/windowtray.jsonc"
+            ],
+            "url": "./.examples/schema/windowtray.schema.json"
+        },
+        {
+            "fileMatch": [
+                "/config/workspaces.jsonc",
+                "/.examples/workspaces.jsonc"
+            ],
+            "url": "./.examples/schema/workspaces.schema.json"
+        }
+    ]
+}

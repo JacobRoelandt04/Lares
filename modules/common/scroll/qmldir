@@ -1,0 +1,5 @@
+singleton ScrollFeel 1.0 ScrollFeel.qml
+KineticScroll 1.0 KineticScroll.qml
+singleton WheelHub 1.0 WheelHub.qml
+WheelArea 1.0 WheelArea.qml
+SideSwipe 1.0 SideSwipe.qml

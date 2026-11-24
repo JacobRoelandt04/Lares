@@ -1,0 +1,5 @@
+captured: 2026-10-02T21:40:05+02:00
+kernel:   6.18.54-1-lts
+board:    N6506MV / bios N6506MV.313
+files:    502 copied, 9 unreadable (created empty, mode kept in modes.txt)
+links:    29

@@ -1,0 +1,10 @@
+[FluxCast WFD] Starting NetworkManager Wi-Fi Direct scan on wlan0 for 8s...
+[FluxCast WFD] Wi-Fi Direct peer(s):
+  [0] 02:AE:00:00:0A:01  [TV] Living Room OLED 65 via nm
+      WFD capability data detected
+  [1] 6E:11:22:33:44:55  Pixel 9
+      not advertising Wi-Fi Display; if this is a TV, put it into Screen Share mode first
+      already running its own group; FluxCast can start a new group but cannot join an existing group
+  [2] AA:BB:CC:00:11:22 via wpa
+      WFD capability data detected
+      pairs by PIN only; FluxCast connects by push button

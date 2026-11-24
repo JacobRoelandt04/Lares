@@ -1,0 +1,6 @@
+Invalid display
+   I2C bus:          /dev/i2c-12
+   DRM connector:    card1-eDP-1
+   drm_connector_id: 512
+   Monitor:          SDC::
+

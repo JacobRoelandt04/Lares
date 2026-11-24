@@ -1,0 +1,15 @@
+{
+  "security.workspace.trust.untrustedFiles": "open",
+  "editor.fontFamily": "Consolas, 'Courier New', monospace",
+  "editor.fontSize": 14,
+  // "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnPaste": true,
+  "files.exclude": {
+    "**/*.code-workspace": true,
+    "**/hideme": true,
+  },
+  "window.autoDetectColorScheme": false,
+  // "workbench.colorTheme": "Gruvbox Dark Medium",
+  "workbench.colorTheme": "Eva Light Bold",
+  "workbench.iconTheme": "material-icon-theme", /* a trailing comma follows the last member */
+}

@@ -1,0 +1,54 @@
+// player.jsonc -- the music player (modules/bar/player, mpd). The template of ~/.config/quickshell/config/player.jsonc. Every key is optional
+// and every value below IS the default. Read hot (the popup's keys: at its next open) unless a key says otherwise. Comments are allowed.
+{
+    // How the popup opens.
+    "open": {
+        // "player" (the record on its platter) | "mini".
+        "view": "player",
+        // The sidebar out, and which of its panels: "queue" | "library" | "data".
+        "sidebar": false,
+        "panel": "queue",
+        // true: the first open of a session is the three above, and after that the popup comes back as you left it. false: every open is
+        // the three above.
+        "remember": true
+    },
+
+    // The library as the popup opens it.
+    "library": {
+        // "albums" | "artists" | "genres" | "playlists" | "recent".
+        "grouping": "albums",
+        // How each grouping is sorted: albums by "artist" | "title" | "year" | "length" | "songs"; artists and genres by "name" | "albums" |
+        // "songs" | "length"; playlists by "order" | "name" | "songs".
+        "sort": { "albums": "artist", "artists": "name", "genres": "name", "playlists": "order" },
+        // false: every sort from its far end (the newest year first).
+        "ascending": true,
+        // Artists who have loose songs only are listed too.
+        "looseArtists": false
+    },
+
+    // Something put in an empty queue starts to play by itself.
+    "autoplay": true,
+    // A play waits until the record has come down on the platter.
+    "holdForRecord": true,
+    // "Previous" this many seconds into a song goes back to its start instead of to the song before. 0: always the song before. 0 .. 60.
+    "prevRestartSec": 3,
+    // The viewfinder's sparks follow the music (one process and about 25 MB while the popup is open and a song plays).
+    "musicSparks": true,
+    // Shuffle: the least songs between two of one artist, and between two of one album. 0 .. 20.
+    "shuffle": { "artistGap": 3, "albumGap": 2 },
+
+    // Where the music is. Read as the shell starts.
+    "paths": {
+        // mpd's music directory.
+        "music": "~/Music",
+        // Its folders: albums (artist / album), loose songs, playlists, and the playlist that is the favourites.
+        "albums": "Albums",
+        "tracks": "Tracks",
+        "playlists": "Playlists",
+        "favorites": "Favorites",
+        // The cover's file names, the first that is there.
+        "covers": ["cover.jpg", "cover.png", "cover.webp"],
+        // mpd's socket (a local one: no host and port). "": $XDG_RUNTIME_DIR/mpd/socket.
+        "socket": ""
+    }
+}

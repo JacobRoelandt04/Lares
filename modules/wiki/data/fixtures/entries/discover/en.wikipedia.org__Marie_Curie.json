@@ -1,0 +1,116 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Marie_Curie",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Marie Curie",
+  "url": "https://en.wikipedia.org/wiki/Marie_Curie",
+  "revid": 1377371733,
+  "license": "CC BY-SA 4.0",
+  "quality": "good"
+ },
+ "title": "Marie Curie",
+ "category": {
+  "family": "people",
+  "topic": "women",
+  "via": "thompson",
+  "why": {
+   "p": 0.09,
+   "oneIn": 11,
+   "openRate": null
+  }
+ },
+ "intro": {
+  "text": "Maria Salomea Skłodowska Curie, better known as Marie Curie, was a Polish and naturalised-French physicist and chemist. She shared the 1903 Nobel Prize in Physics with her husband, Pierre Curie, \"for their joint researches on the radioactivity phenomena discovered by Professor Henri Becquerel\". She won the 1911 Nobel Prize in Chemistry for the discovery of the elements radium and polonium. Curie was the first woman to win a Nobel Prize, the first person to win a Nobel Prize twice and the only person to win a Nobel Prize in two different scientific fields. She and Pierre were the first married couple to win the Nobel Prize, launching the Curie family legacy of five Nobel Prizes.",
+  "words": 115,
+  "provenance": "cleaned",
+  "stripped": [
+   "dates",
+   "citations"
+  ],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 140,
+    "e": 162,
+    "target": "Nobel Prize in Physics",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Nobel_Prize_in_Physics"
+   },
+   {
+    "s": 181,
+    "e": 193,
+    "target": "Pierre Curie",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Pierre_Curie"
+   },
+   {
+    "s": 278,
+    "e": 293,
+    "target": "Henri Becquerel",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Henri_Becquerel"
+   },
+   {
+    "s": 313,
+    "e": 337,
+    "target": "Nobel Prize in Chemistry",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Nobel_Prize_in_Chemistry"
+   },
+   {
+    "s": 372,
+    "e": 378,
+    "target": "Radium",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Radium"
+   },
+   {
+    "s": 383,
+    "e": 391,
+    "target": "Polonium",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Polonium"
+   }
+  ]
+ },
+ "images": [
+  {
+   "file": "img/en.wikipedia.org__Marie_Curie-0.jpg",
+   "thumb": "img/en.wikipedia.org__Marie_Curie-0-thumb.jpg",
+   "w": 960,
+   "h": 540,
+   "aspect": 0.74,
+   "kind": "photo",
+   "focusY": 0.33,
+   "credit": "Marie Curie, c. 1920s, Henri Manuel",
+   "license": "PD",
+   "src": "page",
+   "fileTitle": "File:Marie Curie c. 1920s.jpg"
+  }
+ ],
+ "installed": null,
+ "popularity": {
+  "views60d": 610000,
+  "band": 0.96
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

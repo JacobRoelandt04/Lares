@@ -1,0 +1,453 @@
+#!/usr/bin/env bash
+# The lock's SUPERVISOR: the only thing that starts the Lares lock.
+#
+#   tools/lockscreen/lares-lock [--boot]
+#   tools/lockscreen/lares-lock --rescue      from a TTY: end a Lares lock that is up and will not unlock;
+#                                          the session goes straight to hyprlock (your password, PAM lares-lock)
+#
+# A real lock is started through tools/lockscreen/lares-lock-session (the reel's Lock, hypridle, later SDDM's
+# --locked-cmd), from the SNAPSHOT of a commit (lares's `lock/current`), never from a working tree: a
+# half-edited tree could load a lock whose auth is broken, and this supervisor falls back only when the lock EXITS.
+#
+# WHY IT EXISTS. A session lock that dies leaves Hyprland on its lockdead
+# screen (a red-on-black "compositor is locked" with a TTY as the only way out)
+# unless a new locker takes over. So this process outlives the lock, and:
+#   - runs `quickshell -p lock/shell.qml` with LARES_LOCK_SUPERVISED=1 (the lock
+#     refuses to lock without it) and QS_DISABLE_CRASH_HANDLER=1 (with
+#     the handler on, a crash more than 10 s after launch re-execs the SAME
+#     pid, invisible here, and dumps core -- a core of a lock holds a password
+#     buffer);
+#   - ends a lock that never says `LARESLOCK secure` within 5 s (SIGKILL);
+#   - treats ANY exit that was not preceded by `LARESLOCK unlocked` as a failure
+#     -- a signal, `qs kill`, a stray Qt.quit(), even exit 0 -- restores
+#     Hyprland's settings at once (a dead lock must not leave xray on, or the
+#     desktop shows through the lockdead screen), and relaunches ONCE;
+#   - after a second failure hands the session to hyprlock, with the same PAM
+#     service (tools/lockscreen/hyprlock.conf), so the session is never left
+#     without a locker;
+#   - puts Hyprland's settings back on EVERY way out (trap), and pauses the
+#     OLED-protection script while locked.
+#
+# WHAT IT SETS IN HYPRLAND BEFORE EVERY LAUNCH (the lock, its relaunch, hyprlock), and takes back on the way out:
+#   - misc:allow_session_lock_restore = true. With it false (the user's config has it so) a lock that
+#     dies leaves the lockdead screen and NOTHING can take over: neither the relaunch nor hyprlock. Set before each
+#     launch, not once, because a config reload in between puts the file's value back.
+#   - the `lares-bar` layer above the lock (`lares_bar_above_lock`): the shell's bars and its popup with the password field draw over the lock
+#     surface (under the last-resort hyprlock: 0). Set here and not in the config, so that it holds only while one of OUR locks is up:
+#     over any other locker the shell would show what it shows (toasts, titles) without knowing a lock is there. Back to 0 on the way
+#     out. UNDER THE LOCK (0) FROM THE LAUNCH UNTIL THE LOCK IS SECURE: while the session is locked Hyprland draws a layer that has the rule only together with a
+#     MAPPED lock surface (Renderer::renderLockscreen), and no frame between the lock's request and its first commit has one, so a rule set before the request
+#     takes the bars out of every frame of that span (two frames with no shell visible). A layer with no rule stays in the normal pass, under
+#     xray, under the lock's clear first frame: the same pixels. A boot or relaunched lock has no desktop to keep and starts at 1.
+#     NOT INTERACTIVE (above_lock = 1) from secure, INTERACTIVE (2: the pointer reaches the shell's own input region -- the idle
+#     reel, the volume pill, the player's buttons; the shell narrows that region to those the moment it hears the lock) only while the
+#     lock prints `LARESLOCK shell on` (LockRoot.shellOver: the shell is connected and shows its popup on every screen, so it is lock-aware) and
+#     back to 1 at `LARESLOCK shell off`: a shell that never heard of the lock (not started, a dropped socket, frozen) is never handed the
+#     pointer over a locked screen. The rule now in force is written to $XDG_RUNTIME_DIR/lares-lock.rule (lares re-applies it after a
+#     config reload, which takes the rule away, while tools/lockscreen/lares-lock-held says a lock is up).
+#   - THE COVER's `no_anim` (`lares_lock_cover`, before a boot, relaunched or replaced lock: BOOT=1). Such a lock maps a black layer
+#     (namespace `lares-lock-cover`, modules/lockscreen/lock/BootCover.qml) before it asks for the session, because Hyprland draws the
+#     workspace from the request until the lock has drawn; the cover must be opaque in its first frame, and a layer fades in over
+#     ~0.5 s otherwise (the user's `fade` animation). Back to no_anim = false on the way out.
+#
+# THE GPU. When the boot GPU is Intel's, the lock and hyprlock load Mesa's EGL only (__EGL_VENDOR_LIBRARY_FILENAMES),
+# as tools/lockscreen/lares-lock-warm and tools/dev/lock_env.sh do. Under glvnd's own order a fresh locker loads NVIDIA's
+# whole EGL stack too, and suspend hangs went with a fresh
+# locker starting at before_sleep (memory: suspend hang). Never pinned when the boot GPU is NVIDIA's (dGPU-only MUX
+# mode): Mesa would have no device there, and the lock would not start.
+#
+# THE KEYBOARD RE-KEY (the LAST RESORT: modules/lockscreen/lock/KeyboardWatch.qml gets the keyboard
+# back without leaving the lock, and this is what is left when two hops did not -- the session sits on Hyprland's lockdead screen,
+# the sad face, from the old lock's exit until the new one draws, which is why the new lock is PRE-STARTED, below). Every suspend takes the seat's keyboards away (aquamarine: "Disabling seat", every libinput
+# device removed, added again on resume) and Hyprland does not send the lock surface a keyboard `enter` when they come back:
+# the surface never hears a key again. Only a NEW surface is given the keyboard, so
+# the lock watches for it (LockRoot, KeyboardWatch): no surface holding the keyboard for a second while the seat has one, and
+# it prints `LARESLOCK rekey` and exits. That exit is not a failure: the session stays locked (lockdead) and this supervisor
+# starts a new lock at once, up to REKEY_MAX times, without using the one relaunch a crash is allowed.
+#
+# PRE-STARTED. When the lock prints `LARESLOCK rekey` it does NOT quit: this supervisor starts the next lock at once (LARES_LOCK_AFTER=<the old
+# pid>: it loads everything, prints `LARESLOCK ready`, and asks for the session lock only when that pid is gone), waits for `ready`
+# (4 s at most), and then ends the old lock with SIGTERM (SIGKILL after 3 s). What the screen shows between the two is the time to ask
+# for a lock and draw it, not the 0.5 s (1.1 s on the user's machine) of a whole start of Quickshell. Nothing can hide it entirely:
+# a layer of any kind is not drawn over the lockdead screen (measured), and Hyprland takes a second lock
+# only once the first is gone.
+#
+# THE LOG THAT SURVIVES. The lock's log in $XDG_RUNTIME_DIR dies with the session, so a post-mortem would have none.
+# Every run also writes a timestamped, colour-free copy to $XDG_STATE_HOME/lares/lock/logs/ (mode 600, the last
+# LOG_KEEP kept) -- this supervisor's own lines and everything the lock prints, as it prints it. Nothing typed is ever in it:
+# the lock never logs a key's text.
+#
+# THE STATUS LINES. The lock prints `LARESLOCK secure` and `LARESLOCK unlocked` with
+# console.log; quickshell writes them to its log stream, which goes to a file
+# here ($XDG_RUNTIME_DIR/lares-lock.log, 0600) and is polled every 100 ms. A file
+# and not a pipe: this shell must never block on, or die with, a reader.
+#
+# SAFETY. Refuses to run unless LOCK_ENV_DIR (tools/dev/lock_env.sh) or
+# LARES_LOCK_REAL=1 (only tools/lockscreen/lares-lock-session sets it): a lock started
+# by accident on the real desktop, from a test, is a locked-out user.
+set -u
+
+# ---- --rescue: before the guard; it ends a lock, it never starts one ----------------------------------
+if [ "${1:-}" = "--rescue" ]; then
+    rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+    pid=""
+    read -r pid 2> /dev/null < "$rt/lares-lock.child"
+    if [ -z "$pid" ] || ! tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q 'lock/shell\.qml'; then
+        echo "lares-lock: no Lares lock is running (a hyprlock that is up unlocks with your password)" >&2
+        exit 1
+    fi
+    : > "$rt/lares-lock.rescue"   # read by the supervisor: no relaunch of the same files, hyprlock at once
+    kill -9 "$pid" || exit 1
+    echo "lares-lock: the lock (pid $pid) was ended; hyprlock takes the session over -- unlock it with your password"
+    exit 0
+fi
+
+[ -n "${LOCK_ENV_DIR:-}" ] || [ "${LARES_LOCK_REAL:-}" = 1 ] || {
+    echo "lares-lock: refusing to lock: neither LOCK_ENV_DIR nor LARES_LOCK_REAL=1 is set" >&2
+    exit 2
+}
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)"
+RT="${XDG_RUNTIME_DIR:?lares-lock: XDG_RUNTIME_DIR is not set}"
+LOG="$RT/lares-lock.log"
+CHILD="$RT/lares-lock.child"     # the running Lares lock's pid, for --rescue (never hyprlock's: killing that is lockdead)
+RESCUE="$RT/lares-lock.rescue"   # --rescue was asked: skip the relaunch
+SECURE_WITHIN_MS="${LARES_LOCK_SECURE_MS:-5000}"
+REKEY_MAX="${LARES_LOCK_REKEY_MAX:-5}"
+LOG_KEEP="${LARES_LOCK_LOG_KEEP:-8}"
+PLOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lares/lock/logs"
+PLOG=""       # this supervisor's persistent log (plog_open)
+BOOT=""
+NEXT_PID=""   # a pre-started replacement (THE KEYBOARD RE-KEY, PRE-STARTED)
+RELAUNCH=""   # set for the second launch: a boot for the veil, a deliberate lock for the face
+RAN_MS=0      # how long the last lock lived
+REKEY="${LARES_LOCK_REKEY:-0}"   # how many times the lock asked for a new one to get the keyboard back ("off": never asks)
+[ "${1:-}" = "--boot" ] && BOOT=1
+
+ulimit -c 0
+
+# One lock at a time. fd 9 is closed for the children, so a stray quickshell
+# never keeps the lock held once this supervisor is gone. lares-lock-session takes
+# it BEFORE screentimed's lock-run and hands it over open (LARES_LOCK_HELD_FD=9): a
+# second request then neither locks nor tells screentime of a locker that exits
+# at once. A lock on the same open file is granted again, so that is the test.
+if [ "${LARES_LOCK_HELD_FD:-}" = 9 ] && flock -n 9 2> /dev/null; then
+    :
+else
+    exec 9> "$RT/lares-lock.lock"
+    flock -n 9 || exit 0
+    # until `lares cleanup-old-name`: a lock of the OLD name that is up counts (two locks beside each other is the one thing never allowed)
+    if "$ROOT/tools/lockscreen/lares-lock-held" --old; then echo "lares-lock: a lock of the old name (qs-lock) is up: not starting a second" >&2; exit 0; fi
+fi
+unset LARES_LOCK_HELD_FD
+rm -f "$RESCUE" "$CHILD"
+
+say() { echo "lares-lock: $*" >&2; plog "lares-lock: $*"; }
+now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+
+# ---- the persistent log (THE LOG THAT SURVIVES) ---------------------------------------------------------
+plog() { [ -n "$PLOG" ] && printf '%s %s\n' "$(date '+%F %T.%3N')" "$*" >> "$PLOG"; return 0; }
+plog_open() {
+    local f
+    mkdir -p "$PLOG_DIR" 2> /dev/null && chmod 700 "$PLOG_DIR" 2> /dev/null || return 0
+    # keep the newest LOG_KEEP-1 of the earlier runs; this one makes LOG_KEEP
+    # shellcheck disable=SC2012
+    for f in $(ls -1t "$PLOG_DIR"/lock-*.log 2> /dev/null | tail -n +"$LOG_KEEP"); do rm -f -- "$f"; done
+    PLOG="$PLOG_DIR/lock-$(date +%Y%m%d-%H%M%S)-$$.log"
+    ( umask 077; : > "$PLOG" ) 2> /dev/null || { PLOG=""; return 0; }
+    chmod 600 "$PLOG" 2> /dev/null
+    plog "lares-lock: supervisor $$ starts (root $ROOT, boot=${BOOT:-0}, session ${HYPRLAND_INSTANCE_SIGNATURE:-?})"
+}
+# plog_follow <pid>: copy the lock's log into PLOG as it is written, until the lock's pid is gone. Detached from the caller's
+# fds (9 is the lock file, 8 the log we read), colour codes dropped, every line stamped; the copy never delays the lock.
+plog_follow() {
+    [ -n "$PLOG" ] || return 0
+    # a pipeline of the two programs themselves: a ( ... ) group would stay behind as a second bash with this script's command line
+    tail -c +1 -f -s 0.2 --pid="$1" "$LOG" 2> /dev/null 9>&- 8<&- \
+        | awk '{ gsub(/\033\[[0-9;]*m/, ""); t = strftime("%F %T"); print t, $0; fflush() }' >> "$PLOG" 2> /dev/null 9>&- 8<&- &
+}
+
+# ---- Hyprland's settings ---------------------------------------------------------------------
+# What the user's config has for blur.xray, read BEFORE the lock changes it.
+plog_open
+
+ORIG_XRAY=$(timeout 3 hyprctl getoption decoration:blur:xray -j 2>/dev/null \
+    | jq -r 'if has("bool") then .bool else (.int != 0) end' 2>/dev/null)
+case "$ORIG_XRAY" in true|false) ;; *) ORIG_XRAY=true ;; esac
+export LARES_LOCK_ORIG_BLUR_XRAY="$ORIG_XRAY"
+
+ORIG_RESTORE=$(timeout 3 hyprctl getoption misc:allow_session_lock_restore -j 2>/dev/null \
+    | jq -r 'if has("bool") then .bool else (.int != 0) end' 2>/dev/null)
+case "$ORIG_RESTORE" in true|false) ;; *) ORIG_RESTORE="" ;; esac   # unreadable: left as this script sets it
+ABOVE_LOCK='hl.layer_rule({ name = "lares_bar_above_lock", match = { namespace = "^lares-bar$" }, above_lock = %d })'
+COVER_RULE='hl.layer_rule({ name = "lares_lock_cover", match = { namespace = "^lares-lock-cover$" }, no_anim = %s })'
+
+restore_hypr() {
+    timeout 3 hyprctl eval "hl.config({ misc = { session_lock_xray = false, session_lock_blur = true }, decoration = { blur = { xray = $ORIG_XRAY } } })" > /dev/null 2>&1
+}
+
+hop_output_gone() {   # a headless output of the keyboard hop (KeyboardWatch) left behind by a lock that died in the middle of it
+    timeout 3 "$ROOT/tools/lockscreen/lares-lock-hop" remove LARESLOCK-HOP > /dev/null 2>&1
+    return 0
+}
+
+RULE_FILE="$RT/lares-lock.rule"
+set_rule() {   # set_rule <above_lock 2|1|0>: the lares-bar layer's rule, and the value kept where lares can read it
+    local r
+    # shellcheck disable=SC2059
+    r=$(timeout 3 hyprctl eval "$(printf "$ABOVE_LOCK" "$1")" 2>&1)
+    case "$r" in ok*) printf '%s\n' "$1" > "$RULE_FILE" ;; *) say "the lares-bar above_lock rule not set to $1 ($r)" ;; esac
+}
+lock_settings() {   # lock_settings <above_lock 1|0>: before every launch (a reload since the last one put the config's values back)
+    local r
+    hop_output_gone
+    r=$(timeout 3 hyprctl eval "hl.config({ misc = { allow_session_lock_restore = true } })" 2>&1)
+    case "$r" in ok*) ;; *) say "allow_session_lock_restore not set ($r): a lock that dies could not be taken over" ;; esac
+    set_rule "$1"
+}
+
+COVERED=""   # the cover's rule was set (THE COVER's no_anim): settings_back takes it back
+cover_rule() {
+    local r
+    # shellcheck disable=SC2059
+    r=$(timeout 3 hyprctl eval "$(printf "$COVER_RULE" true)" 2>&1)
+    case "$r" in ok*) COVERED=1 ;; *) say "the cover's no_anim rule not set ($r): its first frames may fade in over the workspace" ;; esac
+}
+
+# shellcheck disable=SC2329   # called from cleanup, the EXIT trap
+settings_back() {   # the way out: what lock_settings changed
+    hop_output_gone
+    # shellcheck disable=SC2059
+    timeout 3 hyprctl eval "$(printf "$ABOVE_LOCK" 0)" > /dev/null 2>&1
+    # shellcheck disable=SC2059
+    [ -n "$COVERED" ] && timeout 3 hyprctl eval "$(printf "$COVER_RULE" false)" > /dev/null 2>&1
+    rm -f "$RULE_FILE"
+    [ -n "$ORIG_RESTORE" ] && timeout 3 hyprctl eval "hl.config({ misc = { allow_session_lock_restore = $ORIG_RESTORE } })" > /dev/null 2>&1
+    return 0
+}
+
+# ---- the GPU (THE GPU above) ------------------------------------------------------------------------------
+EGL_PIN=()
+if [ -z "${__EGL_VENDOR_LIBRARY_FILENAMES:-}" ] && [ -f /usr/share/glvnd/egl_vendor.d/50_mesa.json ]; then
+    for c in /sys/class/drm/card*; do
+        case "${c##*/}" in *-*) continue ;; esac   # a connector (card1-eDP-1), not a card
+        [ "$(cat "$c/device/boot_vga" 2> /dev/null)" = 1 ] || continue
+        [ "$(cat "$c/device/vendor" 2> /dev/null)" = 0x8086 ] \
+            && EGL_PIN=(__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json)
+        break
+    done
+fi
+
+# The OLED protection keeps global state in /tmp: never touched from a test env.
+hyproled() {
+    [ -n "${LOCK_ENV_DIR:-}" ] && return 0
+    local s="$HOME/.config/HyprV/waybar/scripts/hyproled-toggle.sh"
+    [ -f "$s" ] && bash "$s" "$1" > /dev/null 2>&1
+    return 0
+}
+
+# shellcheck disable=SC2329   # the EXIT trap
+cleanup() {
+    [ -n "$NEXT_PID" ] && kill -9 "$NEXT_PID" 2> /dev/null
+    restore_hypr
+    settings_back
+    rm -f "$CHILD" "$RESCUE"
+    hyproled resume
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+# ---- one launch of the Lares lock ------------------------------------------------------------
+# start_lock <log> [<pid of the lock to take over from>]: the Lares lock in the background, its pid in $LAUNCHED.
+start_lock() {
+    : > "$1"; chmod 600 "$1"
+    # THE ENGAGE (see the header): under the desktop until the lock is secure; a boot or relaunched lock has no desktop to keep
+    lock_settings "${BOOT:-0}"
+    [ "${BOOT:-}" = 1 ] && cover_rule
+    env "${EGL_PIN[@]}" LARES_LOCK_SUPERVISED=1 QS_DISABLE_CRASH_HANDLER=1 LARES_LOCK_BOOT="$BOOT" LARES_LOCK_RELAUNCH="$RELAUNCH" \
+        LARES_LOCK_REKEY="$REKEY" LARES_LOCK_AFTER="${2:-}" quickshell -p "$ROOT/lock/shell.qml" > "$1" 2>&1 9>&- &
+    LAUNCHED=$!
+}
+
+# The budget of THE KEYBOARD RE-KEY, decided when the lock asks (plan_rekey <ms the old lock lived>): REKEY for the next lock.
+plan_rekey() {
+    RELAUNCH=1; BOOT=1
+    # a lock that lived a minute was not a loop: the budget is for a run of them, one per suspend is fine
+    [ "$REKEY" != off ] && [ "$1" -gt "${LARES_LOCK_REKEY_RESET_MS:-60000}" ] && REKEY=0
+    if [ "$REKEY" != off ] && [ "$REKEY" -lt "$REKEY_MAX" ]; then
+        REKEY=$(( REKEY + 1 ))
+        say "starting a new lock to get the keyboard back ($REKEY of $REKEY_MAX)"
+    else
+        REKEY=off
+        say "the lock asked for the keyboard $REKEY_MAX times and never had it: the next one stays up as it is"
+    fi
+}
+
+# The old lock has asked for a new one (`LARESLOCK rekey`, still up): start the next, wait until it has loaded, end the old.
+# prestart_next <old pid> <ms the old lock lived>
+prestart_next() {
+    local old=$1 t keep=$REKEY
+    [ -e "$RESCUE" ] && return 1
+    plan_rekey "$2"
+    start_lock "$LOG.next" "$old"
+    NEXT_PID=$LAUNCHED
+    plog "lares-lock: pre-started the next lock (pid $NEXT_PID) behind $old"
+    t=$(now_ms)
+    while kill -0 "$NEXT_PID" 2> /dev/null && ! grep -aq 'LARESLOCK ready' "$LOG.next" && [ $(( $(now_ms) - t )) -lt 4000 ]; do sleep 0.02; done
+    if ! kill -0 "$NEXT_PID" 2> /dev/null; then
+        # it did not load: the old lock is still the session's lock, and it stays (it ends itself in 4 s, which plans again)
+        plog "lares-lock: the next lock (pid $NEXT_PID) died before it was ready: the old one is not ended"
+        say "the new lock did not start: the old one goes on (and is replaced when it ends, without a lock started ahead)"
+        NEXT_PID=""; REKEY=$keep
+        return 1
+    fi
+    plog "lares-lock: the next lock is $(grep -aq 'LARESLOCK ready' "$LOG.next" && echo ready || echo 'NOT ready') after $(( $(now_ms) - t )) ms: ending the old one"
+    kill -TERM "$old" 2> /dev/null
+    return 0
+}
+
+# Returns 0 when the lock ended with `LARESLOCK unlocked`, 2 when it asked for a new one, 1 otherwise.
+run_lock() {
+    local pid t0 secure=0 termed=0 rule=${BOOT:-0} want
+    if [ -n "$NEXT_PID" ]; then   # the pre-started one: its log is the next one's
+        pid=$NEXT_PID; NEXT_PID=""
+        mv -f "$LOG.next" "$LOG"
+    else
+        start_lock "$LOG"
+        pid=$LAUNCHED
+    fi
+    echo "$pid" > "$CHILD"
+    plog "lares-lock: launched the lock (pid $pid, relaunch=${RELAUNCH:-0}, rekey=$REKEY)"
+    plog_follow "$pid"
+    # The log is read through fd 8, opened on the file the lock writes, never
+    # by its path: deciding from the path would relaunch a lock that HAD unlocked
+    # whenever something moves the log away (a second, boot-mode lock right
+    # after unlocking). /dev/fd/8 reopens the same file wherever it has gone.
+    exec 8< "$LOG"
+    t0=$(now_ms)
+    local last=$t0 now
+    while kill -0 "$pid" 2> /dev/null; do
+        # A suspend inside the wait (hypridle's before_sleep starts the lock a moment before the machine sleeps): the wall clock
+        # runs on while nothing does, and a lock that has not had its five seconds would be killed at the resume. The wait does
+        # not count the time asleep -- and the log says the machine slept, which a post-mortem asks first.
+        now=$(now_ms)
+        if [ $(( now - last )) -gt 2000 ]; then
+            plog "lares-lock: the supervisor was not running for $(( now - last )) ms (the machine slept)"
+            t0=$(( t0 + now - last ))
+        fi
+        last=$now
+        # the shell is over the lock and lock-aware (or no longer): the pointer is handed to it (2) or taken back (1)
+        want=1
+        [ "$rule" = 0 ] && ! grep -aq 'LARESLOCK secure' /dev/fd/8 && want=0
+        [ "$(grep -ac 'LARESLOCK shell on' /dev/fd/8)" -gt "$(grep -ac 'LARESLOCK shell off' /dev/fd/8)" ] && want=2
+        if [ "$want" != "$rule" ]; then set_rule "$want"; rule=$want; plog "lares-lock: the lares-bar rule is now above_lock $want"; fi
+        if [ "$secure" = 0 ]; then
+            if grep -aq 'LARESLOCK secure' /dev/fd/8; then
+                secure=1
+            elif [ $(( $(now_ms) - t0 )) -gt "$SECURE_WITHIN_MS" ]; then
+                say "no LARESLOCK secure within ${SECURE_WITHIN_MS} ms: killing the lock"
+                kill -9 "$pid" 2> /dev/null
+            fi
+        fi
+        # It asked for a new lock (PRE-STARTED): the next one is started and the old one ended; whatever the old one does after
+        # that is ended for good 3 s later
+        if [ "$termed" = 0 ] && grep -aq 'LARESLOCK rekey' /dev/fd/8; then
+            if prestart_next "$pid" $(( $(now_ms) - t0 )); then termed=$(now_ms); else termed=-1; fi
+        elif [ "$termed" -gt 0 ] && [ $(( $(now_ms) - termed )) -gt 3000 ]; then
+            kill -9 "$pid" 2> /dev/null
+        fi
+        if [ "$rule" = 0 ]; then sleep 0.01; else sleep 0.1; fi   # the moment the lock is secure the bars go over it: the veil comes next
+    done
+    wait "$pid" 2> /dev/null
+    local rc=$?
+    RAN_MS=$(( $(now_ms) - t0 ))
+    rm -f "$CHILD"
+    if grep -aq 'LARESLOCK unlocked' /dev/fd/8; then exec 8<&-; return 0; fi
+    # It asked for a new lock to get the keyboard back (THE KEYBOARD RE-KEY): the session is still locked, nothing failed.
+    if grep -aq 'LARESLOCK rekey' /dev/fd/8; then
+        exec 8<&-
+        say "the lock exited (status $rc) asking for a new one: $(grep -a 'LARESLOCK rekey' "$LOG" | tail -1 | sed 's/.*LARESLOCK rekey//')"
+        return 2
+    fi
+    exec 8<&-
+    say "the lock exited (status $rc) without unlocking"
+    return 1
+}
+
+# After a lock that ENDED WITH `LARESLOCK unlocked` -- never before or during a lock, never on
+# a failure path -- refill the driver's shader cache if what it depends on changed (a Mesa
+# update, a changed veil shader), so the next lock's veil does not compile in its first
+# frame. Fully detached (new session, no stdio, no lock fd): it neither delays this
+# supervisor nor depends on it, runs niced, and `--if-stale` makes it a no-op nearly
+# always. A test env runs it only when it names a stand-in (LARES_LOCK_WARM_CMD).
+warm_after_unlock() {
+    local w="${LARES_LOCK_WARM_CMD:-$ROOT/tools/lockscreen/lares-lock-warm}"
+    [ -n "${LOCK_ENV_DIR:-}" ] && [ -z "${LARES_LOCK_WARM_CMD:-}" ] && return 0
+    [ -x "$w" ] || return 0
+    setsid -f "$w" --if-stale < /dev/null > /dev/null 2>&1 9>&- 8<&-
+    return 0
+}
+
+hyproled suspend
+
+# The lock's exits, in order (run_lock: 0 unlocked, 2 asked for a new lock, 1 anything else):
+#   - 2 (THE KEYBOARD RE-KEY, the last resort; PRE-STARTED while the old lock is still up): a new lock at once, up to REKEY_MAX times; the face may look at once (the machine has just come
+#     back, which is what asked for this) and nothing is behind it but the lockdead screen. A rekey costs no relaunch below.
+#     Past the budget the next lock is told `off` and stays up as it is: a lock that cannot have the keyboard is still a lock,
+#     and the face, --rescue and the TTY are the ways out (hyprlock would be as deaf).
+#   - 1 (a crash, a kill, a stray quit): a relaunch ONCE, then hyprlock.
+crashes=0
+run_lock; rc=$?
+while :; do
+    case $rc in
+        0) warm_after_unlock; exit 0 ;;
+        2)
+            if [ -e "$RESCUE" ]; then
+                [ -n "$NEXT_PID" ] && kill -9 "$NEXT_PID" 2> /dev/null
+                break
+            fi
+            # (pre-started already: the budget was planned then; otherwise plan it now)
+            [ -z "$NEXT_PID" ] && plan_rekey "$RAN_MS"
+            run_lock; rc=$? ;;
+        *)
+            restore_hypr
+            if [ -e "$RESCUE" ]; then
+                say "ended by --rescue: no relaunch of the same files"
+                break
+            fi
+            [ "$crashes" -ge 1 ] && break
+            crashes=$(( crashes + 1 ))
+            say "relaunching the lock"
+            RELAUNCH=1
+            BOOT=1   # what is behind a relaunched lock is the lockdead screen: nothing to hold
+            run_lock; rc=$? ;;
+    esac
+done
+restore_hypr
+rm -f "$RESCUE"
+
+# ---- last resort -------------------------------------------------------------------------------------
+say "the lock failed twice: handing over to hyprlock"
+HL=/usr/bin/hyprlock
+# A test env substitutes its own locker; the real one never can be.
+[ -n "${LOCK_ENV_DIR:-}" ] && [ -n "${LARES_LOCK_HYPRLOCK:-}" ] && HL="$LARES_LOCK_HYPRLOCK"
+# The restore stays allowed while hyprlock holds the session; the shell's layer goes UNDER it (hyprlock is a whole
+# screen of its own, and the shell has nothing to add over it), and the shell holds its toasts while the lock file is
+# held (tools/lockscreen/lares-lock-held).
+lock_settings 0
+# THE PAM SERVICE OF THE LAST RESORT. hyprlock's pinned config names its PAM service (auth { pam { module = lares-lock } }) and a service that is not
+# installed denies everything: a fallback nobody can open. Until root step R2 has put /etc/pam.d/lares-lock there -- and on a machine that has only the
+# old name's file -- the pinned file is handed over with the old service, qs-lock (a copy in the runtime dir; the pinned file is never edited). A machine
+# with neither file is handed "login", the service the Lares lock asks there too (AuthController, A FRESH MACHINE).
+hyprlock_conf() {
+    local pam_dir=${LARES_LOCK_PAM_DIR:-/etc/pam.d} conf=$ROOT/tools/lockscreen/hyprlock.conf out=$RT/lares-lock.hyprlock.conf svc=login
+    if [ -s "$pam_dir/lares-lock" ]; then printf '%s' "$conf"; return 0; fi
+    [ -s "$pam_dir/qs-lock" ] && svc=qs-lock
+    if sed "s/^\\([[:space:]]*module[[:space:]]*=[[:space:]]*\\)lares-lock[[:space:]]*\$/\\1$svc/" "$conf" > "$out" 2> /dev/null && [ -s "$out" ]; then
+        printf '%s' "$out"
+    else
+        printf '%s' "$conf"
+    fi
+}
+env "${EGL_PIN[@]}" "$HL" --grace 0 -c "$(hyprlock_conf)" 9>&-
+exit $?

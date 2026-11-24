@@ -1,0 +1,2619 @@
+#!/usr/bin/env python3
+"""aerial-helper -- the ONE backend process of the aerial (network) module.
+
+Contract: docs/contracts/aerial.md section 3. Started as
+    setpriv --pdeathsig TERM -- python3 -I tools/aerial/aerial-helper [--bus-address <addr>]
+JSON lines out (stdout), commands in (stdin). NetworkManager and BlueZ over D-Bus (python-dbus + GLib), ProtonVPN's CLI and
+Proton's server cache, the health pads, the speed test.
+
+THE LAWS THIS FILE KEEPS (CLAUDE.md):
+  - every D-Bus call is async (`call()`), so a stuck NetworkManager never stalls the loop; no proxy object is ever made (a proxy
+    introspects, which blocks);
+  - a program (ping, iw, protonvpn, curl) runs as a child on GLib watches, never as a blocking call;
+  - stdin is read from a GLib IO watch, non-blocking; it ends the process on EOF;
+  - a turn that raises is caught and logged, and the loop goes on;
+  - a secret is printed only by the `secrets` reply; no log line carries a command's arguments;
+  - a locked keyring is never opened by a read nobody asked for ("the keyring", below): no prompt because the shell started.
+"""
+import sys
+import os
+import json
+import time
+import re
+import socket
+import struct
+import signal
+import threading
+import traceback
+import functools
+import warnings
+import ipaddress
+import subprocess
+import uuid as uuidlib
+
+warnings.simplefilter("ignore")
+
+import dbus
+import dbus.lowlevel
+import dbus.service
+import dbus.mainloop.glib
+from gi.repository import GLib
+
+NM_NAME = "org.freedesktop.NetworkManager"
+NM_PATH = "/org/freedesktop/NetworkManager"
+NM_IF = NM_NAME
+NM_DEV = NM_NAME + ".Device"
+NM_WIFI = NM_NAME + ".Device.Wireless"
+NM_WIRED = NM_NAME + ".Device.Wired"
+NM_STATS = NM_NAME + ".Device.Statistics"
+NM_AP = NM_NAME + ".AccessPoint"
+NM_ACTIVE = NM_NAME + ".Connection.Active"
+NM_IP4 = NM_NAME + ".IP4Config"
+NM_IP6 = NM_NAME + ".IP6Config"
+NM_SETTINGS = NM_NAME + ".Settings"
+NM_SETCONN = NM_NAME + ".Settings.Connection"
+PROPS = "org.freedesktop.DBus.Properties"
+OBJMAN = "org.freedesktop.DBus.ObjectManager"
+BLUEZ_NAME = "org.bluez"
+BZ_ADAPTER = "org.bluez.Adapter1"
+BZ_DEVICE = "org.bluez.Device1"
+BLUEZ_AGENT_IF = "org.bluez.Agent1"
+AGENT_PATH = "/org/lares/aerial/agent"
+DEFAULT_CHECK_URL = "http://ping.archlinux.org/nm-check.txt"
+COALESCE_MS = 100
+LEASE_DIR = os.environ.get("AERIAL_LEASE_DIR", "/var/lib/NetworkManager")        # dnsmasq-<iface>.leases (tests point it elsewhere)
+RFKILL_DIR = os.environ.get("AERIAL_RFKILL_DIR", "/sys/class/rfkill")
+
+DEVICE_TYPES = {1: "ethernet", 2: "wifi", 5: "bluetooth", 6: "olpc-mesh", 7: "wimax", 8: "modem", 9: "infiniband", 10: "bond",
+                11: "vlan", 12: "adsl", 13: "bridge", 14: "generic", 15: "team", 16: "tun", 17: "ip-tunnel", 18: "macvlan",
+                19: "vxlan", 20: "veth", 21: "macsec", 22: "dummy", 23: "ppp", 24: "ovs-interface", 25: "ovs-port",
+                26: "ovs-bridge", 27: "wpan", 28: "6lowpan", 29: "wireguard", 30: "wifi-p2p", 31: "vrf", 32: "loopback"}
+DEVICE_STATES = {0: "unknown", 10: "unmanaged", 20: "unavailable", 30: "disconnected", 40: "prepare", 50: "config",
+                 60: "need-auth", 70: "ip-config", 80: "ip-check", 90: "secondaries", 100: "activated", 110: "deactivating",
+                 120: "failed"}
+ACTIVE_STATES = {0: "unknown", 1: "activating", 2: "activated", 3: "deactivating", 4: "deactivated"}
+STATE_REASONS = {0: "none", 1: "unknown", 2: "now-managed", 3: "now-unmanaged", 4: "config-failed", 5: "ip-config-unavailable",
+                 6: "ip-config-expired", 7: "no-secrets", 8: "supplicant-disconnect", 9: "supplicant-config-failed",
+                 10: "supplicant-failed", 11: "supplicant-timeout", 12: "ppp-start-failed", 13: "ppp-disconnect",
+                 14: "ppp-failed", 15: "dhcp-start-failed", 16: "dhcp-error", 17: "dhcp-failed", 18: "shared-start-failed",
+                 19: "shared-failed", 20: "autoip-start-failed", 21: "autoip-error", 22: "autoip-failed",
+                 38: "removed", 39: "sleeping", 40: "connection-removed", 41: "user-requested", 42: "carrier",
+                 43: "connection-assumed", 44: "supplicant-available"}
+METERED = {0: "unknown", 1: "yes", 2: "no", 3: "guess-yes", 4: "guess-no"}
+METERED_SET = {"unknown": 0, "yes": 1, "no": 2}
+FEATURE_BITS = (("securecore", 1), ("tor", 2), ("p2p", 4), ("streaming", 8), ("ipv6", 16))
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# output
+# --------------------------------------------------------------------------------------------------------------------------------
+def emit(obj):
+    try:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":"), ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os._exit(0)
+    except Exception:
+        pass
+
+
+def log(level, text):
+    emit({"t": "log", "level": level, "text": str(text)[:2000]})
+
+
+def guarded(fn):
+    """A turn that raises is logged and the loop goes on."""
+    @functools.wraps(fn)
+    def w(*a, **k):
+        try:
+            return fn(*a, **k)
+        except Exception as e:
+            tb = traceback.extract_tb(sys.exc_info()[2])[-1]
+            log("error", "%s: %s: %s (line %d)" % (fn.__name__, type(e).__name__, e, tb.lineno))
+            return None
+    return w
+
+
+def guarded_keep(fn):
+    """Same, for a GLib source that must stay installed."""
+    g = guarded(fn)
+
+    @functools.wraps(fn)
+    def w(*a, **k):
+        r = g(*a, **k)
+        return True if r is None else r
+    return w
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def plain(v):
+    """A dbus value as plain JSON-able Python."""
+    if isinstance(v, dbus.Boolean):
+        return bool(v)
+    if isinstance(v, (dbus.Byte,)):
+        return int(v)
+    if isinstance(v, (dbus.Int16, dbus.Int32, dbus.Int64, dbus.UInt16, dbus.UInt32, dbus.UInt64)):
+        return int(v)
+    if isinstance(v, dbus.Double):
+        return float(v)
+    if isinstance(v, (dbus.String, dbus.ObjectPath, dbus.Signature)):
+        return str(v)
+    if isinstance(v, dbus.ByteArray):
+        return bytes(v)
+    if isinstance(v, dbus.Array):
+        if v.signature == "y":
+            return bytes(bytearray(int(x) for x in v))
+        return [plain(x) for x in v]
+    if isinstance(v, dbus.Dictionary):
+        return {str(k): plain(x) for k, x in v.items()}
+    if isinstance(v, dbus.Struct):
+        return [plain(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): plain(x) for k, x in v.items()}
+    return v
+
+
+def utf8(b):
+    return bytes(b).decode("utf-8", "replace")
+
+
+def mac_of(v):
+    return str(v).upper() if v else ""
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# the bus
+# --------------------------------------------------------------------------------------------------------------------------------
+BUS = None
+PENDING_CALLS = {"n": 0}
+
+
+def call(dest, path, iface, method, sig, args, ok=None, err=None, timeout=15.0):
+    """ONE async D-Bus call. `ok(*reply)`, `err(DBusException)`. Never blocks, never raises into the caller's turn."""
+    def good(*r):
+        if ok is not None:
+            guarded(ok)(*r)
+
+    def bad(e):
+        if err is not None:
+            guarded(err)(e)
+        else:
+            log("warn", "%s.%s failed: %s" % (iface, method, dbus_text(e)))
+    try:
+        BUS.call_async(dest, path, iface, method, sig, args, good, bad, timeout=timeout)
+    except Exception as e:
+        guarded(bad)(e)
+
+
+def dbus_text(e):
+    try:
+        n = e.get_dbus_name()
+    except Exception:
+        n = ""
+    m = ""
+    try:
+        m = e.get_dbus_message()
+    except Exception:
+        m = str(e)
+    m = (m or str(e)).strip()
+    return ("%s: %s" % (n, m)) if n and n not in m else (m or n or type(e).__name__)
+
+
+def nm_call(path, iface, method, sig, args, ok=None, err=None, timeout=15.0):
+    call(NM_NAME, path, iface, method, sig, args, ok, err, timeout)
+
+
+def get_all(path, iface, cb, err=None):
+    nm_call(path, PROPS, "GetAll", "s", (iface,), cb, err or (lambda e: None), timeout=10.0)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# children (programs) and threads: all on GLib watches
+# --------------------------------------------------------------------------------------------------------------------------------
+CHILDREN = set()
+
+
+def kill_group(p, sig=signal.SIGKILL):
+    try:
+        os.killpg(p.pid, sig)
+    except Exception:
+        try:
+            p.kill()
+        except Exception:
+            pass
+
+
+class Run:
+    """A request a Task yields: run a program, collect its output, give back (rc, out, err, timedout)."""
+
+    def __init__(self, argv, timeout_s=10.0, feed=None, env=None):
+        self.argv = argv
+        self.timeout_s = timeout_s
+        self.feed = feed          # argv of a producer whose stdout is the child's stdin
+        self.env = env
+        self.proc = None
+        self.finished = False
+
+    def start(self, task):
+        env = dict(os.environ)
+        env["LC_ALL"] = "C"
+        if self.env:
+            env.update(self.env)
+        try:
+            stdin = subprocess.DEVNULL
+            feeder = None
+            if self.feed:
+                feeder = subprocess.Popen(self.feed, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+                stdin = feeder.stdout
+            p = subprocess.Popen(self.argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+                                 start_new_session=True)
+            if feeder is not None:
+                feeder.stdout.close()
+        except Exception as e:
+            GLib.idle_add(lambda: task.step((127, "", "%s" % e, False)) and False)
+            return
+        self.proc = p
+        self.feeder = feeder
+        CHILDREN.add(p)
+        bufs = {"out": [], "err": []}
+        state = {"open": 2, "timedout": False}
+        task.current = self
+
+        def finish():
+            if self.finished:
+                return False
+            rc = p.poll()
+            if rc is None:
+                GLib.timeout_add(10, guarded(finish))
+                return False
+            self.finished = True
+            CHILDREN.discard(p)
+            if self.feeder is not None:
+                kill_group(self.feeder)
+                try:
+                    self.feeder.wait(0.1)
+                except Exception:
+                    pass
+            if state["timedout"]:
+                rc = None
+            if state.get("tid"):
+                GLib.source_remove(state["tid"])
+            task.current = None
+            task.step((rc, b"".join(bufs["out"]).decode("utf-8", "replace"), b"".join(bufs["err"]).decode("utf-8", "replace"),
+                       state["timedout"]))
+            return False
+
+        def reader(which, fd):
+            os.set_blocking(fd, False)
+
+            def cb(_fd, cond):
+                try:
+                    data = os.read(_fd, 65536)
+                except BlockingIOError:
+                    return True
+                except Exception:
+                    data = b""
+                if data:
+                    bufs[which].append(data)
+                    return True
+                state["open"] -= 1
+                if state["open"] == 0:
+                    guarded(finish)()
+                return False
+            GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, guarded_keep(cb))
+
+        reader("out", p.stdout.fileno())
+        reader("err", p.stderr.fileno())
+
+        def timeout():
+            state["timedout"] = True
+            state["tid"] = None
+            kill_group(p)
+            if self.feeder is not None:
+                kill_group(self.feeder)
+            return False
+        state["tid"] = GLib.timeout_add(int(self.timeout_s * 1000), guarded(timeout))
+
+    def cancel(self):
+        if self.proc is not None and not self.finished:
+            kill_group(self.proc)
+            if getattr(self, "feeder", None) is not None:
+                kill_group(self.feeder)
+
+
+class InThread:
+    """A request a Task yields: a blocking function in a worker thread; (ok, value) back, or (False, 'timeout')."""
+
+    def __init__(self, fn, timeout_s=10.0):
+        self.fn = fn
+        self.timeout_s = timeout_s
+
+    def start(self, task):
+        done = {"v": False}
+
+        def deliver(res):
+            if done["v"]:
+                return False
+            done["v"] = True
+            if done.get("tid"):
+                GLib.source_remove(done["tid"])
+            task.step(res)
+            return False
+
+        def work():
+            try:
+                res = (True, self.fn())
+            except Exception as e:
+                res = (False, "%s" % e)
+            GLib.idle_add(guarded(lambda: deliver(res)))
+        threading.Thread(target=work, daemon=True).start()
+
+        def to():
+            done["tid"] = None
+            return deliver((False, "timeout"))
+        done["tid"] = GLib.timeout_add(int(self.timeout_s * 1000), guarded(to))
+
+
+class Sleep:
+    def __init__(self, ms):
+        self.ms = ms
+
+    def start(self, task):
+        GLib.timeout_add(self.ms, guarded(lambda: task.step(None) and False))
+
+
+class Task:
+    """A generator that yields requests (Run, InThread, Sleep) and is sent their results; its return value goes to `done`."""
+
+    def __init__(self, gen, done=None):
+        self.gen = gen
+        self.done = done
+        self.current = None
+        self.cancelled = False
+        self.step(None, first=True)
+
+    @guarded
+    def step(self, val, first=False):
+        if self.cancelled:
+            try:
+                self.gen.close()
+            except Exception:
+                pass
+            if self.done:
+                self.done(None, True)
+            return False
+        try:
+            req = next(self.gen) if first else self.gen.send(val)
+        except StopIteration as e:
+            if self.done:
+                self.done(e.value, False)
+            return False
+        except Exception as e:
+            log("error", "task: %s: %s" % (type(e).__name__, e))
+            if self.done:
+                self.done(None, False)
+            return False
+        req.start(self)
+        return False
+
+    def cancel(self):
+        self.cancelled = True
+        if self.current is not None:
+            self.current.cancel()
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# NetworkManager: the property cache
+# --------------------------------------------------------------------------------------------------------------------------------
+P = {}              # path -> {iface: props}
+P_REQ = set()       # (path, iface) asked
+NM_OWNED = {"v": False}
+AP_SETS = {}        # wifi device path -> set of ap paths
+PROFILES = {}       # settings path -> profile dict (no secrets)
+PROFILE_RAW = {}    # settings path -> plain settings (no secrets); never printed whole
+SCAN = {"asked": 0, "since": 0.0}
+REG = {"country": "", "phys": []}     # `iw reg get`: the regulatory country (the self-managed phy's, else the global one)
+STATS = {}          # iface -> refresh state
+LAST_EMIT = {}
+LAST_JSON = {}
+PENDING_EMIT = {}
+DIRTY_NET = ("nm", "devices", "active", "wifi")
+CHECK = {"url": DEFAULT_CHECK_URL}
+
+
+def prop(path, iface, name, default=None):
+    return P.get(path, {}).get(iface, {}).get(name, default)
+
+
+def ensure(path, ifaces):
+    if not path or path == "/":
+        return
+    for i in ifaces:
+        k = (path, i)
+        if k in P_REQ:
+            continue
+        P_REQ.add(k)
+
+        def got(d, path=path, i=i):
+            P.setdefault(path, {})[i] = {str(k): v for k, v in d.items()}
+            touched(path, i)
+
+        def bad(e, k=k):
+            P_REQ.discard(k)
+        get_all(path, i, got, bad)
+
+
+def forget_path(path):
+    P.pop(path, None)
+    for k in [k for k in P_REQ if k[0] == path]:
+        P_REQ.discard(k)
+
+
+def kind_of(path):
+    p = str(path)
+    if p == NM_PATH:
+        return "manager"
+    for k, pre in (("device", NM_PATH + "/Devices/"), ("ap", NM_PATH + "/AccessPoint/"), ("active", NM_PATH + "/ActiveConnection/"),
+                   ("ip4", NM_PATH + "/IP4Config/"), ("ip6", NM_PATH + "/IP6Config/"), ("setting", NM_PATH + "/Settings/")):
+        if p.startswith(pre):
+            return k
+    return ""
+
+
+@guarded
+def touched(path, iface):
+    """New or changed properties of an object: pull in what it points at, mark what depends on it."""
+    k = kind_of(path)
+    if k == "manager":
+        for d in prop(NM_PATH, NM_IF, "Devices", []):
+            ensure(str(d), [NM_DEV])
+        for a in prop(NM_PATH, NM_IF, "ActiveConnections", []):
+            ensure(str(a), [NM_ACTIVE])
+        man = P[NM_PATH][NM_IF]
+        if "Devices" in man:
+            live = set(str(x) for x in man["Devices"])
+            for p in [p for p in P if kind_of(p) == "device" and p not in live]:
+                forget_path(p)
+                AP_SETS.pop(p, None)
+        if "ActiveConnections" in man:
+            live = set(str(a) for a in man["ActiveConnections"])
+            for p in [p for p in P if kind_of(p) == "active" and p not in live]:
+                forget_path(p)
+    elif k == "device":
+        dev = P[path].get(NM_DEV, {})
+        t = int(dev.get("DeviceType", 0) or 0)
+        if t == 2:
+            ensure(path, [NM_WIFI])
+        elif t == 1:
+            ensure(path, [NM_WIRED])
+        for key in ("Ip4Config", "Ip6Config"):
+            v = str(dev.get(key, "/"))
+            ensure(v, [NM_IP4 if key == "Ip4Config" else NM_IP6])
+        ensure(str(dev.get("ActiveConnection", "/")), [NM_ACTIVE])
+    if iface == NM_WIFI and k == "device":
+        w = P[path].get(NM_WIFI, {})
+        if "AccessPoints" in w:
+            AP_SETS[path] = set(str(a) for a in w["AccessPoints"])
+            for a in AP_SETS[path]:
+                ensure(a, [NM_AP])
+        lastscan = w.get("LastScan")
+        if lastscan is not None and SCAN["asked"] and boot_ms_to_epoch(int(lastscan)) >= SCAN["since"]:
+            SCAN["asked"] = 0
+    if k == "active":
+        a = P[path].get(NM_ACTIVE, {})
+        ensure(str(a.get("Ip4Config", "/")), [NM_IP4])
+        ensure(str(a.get("Ip6Config", "/")), [NM_IP6])
+    if k in ("manager", "device", "ap", "active", "ip4", "ip6"):
+        mark_net()
+
+
+def boot_offset_ms():
+    """Wall clock less CLOCK_BOOTTIME, in whole seconds: the offset that turns NetworkManager's boot-relative times into epoch times.
+    Whole seconds so that a snapshot whose facts did not change prints the same bytes (the dedupe sees it)."""
+    try:
+        return int(round(time.time() - time.clock_gettime(time.CLOCK_BOOTTIME))) * 1000
+    except Exception:
+        return 0
+
+
+def boot_ms_to_epoch(boot_ms):
+    if boot_ms < 0:
+        return 0
+    return int(boot_ms) + boot_offset_ms()
+
+
+def boot_s_to_epoch_ms(s):
+    return boot_ms_to_epoch(int(s) * 1000) if int(s) >= 0 else 0
+
+
+@guarded
+def on_properties_changed(iface, changed, invalidated, path=None):
+    path = str(path or "")
+    if path.startswith("/org/bluez"):
+        return bz_changed(path, str(iface), changed, invalidated)
+    if not path.startswith(NM_PATH):
+        return
+    iface = str(iface)
+    ent = P.get(path, {}).get(iface)
+    if ent is None:
+        if path.startswith(NM_PATH + "/Devices/") and iface in (NM_STATS,):
+            pass
+        else:
+            return
+    if ent is not None:
+        for k, v in changed.items():
+            ent[str(k)] = v
+    if iface == NM_STATS:
+        stats_changed(path, {str(k): v for k, v in changed.items()})
+    touched(path, iface)
+
+
+@guarded
+def on_ap_added(ap, path=None):
+    path = str(path)
+    AP_SETS.setdefault(path, set()).add(str(ap))
+    ensure(str(ap), [NM_AP])
+    mark_net()
+
+
+@guarded
+def on_ap_removed(ap, path=None):
+    path = str(path)
+    AP_SETS.setdefault(path, set()).discard(str(ap))
+    forget_path(str(ap))
+    mark_net()
+
+
+@guarded
+def on_nm_owner(owner):
+    up = bool(owner)
+    if up == NM_OWNED["v"]:
+        return
+    NM_OWNED["v"] = up
+    if up:
+        walk_nm()
+    else:
+        P.clear()
+        P_REQ.clear()
+        AP_SETS.clear()
+        PROFILES.clear()
+        PROFILE_RAW.clear()
+        PROFILES_LOAD["listed"] = False
+        PROFILES_LOAD["pending"] = set()
+        mark_net()
+        mark("profiles")
+
+
+# The FIRST full read of the saved profiles: `profiles` lines say `complete: false` until every profile ListConnections named has
+# answered GetSettings (or failed). The shell's first-run trust seeding waits for it: seeding a partial or still-empty list made the
+# profiles that answered late (or a network joined on a machine with none) Public / Trusted by accident (the test bed's runs).
+PROFILES_LOAD = {"listed": False, "pending": set()}
+
+
+def walk_nm():
+    ensure(NM_PATH, [NM_IF])
+    nm_call(NM_PATH + "/Settings", NM_SETTINGS, "ListConnections", "", (), on_list_connections)
+
+
+@guarded
+def on_list_connections(paths):
+    if not PROFILES_LOAD["listed"]:
+        PROFILES_LOAD["listed"] = True
+        PROFILES_LOAD["pending"] = set(str(p) for p in paths)
+    for p in paths:
+        fetch_profile(str(p))
+    for gone in [p for p in PROFILES if p not in [str(x) for x in paths]]:
+        PROFILES.pop(gone, None)
+        PROFILE_RAW.pop(gone, None)
+    mark("profiles")
+
+
+def fetch_profile(path):
+    def got(settings):
+        raw = plain(settings)
+        PROFILE_RAW[path] = raw
+        PROFILES[path] = parse_profile(path, raw)
+        PROFILES_LOAD["pending"].discard(path)
+        mark("profiles")
+        mark("wifi")         # the card's power saving is the active profile's setting
+
+    def bad(e):
+        log("warn", "GetSettings %s: %s" % (path, dbus_text(e)))
+        PROFILES_LOAD["pending"].discard(path)
+        mark("profiles")
+    nm_call(path, NM_SETCONN, "GetSettings", "", (), got, bad)
+    # the file name and the unsaved flag come from the object's own properties
+    nm_call(path, PROPS, "GetAll", "s", (NM_SETCONN,), lambda d, path=path: set_profile_file(path, d), lambda e: None)
+
+
+@guarded
+def set_profile_file(path, d):
+    if path in PROFILES:
+        PROFILES[path]["filename"] = str(d.get("Filename", ""))
+        mark("profiles")
+
+
+@guarded
+def on_new_connection(path):
+    fetch_profile(str(path))
+
+
+@guarded
+def on_connection_removed(path):
+    PROFILES.pop(str(path), None)
+    PROFILE_RAW.pop(str(path), None)
+    mark("profiles")
+
+
+@guarded
+def on_connection_updated(path=None):
+    if path and str(path) in PROFILES or (path and str(path).startswith(NM_PATH + "/Settings/")):
+        fetch_profile(str(path))
+
+
+def parse_profile(path, raw):
+    c = raw.get("connection", {})
+    w = raw.get("802-11-wireless", {})
+    sec = raw.get("802-11-wireless-security", {})
+    x = raw.get("802-1x", {})
+    ip4 = raw.get("ipv4", {})
+    ssid = w.get("ssid")
+    ssid_s = utf8(ssid) if isinstance(ssid, (bytes, bytearray)) else ""
+    km = str(sec.get("key-mgmt", ""))
+    if not sec and not x:
+        security = "open"
+    elif km == "wpa-psk":
+        security = "wpa2"
+    elif km == "sae":
+        security = "wpa3"
+    elif km == "owe":
+        security = "owe"
+    elif km in ("wpa-eap", "wpa-eap-suite-b-192", "ieee8021x") or x:
+        security = "eap"
+    elif km == "none":
+        security = "wep"
+    else:
+        security = "open" if not sec else (km or "unknown")
+    mac = str(w.get("cloned-mac-address", "") or "")
+    bssid = w.get("bssid")
+    eap = None
+    if x:
+        methods = x.get("eap") or []
+        eap = {"method": str(methods[0]) if methods else "", "phase2": str(x.get("phase2-auth", "") or ""),
+               "identity": str(x.get("identity", "") or ""), "anonymousIdentity": str(x.get("anonymous-identity", "") or ""),
+               "caCert": cert_path(x.get("ca-cert")), "domain": str(x.get("domain-suffix-match", "") or ""),
+               "systemCaCerts": bool(x.get("system-ca-certs", False))}
+    mode = str(w.get("mode", "")) if w else ""
+    ctype = str(c.get("type", ""))
+    return {"path": path, "uuid": str(c.get("uuid", "")), "id": str(c.get("id", "")), "type": ctype, "ssid": ssid_s, "mode": mode,
+            "security": security if ctype == "802-11-wireless" else "", "autoconnect": bool(c.get("autoconnect", True)),
+            "priority": int(c.get("autoconnect-priority", 0) or 0), "timestamp": int(c.get("timestamp", 0) or 0),
+            "hidden": bool(w.get("hidden", False)), "filename": PROFILES.get(path, {}).get("filename", ""),
+            "ip4method": str(ip4.get("method", "")), "metered": METERED.get(int(c.get("metered", 0) or 0), "unknown"),
+            "macPolicy": mac or "default", "band": str(w.get("band", "") or ""),
+            "bssid": mac_of(":".join("%02X" % b for b in bssid)) if isinstance(bssid, (bytes, bytearray)) and len(bssid) == 6 else "",
+            "ifname": str(c.get("interface-name", "") or ""), "eap": eap, "powersave": int(w.get("powersave", 0) or 0)}
+
+
+def cert_path(v):
+    if isinstance(v, (bytes, bytearray)):
+        s = bytes(v).rstrip(b"\0").decode("utf-8", "replace")
+        return s[7:] if s.startswith("file://") else s
+    return ""
+
+
+def profile_by_uuid(u):
+    for p in PROFILES.values():
+        if p["uuid"] == u:
+            return p
+    return None
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# snapshots
+# --------------------------------------------------------------------------------------------------------------------------------
+def mark(t):
+    if t in PENDING_EMIT:
+        return
+    due = LAST_EMIT.get(t, 0) + COALESCE_MS / 1000.0
+    delay = max(1, int((due - time.time()) * 1000))
+    PENDING_EMIT[t] = GLib.timeout_add(delay, guarded(lambda t=t: flush(t)))
+
+
+def mark_net():
+    for t in DIRTY_NET:
+        mark(t)
+
+
+def flush(t):
+    PENDING_EMIT.pop(t, None)
+    LAST_EMIT[t] = time.time()
+    obj = BUILDERS[t]()
+    extra = {"complete": PROFILES_LOAD["listed"] and not PROFILES_LOAD["pending"]} if t == "profiles" else {}
+    s = json.dumps([obj, extra], separators=(",", ":"), sort_keys=True)
+    if LAST_JSON.get(t) == s:
+        return False
+    LAST_JSON[t] = s
+    if isinstance(obj, list):
+        emit(dict({"t": t, "v": obj}, **extra))   # `devices` / `active` / `profiles` are arrays: the line carries them as "v"
+    else:
+        emit(dict({"t": t}, **obj))
+    return False
+
+
+def ip_info(path, v6):
+    d = P.get(str(path), {}).get(NM_IP6 if v6 else NM_IP4)
+    if d is None:
+        return None
+    addrs = []
+    for a in d.get("AddressData", []) or []:
+        a = plain(a)
+        addrs.append({"address": str(a.get("address", "")), "prefix": int(a.get("prefix", 0))})
+    dns = []
+    nsd = d.get("NameserverData")
+    if nsd:
+        for n in nsd:
+            n = plain(n)
+            dns.append(str(n.get("address", "")))
+    elif d.get("Nameservers"):
+        for n in d["Nameservers"]:
+            if v6:
+                try:
+                    dns.append(str(ipaddress.IPv6Address(bytes(bytearray(int(b) for b in n)))))
+                except Exception:
+                    pass
+            else:
+                dns.append(socket.inet_ntoa(struct.pack("=I", int(n))))
+    return {"addresses": addrs, "gateway": str(d.get("Gateway", "") or ""), "dns": dns}
+
+
+def device_dict(path):
+    ent = P.get(path, {})
+    dev = ent.get(NM_DEV, {})
+    t = int(dev.get("DeviceType", 0) or 0)
+    wifi = ent.get(NM_WIFI, {})
+    wired = ent.get(NM_WIRED, {})
+    st = int(dev.get("State", 0) or 0)
+    reason = dev.get("StateReason") or (0, 0)
+    rc = int(reason[1]) if len(reason) > 1 else 0
+    ac = str(dev.get("ActiveConnection", "/"))
+    hw = wifi.get("HwAddress") or wired.get("HwAddress") or dev.get("HwAddress") or ""
+    perm = wifi.get("PermHwAddress") or wired.get("PermHwAddress") or ""
+    speed = 0
+    if t == 1:
+        speed = int(wired.get("Speed", 0) or 0)
+    elif t == 2:
+        speed = int(int(wifi.get("Bitrate", 0) or 0) / 1000)
+    return {"path": path, "iface": str(dev.get("Interface", "")), "type": DEVICE_TYPES.get(t, "type%d" % t), "typeCode": t,
+            "driver": str(dev.get("Driver", "")), "driverVersion": str(dev.get("DriverVersion", "") or ""),
+            "firmware": str(dev.get("FirmwareVersion", "") or ""), "state": DEVICE_STATES.get(st, "state%d" % st), "stateCode": st,
+            "stateReason": STATE_REASONS.get(rc, "reason%d" % rc), "stateReasonCode": rc, "hwAddress": mac_of(hw),
+            "permHwAddress": mac_of(perm), "managed": bool(dev.get("Managed", False)),
+            "carrier": bool(wired.get("Carrier", False)) if t == 1 else None, "speed": speed,
+            "activeConnection": ac if ac != "/" else "", "ip4": ip_info(dev.get("Ip4Config", "/"), False),
+            "ip6": ip_info(dev.get("Ip6Config", "/"), True)}
+
+
+def device_paths():
+    return [str(d) for d in prop(NM_PATH, NM_IF, "Devices", []) if str(d) in P and NM_DEV in P[str(d)]]
+
+
+def wifi_device_path(iface=None):
+    """The Wi-Fi device: the one named, else the best of NetworkManager's -- one it MANAGES (an unmanaged radio is somebody else's: the
+    test bed's access points, a USB dongle the user handed to another tool), activated before available before the rest, then the
+    first. The first found was taken before: in the test bed that was an unmanaged access-point radio, and every scan was refused."""
+    best, best_rank = None, -1
+    for p in device_paths():
+        d = P[p][NM_DEV]
+        if int(d.get("DeviceType", 0) or 0) != 2:
+            continue
+        if iface is not None:
+            if str(d.get("Interface")) == iface:
+                return p
+            continue
+        state = int(d.get("State", 0) or 0)
+        rank = (2 if bool(d.get("Managed", False)) else 0) + (1 if state >= 30 else 0) + (1 if state == 100 else 0)
+        if rank > best_rank:
+            best, best_rank = p, rank
+    return best
+
+
+def device_path_by_iface(iface):
+    for p in device_paths():
+        if str(P[p][NM_DEV].get("Interface")) == iface:
+            return p
+    return None
+
+
+def build_devices():
+    return [device_dict(p) for p in device_paths()]
+
+
+def ap_dict(path):
+    a = P.get(path, {}).get(NM_AP, {})
+    ssid = a.get("Ssid")
+    sb = bytes(bytearray(int(x) for x in ssid)) if ssid is not None else b""
+    freq = int(a.get("Frequency", 0) or 0)
+    ls = int(a.get("LastSeen", -1))
+    return {"path": path, "bssid": mac_of(a.get("HwAddress", "")), "ssid": utf8(sb), "ssidHex": sb.hex(), "freq": freq,
+            "width": int(a.get("Bandwidth", 0) or 0), "strength": int(a.get("Strength", 0) or 0),
+            "maxBitrate": int(a.get("MaxBitrate", 0) or 0), "flags": int(a.get("Flags", 0) or 0),
+            "wpaFlags": int(a.get("WpaFlags", 0) or 0), "rsnFlags": int(a.get("RsnFlags", 0) or 0), "lastSeen": ls,
+            "lastSeenMs": boot_s_to_epoch_ms(ls) if ls >= 0 else 0, "mode": int(a.get("Mode", 0) or 0)}
+
+
+def build_wifi():
+    wp = wifi_device_path()
+    man = P.get(NM_PATH, {}).get(NM_IF, {})
+    if wp is None:
+        return {"device": None, "aps": [], "activeAp": "", "scanning": False, "lastScan": -1, "lastScanMs": 0,
+                "radioOn": bool(man.get("WirelessEnabled", False)), "hardwareEnabled": bool(man.get("WirelessHardwareEnabled", True))}
+    w = P[wp].get(NM_WIFI, {})
+    dev = device_dict(wp)
+    aps = sorted((ap_dict(p) for p in AP_SETS.get(wp, set()) if NM_AP in P.get(p, {})), key=lambda a: (a["bssid"], a["path"]))
+    active = str(w.get("ActiveAccessPoint", "/"))
+    act_bssid = mac_of(P.get(active, {}).get(NM_AP, {}).get("HwAddress", "")) if active != "/" else ""
+    ls = int(w.get("LastScan", -1))
+    scanning = bool(SCAN["asked"]) and time.time() - SCAN["since"] / 1000.0 < 12
+    dev["bitrate"] = int(w.get("Bitrate", 0) or 0)
+    dev["radioOn"] = bool(man.get("WirelessEnabled", False))
+    dev["country"] = REG["country"]
+    auuid = str(P.get(dev["activeConnection"], {}).get(NM_ACTIVE, {}).get("Uuid", "")) if dev["activeConnection"] else ""
+    ap_prof = profile_by_uuid(auuid) if auuid else None
+    dev["powersave"] = ap_prof["powersave"] if ap_prof else 0        # the active profile's setting: 3 is "on", the model reads that
+    return {"device": dev, "aps": aps, "activeAp": act_bssid, "scanning": scanning, "lastScan": ls,
+            "lastScanMs": boot_ms_to_epoch(ls), "radioOn": bool(man.get("WirelessEnabled", False)),
+            "hardwareEnabled": bool(man.get("WirelessHardwareEnabled", True))}
+
+
+def active_dict(path):
+    a = P.get(path, {}).get(NM_ACTIVE, {})
+    ifaces = []
+    for d in a.get("Devices", []) or []:
+        ifaces.append(str(P.get(str(d), {}).get(NM_DEV, {}).get("Interface", "")))
+    cid = str(a.get("Id", ""))
+    typ = str(a.get("Type", ""))
+    st = int(a.get("State", 0) or 0)
+    return {"path": path, "uuid": str(a.get("Uuid", "")), "id": cid, "type": typ, "devices": ifaces,
+            "state": ACTIVE_STATES.get(st, "state%d" % st), "vpn": bool(a.get("Vpn", False)) or typ in ("vpn", "wireguard"),
+            "default4": bool(a.get("Default", False)), "default6": bool(a.get("Default6", False)),
+            "specific": str(a.get("SpecificObject", "")) if str(a.get("SpecificObject", "/")) != "/" else "",
+            "proton": typ == "wireguard" and cid.startswith("ProtonVPN "), "killswitch": cid.startswith("pvpn-killswitch")}
+
+
+def build_active():
+    man = P.get(NM_PATH, {}).get(NM_IF, {})
+    return sorted((active_dict(str(p)) for p in man.get("ActiveConnections", []) if NM_ACTIVE in P.get(str(p), {})),
+                  key=lambda a: a["path"])
+
+
+def build_profiles():
+    return sorted((dict(p) for p in PROFILES.values()), key=lambda p: (p["id"], p["uuid"]))
+
+
+def build_nm():
+    man = P.get(NM_PATH, {}).get(NM_IF, {})
+    prim = str(man.get("PrimaryConnection", "/"))
+    pid = str(P.get(prim, {}).get(NM_ACTIVE, {}).get("Id", "")) if prim != "/" else ""
+    real = pid
+    if pid.startswith("pvpn-killswitch"):
+        real = ""
+        for a in build_active():
+            if a["default4"] and not a["killswitch"] and not a["proton"] and not a["vpn"]:
+                real = a["id"]
+                break
+        if not real:
+            for a in build_active():
+                if a["type"] in ("802-11-wireless", "802-3-ethernet") and a["state"] == "activated":
+                    real = a["id"]
+                    break
+    return {"running": NM_OWNED["v"], "state": int(man.get("State", 0) or 0), "primary": pid, "primaryReal": real,
+            "connectivity": int(man.get("Connectivity", 0) or 0), "wirelessEnabled": bool(man.get("WirelessEnabled", False)),
+            "wirelessHardwareEnabled": bool(man.get("WirelessHardwareEnabled", True)), "version": str(man.get("Version", ""))}
+
+
+BUILDERS = {"wifi": build_wifi, "devices": build_devices, "active": build_active, "profiles": build_profiles, "nm": build_nm}
+BUILDERS["bt"] = lambda: build_bt()
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# statistics
+# --------------------------------------------------------------------------------------------------------------------------------
+def stats_changed(path, changed):
+    iface = str(P.get(path, {}).get(NM_DEV, {}).get("Interface", ""))
+    if iface not in STATS:
+        return
+    ent = P[path].setdefault(NM_STATS, {})
+    ent.update(changed)
+    if "RxBytes" in changed or "TxBytes" in changed:
+        emit({"t": "stats", "iface": iface, "rx": int(ent.get("RxBytes", 0)), "tx": int(ent.get("TxBytes", 0)), "atMs": now_ms()})
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# commands
+# --------------------------------------------------------------------------------------------------------------------------------
+COMMANDS = {}
+
+
+def command(fn):
+    COMMANDS[fn.__name__[4:]] = fn
+    return fn
+
+
+def a_sv(d=None):
+    return dbus.Dictionary(d or {}, signature="sv")
+
+
+def need_wifi(reply):
+    wp = wifi_device_path()
+    if wp is None:
+        reply(False, "no Wi-Fi device")
+    return wp
+
+
+def nm_err(reply):
+    def e(exc):
+        reply(False, dbus_text(exc))
+    return e
+
+
+@command
+def cmd_scan(msg, reply):
+    wp = need_wifi(reply)
+    if not wp:
+        return
+    SCAN["asked"] = 1
+    SCAN["since"] = time.time() * 1000
+    mark("wifi")
+    GLib.timeout_add(12500, guarded(lambda: (SCAN.update(asked=0), mark("wifi"), False)[2]))
+
+    def bad(e):
+        SCAN["asked"] = 0
+        mark("wifi")
+        reply(False, dbus_text(e))
+    nm_call(wp, NM_WIFI, "RequestScan", "a{sv}", (a_sv(),), lambda: reply(True), bad)
+
+
+def resolve_ap(wp, ap):
+    if not ap:
+        return "/"
+    if str(ap).startswith("/"):
+        return str(ap)
+    want = str(ap).upper()
+    for p in AP_SETS.get(wp, set()):
+        if mac_of(P.get(p, {}).get(NM_AP, {}).get("HwAddress", "")) == want:
+            return p
+    return "/"
+
+
+def pick_device_for_profile(prof, iface):
+    if iface:
+        return device_path_by_iface(iface)
+    if prof and prof["ifname"]:
+        p = device_path_by_iface(prof["ifname"])
+        if p:
+            return p
+    t = prof["type"] if prof else "802-11-wireless"
+    want = {"802-11-wireless": 2, "802-3-ethernet": 1}.get(t)
+    for p in device_paths():
+        if int(P[p][NM_DEV].get("DeviceType", 0) or 0) == want:
+            return p
+    return None
+
+
+def stale_binding(prof, dev):
+    """A profile bound (`connection.interface-name`) to an interface this machine does not have, asked onto a device it does have.
+    The name is not stable here: the Wi-Fi card is wlp46s0 or wlp47s0 depending on whether the dGPU is on the PCI bus, and every profile
+    nmcli / nm-applet once made carries the name of that day. NetworkManager refuses such a profile on the device ("profile is not
+    compatible with device (mismatching interface name)", the user's machine 2026-11-20: no saved network and no hotspot would come
+    up). A name that IS a device of this machine is a choice and is left alone."""
+    name = prof.get("ifname") or ""
+    if not name or str(P.get(dev, {}).get(NM_DEV, {}).get("Interface")) == name:
+        return False
+    return device_path_by_iface(name) is None
+
+
+def unbind(st):
+    c = st.get("connection")
+    if c is not None and "interface-name" in c:
+        del c["interface-name"]
+
+
+def activate_on(prof, dev, spec, ok, reply, mutate=None):
+    """ActivateConnection of a saved profile on a device; a dead interface name is taken off the profile first (and `mutate`, a patch
+    of the caller's, goes in the same Update)."""
+    def go():
+        nm_call(NM_PATH, NM_IF, "ActivateConnection", "ooo", (dbus.ObjectPath(prof["path"]), dbus.ObjectPath(dev), dbus.ObjectPath(spec)),
+                ok, nm_err(reply), timeout=30.0)
+    stale = stale_binding(prof, dev)
+    if not stale and mutate is None:
+        return go()
+
+    def both(st):
+        if stale:
+            unbind(st)
+        if mutate is not None:
+            mutate(st)
+    merge_update(prof["uuid"], both, reply, then=go)
+
+
+@command
+def cmd_activate(msg, reply):
+    prof = profile_by_uuid(str(msg.get("uuid", "")))
+    if prof is None:
+        return reply(False, "no such profile")
+    dev = pick_device_for_profile(prof, msg.get("iface"))
+    if dev is None:
+        return reply(False, "no device for this profile")
+    spec = resolve_ap(dev, msg.get("ap")) if prof["type"] == "802-11-wireless" else "/"
+    activate_on(prof, dev, spec, lambda active: reply(True, data={"active": str(active)}), reply)
+
+
+def eap_settings(eap):
+    method = str(eap.get("method", "peap")).lower()
+    x = {"eap": dbus.Array([method], signature="s")}
+    if eap.get("identity"):
+        x["identity"] = str(eap["identity"])
+    if eap.get("anonymousIdentity"):
+        x["anonymous-identity"] = str(eap["anonymousIdentity"])
+    if eap.get("password"):
+        x["password"] = str(eap["password"])
+    if eap.get("phase2") and method in ("peap", "ttls"):
+        x["phase2-auth"] = str(eap["phase2"]).lower()
+    if eap.get("caCert"):
+        x["ca-cert"] = dbus.ByteArray(b"file://" + str(eap["caCert"]).encode() + b"\0")
+    else:
+        x["system-ca-certs"] = False
+    if eap.get("domain"):
+        x["domain-suffix-match"] = str(eap["domain"])
+    return x
+
+
+def wifi_settings(msg, ssid_b, ifname=None):
+    security = str(msg.get("security", "open"))
+    cid = utf8(ssid_b) or "hidden"
+    conn = {"id": cid, "uuid": str(uuidlib.uuid4()), "type": "802-11-wireless", "autoconnect": True}
+    if ifname:
+        conn["interface-name"] = ifname
+    w = {"ssid": dbus.ByteArray(ssid_b), "mode": "infrastructure"}
+    if msg.get("hidden"):
+        w["hidden"] = True
+    if msg.get("bssid"):
+        try:
+            w["bssid"] = dbus.ByteArray(bytes(int(x, 16) for x in str(msg["bssid"]).split(":")))
+        except Exception:
+            pass
+    s = {"connection": a_sv(conn), "802-11-wireless": a_sv(w), "ipv4": a_sv({"method": "auto"}), "ipv6": a_sv({"method": "auto"})}
+    if security in ("wpa2", "wpa2/3"):
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "wpa-psk", "psk": str(msg.get("psk", ""))})
+    elif security == "wpa3":
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "sae", "psk": str(msg.get("psk", ""))})
+    elif security == "owe":
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "owe"})
+    elif security == "wep":
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "none", "wep-key0": str(msg.get("psk", "")), "wep-key-type": dbus.UInt32(1),
+                                               "wep-tx-keyidx": dbus.UInt32(0)})
+    elif security == "eap":
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "wpa-eap"})
+        s["802-1x"] = a_sv(eap_settings(msg.get("eap") or {}))
+    return s
+
+
+def merge_update(uuid, mutate, reply, then=None):
+    """GetSettings -> mutate(settings) -> Update. `then()` runs after a good Update."""
+    prof = profile_by_uuid(uuid)
+    if prof is None:
+        return reply(False, "no such profile")
+    path = prof["path"]
+
+    def got(settings):
+        try:
+            mutate(settings)
+        except Exception as e:
+            return reply(False, "bad patch: %s" % e)
+        nm_call(path, NM_SETCONN, "Update", "a{sa{sv}}", (settings,), lambda: (then() if then else reply(True)), nm_err(reply))
+    nm_call(path, NM_SETCONN, "GetSettings", "", (), got, nm_err(reply))
+
+
+def sect(settings, name):
+    if name not in settings:
+        settings[name] = a_sv()
+    return settings[name]
+
+
+@command
+def cmd_add_activate(msg, reply):
+    wp = wifi_device_path(msg.get("iface"))
+    if wp is None:
+        return reply(False, "no Wi-Fi device")
+    ssid_b = bytes.fromhex(msg["ssidHex"]) if msg.get("ssidHex") else str(msg.get("ssid", "")).encode("utf-8")
+    existing = [p for p in PROFILES.values() if p["type"] == "802-11-wireless" and p["mode"] in ("infrastructure", "")
+                and p["ssid"].encode("utf-8") == ssid_b and p["mode"] != "ap"]
+    spec = resolve_ap(wp, msg.get("bssid")) if msg.get("bssid") else best_ap_for(wp, ssid_b)
+    # A HIDDEN network's access point broadcasts no name: NetworkManager refuses that AP as the specific object of a connection that
+    # carries the name ("802-11-wireless.ssid: connection does not match access point", the test bed's first real run). Whenever the
+    # AP's own SSID is not the one asked for (hidden, or empty), activate with "/" and let NetworkManager probe for the name.
+    if spec != "/":
+        ap_ssid = P.get(spec, {}).get(NM_AP, {}).get("Ssid", b"")
+        if msg.get("hidden") or bytes(bytearray(int(x) for x in ap_ssid)) != ssid_b:
+            spec = "/"
+    if existing and not msg.get("new"):
+        # several profiles of one name (nmcli makes "<name> 1" when the first is bound to another interface): the one that fits this
+        # device first, then the one used last
+        here = str(P.get(wp, {}).get(NM_DEV, {}).get("Interface"))
+        existing.sort(key=lambda p: (0 if p["ifname"] in ("", here) else 1, -p["timestamp"]))
+        prof = existing[0]
+        mutate = None
+        if bool(msg.get("psk")) or bool((msg.get("eap") or {}).get("password")):
+            def mutate(st):
+                sec = sect(st, "802-11-wireless-security")
+                if msg.get("psk"):
+                    sec["psk"] = str(msg["psk"])
+                if (msg.get("eap") or {}).get("password"):
+                    sect(st, "802-1x")["password"] = str(msg["eap"]["password"])
+        return activate_on(prof, wp, spec, lambda active: reply(True, data={"active": str(active), "uuid": prof["uuid"], "reused": True}), reply,
+                           mutate=mutate)
+    settings = wifi_settings(msg, ssid_b, ifname=None)
+    uuid = str(settings["connection"]["uuid"])
+
+    def ok(path, active, result):
+        reply(True, data={"active": str(active), "uuid": uuid, "path": str(path), "reused": False})
+    nm_call(NM_PATH, NM_IF, "AddAndActivateConnection2", "a{sa{sv}}ooa{sv}",
+            (dbus.Dictionary(settings, signature="sa{sv}"), dbus.ObjectPath(wp), dbus.ObjectPath(spec), a_sv()), ok, nm_err(reply),
+            timeout=30.0)
+
+
+def best_ap_for(wp, ssid_b):
+    best, bs = "/", -1
+    for p in AP_SETS.get(wp, set()):
+        a = P.get(p, {}).get(NM_AP, {})
+        if a.get("Ssid") is not None and bytes(bytearray(int(x) for x in a["Ssid"])) == ssid_b:
+            s = int(a.get("Strength", 0) or 0)
+            if s > bs:
+                best, bs = p, s
+    return best
+
+
+@command
+def cmd_deactivate(msg, reply):
+    u = str(msg.get("uuid", ""))
+    for a in build_active():
+        if a["uuid"] == u:
+            return nm_call(NM_PATH, NM_IF, "DeactivateConnection", "o", (dbus.ObjectPath(a["path"]),), lambda: reply(True),
+                           nm_err(reply))
+    reply(False, "not active")
+
+
+@command
+def cmd_disconnect_device(msg, reply):
+    """`disconnect_device {iface}`: the DEVICE's Disconnect, not the connection's deactivation. NetworkManager then autoconnects nothing
+    on that device until the user activates something; after a plain DeactivateConnection its policy joined another saved network 20 ms
+    later (the test bed's fourth run), so "pull the docked network off" never ended disconnected."""
+    wp = wifi_device_path(msg.get("iface")) if msg.get("iface") else wifi_device_path()
+    if wp is None:
+        return reply(False, "no Wi-Fi device")
+    nm_call(wp, NM_DEV, "Disconnect", "", (), lambda: reply(True), nm_err(reply))
+
+
+@command
+def cmd_delete(msg, reply):
+    prof = profile_by_uuid(str(msg.get("uuid", "")))
+    if prof is None:
+        return reply(False, "no such profile")
+    nm_call(prof["path"], NM_SETCONN, "Delete", "", (), lambda: reply(True), nm_err(reply))
+
+
+def ip4_dns_u32(ip):
+    return dbus.UInt32(struct.unpack("=I", socket.inet_aton(ip))[0])
+
+
+def apply_patch(st, patch):
+    if "ipv4" in patch:
+        p = patch["ipv4"]
+        s4 = sect(st, "ipv4")
+        method = str(p.get("method", "auto"))
+        s4["method"] = method
+        for k in ("addresses", "address-data", "gateway"):
+            s4.pop(k, None)
+        if method == "manual":
+            s4["address-data"] = dbus.Array([a_sv({"address": str(p["address"]), "prefix": dbus.UInt32(int(p.get("prefix", 24)))})],
+                                            signature="a{sv}")
+            if p.get("gateway"):
+                s4["gateway"] = str(p["gateway"])
+        dns = p.get("dns")
+        if dns is not None:
+            s4["dns"] = dbus.Array([ip4_dns_u32(x) for x in dns], signature="u")
+            if method == "auto":
+                s4["ignore-auto-dns"] = bool(dns)
+    if "ipv6" in patch:
+        sect(st, "ipv6")["method"] = str(patch["ipv6"].get("method", "auto"))
+    if "mac" in patch:
+        w = sect(st, "802-11-wireless")
+        m = str(patch["mac"])
+        if m in ("", "default"):
+            w.pop("cloned-mac-address", None)
+        else:
+            w["cloned-mac-address"] = m
+    if "metered" in patch:
+        sect(st, "connection")["metered"] = dbus.Int32(METERED_SET[str(patch["metered"])])
+    if "band" in patch:
+        w = sect(st, "802-11-wireless")
+        if patch["band"]:
+            w["band"] = str(patch["band"])
+        else:
+            w.pop("band", None)
+    if "bssid" in patch:
+        w = sect(st, "802-11-wireless")
+        if patch["bssid"]:
+            w["bssid"] = dbus.ByteArray(bytes(int(x, 16) for x in str(patch["bssid"]).split(":")))
+        else:
+            w.pop("bssid", None)
+    if "autoconnect" in patch:
+        sect(st, "connection")["autoconnect"] = bool(patch["autoconnect"])
+    if "priority" in patch:
+        sect(st, "connection")["autoconnect-priority"] = dbus.Int32(int(patch["priority"]))
+    if patch.get("psk"):         # a known network's new password (an empty one is "no change", never "open")
+        sec = sect(st, "802-11-wireless-security")
+        km = str(sec.get("key-mgmt", "") or "")
+        if km == "none":
+            sec["wep-key0"] = str(patch["psk"])
+        else:
+            if not km:
+                sec["key-mgmt"] = "wpa-psk"
+            sec["psk"] = str(patch["psk"])
+    if isinstance(patch.get("eap"), dict):      # the EAP login: password / identity / anonymousIdentity
+        x = sect(st, "802-1x")
+        for k, key in (("password", "password"), ("identity", "identity"), ("anonymousIdentity", "anonymous-identity")):
+            if patch["eap"].get(k):
+                x[key] = str(patch["eap"][k])
+    if "powersave" in patch:
+        sect(st, "802-11-wireless")["powersave"] = dbus.UInt32(int(patch["powersave"]))      # 2 disable, 3 enable
+    if patch.get("ssid"):
+        sect(st, "802-11-wireless")["ssid"] = dbus.ByteArray(str(patch["ssid"]).encode("utf-8"))
+
+
+@command
+def cmd_update(msg, reply):
+    patch = msg.get("patch") or {}
+    merge_update(str(msg.get("uuid", "")), lambda st: apply_patch(st, patch), reply)
+
+
+@command
+def cmd_secrets(msg, reply):
+    prof = profile_by_uuid(str(msg.get("uuid", "")))
+    if prof is None:
+        return reply(False, "no such profile")
+
+    def got(res):
+        sec = plain(res).get("802-11-wireless-security", {})
+        psk = sec.get("psk") or sec.get("wep-key0") or ""
+        reply(True, data={"psk": str(psk)})
+    nm_call(prof["path"], NM_SETCONN, "GetSecrets", "s", ("802-11-wireless-security",), got, nm_err(reply))
+
+
+@command
+def cmd_wifi_enabled(msg, reply):
+    nm_call(NM_PATH, PROPS, "Set", "ssv", (NM_IF, "WirelessEnabled", dbus.Boolean(bool(msg.get("on")), variant_level=1)),
+            lambda: reply(True), nm_err(reply))
+
+
+def ap_settings(ssid, psk, band):
+    ssid_b = str(ssid).encode("utf-8")
+    conn = {"id": "Hotspot", "uuid": str(uuidlib.uuid4()), "type": "802-11-wireless", "autoconnect": False}
+    w = {"ssid": dbus.ByteArray(ssid_b), "mode": "ap"}
+    if band:
+        w["band"] = str(band)
+    s = {"connection": a_sv(conn), "802-11-wireless": a_sv(w), "ipv4": a_sv({"method": "shared"}), "ipv6": a_sv({"method": "ignore"})}
+    if psk:
+        s["802-11-wireless-security"] = a_sv({"key-mgmt": "wpa-psk", "psk": str(psk)})
+    return s
+
+
+def hotspot_mutator(msg):
+    def mutate(st):
+        w = sect(st, "802-11-wireless")
+        if msg.get("ssid"):
+            w["ssid"] = dbus.ByteArray(str(msg["ssid"]).encode("utf-8"))
+        if msg.get("band"):
+            w["band"] = str(msg["band"])
+        if msg.get("psk"):
+            sec = sect(st, "802-11-wireless-security")
+            sec["key-mgmt"] = "wpa-psk"
+            sec["psk"] = str(msg["psk"])
+    return mutate
+
+
+@command
+def cmd_hotspot_config(msg, reply):
+    """Save the hotspot's name / password / band WITHOUT starting it: the profile `uuid` (or the first AP-mode one), else a new one."""
+    uuid = str(msg.get("uuid") or "")
+    prof = profile_by_uuid(uuid) if uuid else next((p for p in sorted(PROFILES.values(), key=lambda p: p["id"]) if p["mode"] == "ap"), None)
+    if uuid and prof is None:
+        return reply(False, "no such profile")
+    if prof is not None:
+        if prof["mode"] != "ap":
+            return reply(False, "not an access point profile")
+        return merge_update(prof["uuid"], hotspot_mutator(msg), lambda ok, error=None, data=None: reply(ok, error, data or {"uuid": prof["uuid"]}))
+    if not msg.get("ssid"):
+        return reply(False, "a new hotspot needs a name")
+    s = ap_settings(msg["ssid"], msg.get("psk"), msg.get("band"))
+    new_uuid = str(s["connection"]["uuid"])
+    nm_call(NM_PATH + "/Settings", NM_SETTINGS, "AddConnection", "a{sa{sv}}", (dbus.Dictionary(s, signature="sa{sv}"),),
+            lambda path: reply(True, data={"uuid": new_uuid, "created": True}), nm_err(reply))
+
+
+@command
+def cmd_hotspot(msg, reply):
+    wp = need_wifi(reply)
+    if not wp:
+        return
+    if not msg.get("on"):
+        for a in build_active():
+            prof = profile_by_uuid(a["uuid"])
+            if prof and prof["mode"] == "ap" and (not msg.get("uuid") or msg["uuid"] == a["uuid"]):
+                return nm_call(NM_PATH, NM_IF, "DeactivateConnection", "o", (dbus.ObjectPath(a["path"]),), lambda: reply(True),
+                               nm_err(reply))
+        return reply(True, data={"was": "off"})
+    uuid = msg.get("uuid")
+    prof = profile_by_uuid(str(uuid)) if uuid else None
+    if uuid and prof is None:
+        return reply(False, "no such profile")
+    if prof is None and not (msg.get("ssid") or msg.get("psk") or msg.get("band")):
+        prof = next((p for p in PROFILES.values() if p["mode"] == "ap" and p["id"] == "Hotspot"), None)
+
+    if prof is not None:
+        if prof["mode"] != "ap":
+            return reply(False, "not an access point profile")
+        return activate_on(prof, wp, "/", lambda active: reply(True, data={"active": str(active), "uuid": prof["uuid"]}), reply,
+                           mutate=hotspot_mutator(msg) if msg.get("ssid") or msg.get("psk") or msg.get("band") else None)
+    ssid = msg.get("ssid") or "laptop-hotspot"
+    s = ap_settings(ssid, msg.get("psk"), msg.get("band"))
+    uuid = str(s["connection"]["uuid"])
+    nm_call(NM_PATH, NM_IF, "AddAndActivateConnection2", "a{sa{sv}}ooa{sv}",
+            (dbus.Dictionary(s, signature="sa{sv}"), dbus.ObjectPath(wp), dbus.ObjectPath("/"), a_sv()),
+            lambda path, active, res: reply(True, data={"active": str(active), "uuid": uuid, "created": True}), nm_err(reply),
+            timeout=30.0)
+
+
+@command
+def cmd_stats(msg, reply):
+    iface = str(msg.get("iface", ""))
+    dp = device_path_by_iface(iface)
+    if dp is None:
+        return reply(False, "no such device")
+    ms = int(msg.get("ms", 0) or 0)
+    if ms <= 0:
+        STATS.pop(iface, None)
+    else:
+        STATS[iface] = ms
+    ensure(dp, [NM_STATS])
+
+    def after():
+        d = P.get(dp, {}).get(NM_STATS, {})
+        if ms > 0 and d:
+            emit({"t": "stats", "iface": iface, "rx": int(d.get("RxBytes", 0)), "tx": int(d.get("TxBytes", 0)), "atMs": now_ms()})
+        reply(True)
+    nm_call(dp, PROPS, "Set", "ssv", (NM_STATS, "RefreshRateMs", dbus.UInt32(max(0, ms), variant_level=1)),
+            lambda: GLib.timeout_add(50, guarded(lambda: (after(), False)[1])), nm_err(reply))
+
+
+IW_STANDARD_RE = re.compile(r"(EHT|HE|VHT)-MCS|\bMCS\b")
+
+
+def parse_iw_link(text):
+    r = {"standard": "", "dbm": None, "rxMbps": None, "txMbps": None, "bssid": "", "ssid": "", "freq": None, "connected": False}
+    m = re.match(r"Connected to ([0-9a-fA-F:]{17})", text)
+    if not m:
+        return r
+    r["connected"] = True
+    r["bssid"] = m.group(1).upper()
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("SSID:"):
+            r["ssid"] = line[5:].strip()
+        elif line.startswith("freq:"):
+            try:
+                r["freq"] = int(float(line[5:].strip()))
+            except Exception:
+                pass
+        elif line.startswith("signal:"):
+            mm = re.search(r"(-?\d+)\s*dBm", line)
+            if mm:
+                r["dbm"] = int(mm.group(1))
+        elif line.startswith("rx bitrate:") or line.startswith("tx bitrate:"):
+            mm = re.search(r":\s*([\d.]+)\s*MBit/s", line)
+            key = "rxMbps" if line.startswith("rx") else "txMbps"
+            if mm:
+                r[key] = float(mm.group(1))
+            tok = IW_STANDARD_RE.search(line)
+            if tok and not r["standard"]:
+                g = tok.group(1)
+                r["standard"] = {"EHT": "Wi-Fi 7", "HE": "Wi-Fi 6", "VHT": "Wi-Fi 5", None: "Wi-Fi 4"}.get(g)
+    if r["standard"] == "Wi-Fi 6" and (r["freq"] or 0) >= 5925:
+        r["standard"] = "Wi-Fi 6E"
+    return r
+
+
+@command
+def cmd_iw_link(msg, reply):
+    iface = str(msg.get("iface", ""))
+    if not re.match(r"^[A-Za-z0-9_.:-]{1,15}$", iface):
+        return reply(False, "bad interface name")
+
+    def run():
+        res = yield Run(["iw", "dev", iface, "link"], timeout_s=5.0)
+        return res
+
+    def done(res, cancelled):
+        if res is None:
+            return reply(False, "cancelled")
+        rc, out, err, timedout = res
+        if timedout or rc is None:
+            return reply(False, "iw timed out")
+        if rc != 0:
+            return reply(False, (err or out).strip()[:200] or "iw failed")
+        r = parse_iw_link(out)
+        r["iface"] = iface
+        emit(dict(r, t="link"))
+        reply(True, data=r)
+    Task(run(), done)
+
+
+def parse_iw_reg(text):
+    """`iw reg get` -> [{scope, country, selfManaged}]. A self-managed phy (iwlwifi's LAR) carries its own country; the global one says
+    `00` until a country is set."""
+    out, scope, selfm = [], "", False
+    for line in text.splitlines():
+        if not line.strip() or line[0] in " \t":
+            continue
+        t = line.strip()
+        m = re.match(r"^(global|phy#\d+)\s*(\(self-managed\))?\s*$", t)
+        if m:
+            scope, selfm = m.group(1), bool(m.group(2))
+            continue
+        m = re.match(r"^country ([A-Z0-9]{2}):", t)
+        if m and scope:
+            out.append({"scope": scope, "country": m.group(1), "selfManaged": selfm})
+    return out
+
+
+def reg_country(phys):
+    for want in (True, False):
+        for p in phys:
+            if p["selfManaged"] == want and p["country"] not in ("00", "99"):
+                return p["country"]
+    return ""
+
+
+def ask_reg(reply=None):
+    def run():
+        res = yield Run(["iw", "reg", "get"], timeout_s=5.0)
+        return res
+
+    def done(res, cancelled):
+        if res is None or res[0] != 0 or res[3]:
+            if reply:
+                reply(False, "iw reg get failed")
+            return
+        phys = parse_iw_reg(res[1])
+        REG["phys"], REG["country"] = phys, reg_country(phys)
+        emit({"t": "reg", "country": REG["country"], "phys": phys})
+        mark("wifi")
+        if reply:
+            reply(True, data={"country": REG["country"], "phys": phys})
+    Task(run(), done)
+
+
+@command
+def cmd_reg(msg, reply):
+    ask_reg(reply)
+
+
+def parse_iw_stations(text):
+    out, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"^Station ([0-9a-fA-F:]{17}) \(on ", line)
+        if m:
+            cur = {"mac": m.group(1).upper(), "dbm": None, "connectedS": 0}
+            out.append(cur)
+            continue
+        if cur is None:
+            continue
+        t = line.strip()
+        m = re.match(r"^signal:\s*(-?\d+)", t)
+        if m:
+            cur["dbm"] = int(m.group(1))
+        m = re.match(r"^connected time:\s*(\d+)", t)
+        if m:
+            cur["connectedS"] = int(m.group(1))
+    return out
+
+
+def read_leases(iface):
+    """dnsmasq's lease file for the hotspot (`<expiry> <mac> <ip> <name|*> <client id|*>`), if readable: mac -> {ip, name}."""
+    out = {}
+    try:
+        with open(os.path.join(LEASE_DIR, "dnsmasq-%s.leases" % iface), "r", encoding="utf-8", errors="replace") as f:
+            for line in f.read().splitlines():
+                w = line.split()
+                if len(w) >= 4 and re.match(r"^[0-9a-fA-F:]{17}$", w[1]):
+                    out[w[1].upper()] = {"ip": w[2], "name": "" if w[3] == "*" else w[3]}
+    except Exception:
+        pass
+    return out
+
+
+@command
+def cmd_stations(msg, reply):
+    iface = str(msg.get("iface", ""))
+    if not re.match(r"^[A-Za-z0-9_.:-]{1,15}$", iface):
+        return reply(False, "bad interface name")
+
+    def run():
+        res = yield Run(["iw", "dev", iface, "station", "dump"], timeout_s=5.0)
+        return res
+
+    def done(res, cancelled):
+        if res is None:
+            return reply(False, "cancelled")
+        rc, out, err, timedout = res
+        if timedout or rc is None:
+            return reply(False, "iw timed out")
+        if rc != 0:
+            return reply(False, (err or out).strip()[:200] or "iw failed")
+        leases = read_leases(iface)
+        v = []
+        for st in parse_iw_stations(out):
+            l = leases.get(st["mac"], {})
+            v.append({"mac": st["mac"], "dbm": st["dbm"], "connectedS": st["connectedS"], "ip": l.get("ip", ""), "name": l.get("name", "")})
+        emit({"t": "stations", "iface": iface, "v": v})
+        reply(True, data={"iface": iface, "v": v})
+    Task(run(), done)
+
+
+# ---- BlueZ: a read-only snapshot (adapter + devices) ---------------------------------------------------------------------------
+BZ = {}                  # object path -> {interface: props}  (Adapter1 and Device1 only)
+BZ_OWNED = {"v": False}
+BZ_POLL = {"tid": 0}
+
+
+def rfkill_hard():
+    """Is a Bluetooth radio HARD blocked (a switch, the firmware)? sysfs, no fork, no root; BlueZ says `off-blocked` for either kind."""
+    try:
+        for d in sorted(os.listdir(RFKILL_DIR)):
+            base = os.path.join(RFKILL_DIR, d)
+            with open(os.path.join(base, "type")) as f:
+                if f.read().strip() != "bluetooth":
+                    continue
+            with open(os.path.join(base, "hard")) as f:
+                if f.read().strip() == "1":
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def build_bt():
+    adapters = sorted(p for p, e in BZ.items() if BZ_ADAPTER in e)
+    if not BZ_OWNED["v"] or not adapters:
+        return {"present": False, "address": "", "name": "", "powered": False, "powerState": "", "softBlocked": False,
+                "hardBlocked": False, "discovering": False, "discoverable": False, "devices": []}
+    ap = adapters[0]
+    a = BZ[ap][BZ_ADAPTER]
+    ps = str(a.get("PowerState", "") or "")
+    blocked = ps == "off-blocked"
+    hard = rfkill_hard() if blocked else False
+    devs = []
+    for p in sorted(BZ):
+        d = BZ[p].get(BZ_DEVICE)
+        if d is None or not p.startswith(ap + "/"):
+            continue
+        devs.append({"address": mac_of(d.get("Address", "")), "name": str(d.get("Alias") or d.get("Name") or ""),
+                     "paired": bool(d.get("Paired", False)), "connected": bool(d.get("Connected", False)),
+                     "rssi": int(d["RSSI"]) if "RSSI" in d else None})
+    bz_hard_watch(blocked)
+    return {"present": True, "address": mac_of(a.get("Address", "")), "name": str(a.get("Alias") or a.get("Name") or ""),
+            "powered": bool(a.get("Powered", False)), "powerState": ps, "softBlocked": blocked and not hard, "hardBlocked": hard,
+            "discovering": bool(a.get("Discovering", False)), "discoverable": bool(a.get("Discoverable", False)), "devices": devs}
+
+
+def bz_hard_watch(blocked):
+    """A switch flipped under a blocked radio sends BlueZ nothing, so while (and only while) it is `off-blocked` the rfkill files are
+    looked at again every few seconds."""
+    if blocked and not BZ_POLL["tid"]:
+        def look():
+            if not [1 for e in BZ.values() if e.get(BZ_ADAPTER, {}).get("PowerState") == "off-blocked"]:
+                BZ_POLL["tid"] = 0
+                return False
+            mark("bt")
+            return True
+        BZ_POLL["tid"] = GLib.timeout_add(int(os.environ.get("AERIAL_RFKILL_POLL_MS", "3000")), guarded_keep(look))
+    elif not blocked and BZ_POLL["tid"]:
+        GLib.source_remove(BZ_POLL["tid"])
+        BZ_POLL["tid"] = 0
+
+
+@guarded
+def bz_take(objs):
+    BZ.clear()
+    for path, ifaces in objs.items():
+        for i, props in ifaces.items():
+            if str(i) in (BZ_ADAPTER, BZ_DEVICE):
+                BZ.setdefault(str(path), {})[str(i)] = {str(k): v for k, v in props.items()}
+    mark("bt")
+
+
+def bz_walk():
+    call(BLUEZ_NAME, "/", OBJMAN, "GetManagedObjects", "", (), bz_take, lambda e: (BZ.clear(), mark("bt")), timeout=10.0)
+
+
+@guarded
+def on_bz_owner(owner):
+    up = bool(owner)
+    if up == BZ_OWNED["v"]:
+        return
+    BZ_OWNED["v"] = up
+    if up:
+        bz_walk()
+    else:
+        BZ.clear()
+        mark("bt")
+
+
+@guarded
+def bz_changed(path, iface, changed, invalidated):
+    ent = BZ.get(path, {}).get(iface)
+    if ent is None:
+        return
+    for k, v in changed.items():
+        ent[str(k)] = v
+    for k in invalidated or []:
+        ent.pop(str(k), None)
+    mark("bt")
+
+
+@guarded
+def on_bz_added(path, ifaces):
+    for i, props in ifaces.items():
+        if str(i) in (BZ_ADAPTER, BZ_DEVICE):
+            BZ.setdefault(str(path), {})[str(i)] = {str(k): v for k, v in props.items()}
+    mark("bt")
+
+
+@guarded
+def on_bz_removed(path, ifaces):
+    ent = BZ.get(str(path))
+    if ent is not None:
+        for i in ifaces:
+            ent.pop(str(i), None)
+        if not ent:
+            BZ.pop(str(path), None)
+    mark("bt")
+
+
+@command
+def cmd_bt(msg, reply):
+    bz_walk()
+    reply(True)
+
+
+# ---- BlueZ agent ---------------------------------------------------------------------------------------------------------------
+class Rejected(dbus.DBusException):
+    _dbus_error_name = "org.bluez.Error.Rejected"
+
+
+class Canceled(dbus.DBusException):
+    _dbus_error_name = "org.bluez.Error.Canceled"
+
+
+AGENT_TIMEOUT_MS = int(os.environ.get("AERIAL_AGENT_TIMEOUT_MS", "60000"))   # a question nobody answers is rejected (60 s)
+AGENT = {"obj": None, "registered": False, "rid": 0, "pending": {}}
+
+
+def device_addr(path):
+    m = re.search(r"dev_([0-9A-Fa-f_]{17})$", str(path))
+    return m.group(1).replace("_", ":").upper() if m else str(path)
+
+
+class Agent(dbus.service.Object):
+    def _ask(self, kind, device, code, reply_cb, error_cb, answer):
+        AGENT["rid"] += 1
+        rid = AGENT["rid"]
+
+        def timeout():
+            p = AGENT["pending"].pop(rid, None)
+            if p:
+                emit({"t": "agent", "rid": rid, "kind": "cancel", "device": device_addr(device), "code": ""})
+                error_cb(Rejected("no answer in 60 s"))
+            return False
+        tid = GLib.timeout_add(AGENT_TIMEOUT_MS, guarded(timeout))
+        AGENT["pending"][rid] = {"reply": reply_cb, "error": error_cb, "answer": answer, "tid": tid, "device": str(device)}
+        emit({"t": "agent", "rid": rid, "kind": kind, "device": device_addr(device), "code": code})
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="", out_signature="")
+    def Release(self):
+        for rid in list(AGENT["pending"]):
+            agent_drop(rid, "cancel")
+        AGENT["registered"] = False
+        log("info", "bluez released the agent")
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="o", out_signature="s", async_callbacks=("reply_cb", "error_cb"))
+    @guarded
+    def RequestPinCode(self, device, reply_cb, error_cb):
+        self._ask("pin", device, "", reply_cb, error_cb, lambda v: str(v or ""))
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="os", out_signature="")
+    @guarded
+    def DisplayPinCode(self, device, pincode):
+        AGENT["rid"] += 1
+        emit({"t": "agent", "rid": AGENT["rid"], "kind": "display", "device": device_addr(device), "code": str(pincode)})
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="o", out_signature="u", async_callbacks=("reply_cb", "error_cb"))
+    @guarded
+    def RequestPasskey(self, device, reply_cb, error_cb):
+        self._ask("passkey", device, "", reply_cb, error_cb, lambda v: dbus.UInt32(int(v)))
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="ouq", out_signature="")
+    @guarded
+    def DisplayPasskey(self, device, passkey, entered):
+        AGENT["rid"] += 1
+        emit({"t": "agent", "rid": AGENT["rid"], "kind": "display", "device": device_addr(device), "code": "%06d" % int(passkey)})
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="ou", out_signature="", async_callbacks=("reply_cb", "error_cb"))
+    @guarded
+    def RequestConfirmation(self, device, passkey, reply_cb, error_cb):
+        self._ask("confirm", device, "%06d" % int(passkey), reply_cb, error_cb, lambda v: None)
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="o", out_signature="", async_callbacks=("reply_cb", "error_cb"))
+    @guarded
+    def RequestAuthorization(self, device, reply_cb, error_cb):
+        self._ask("authorize", device, "", reply_cb, error_cb, lambda v: None)
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="os", out_signature="", async_callbacks=("reply_cb", "error_cb"))
+    @guarded
+    def AuthorizeService(self, device, uuid, reply_cb, error_cb):
+        self._ask("authorize", device, str(uuid), reply_cb, error_cb, lambda v: None)
+
+    @dbus.service.method(BLUEZ_AGENT_IF, in_signature="", out_signature="")
+    @guarded
+    def Cancel(self):
+        for rid in list(AGENT["pending"]):
+            agent_drop(rid, "cancel")
+
+
+def agent_drop(rid, why):
+    p = AGENT["pending"].pop(rid, None)
+    if not p:
+        return
+    GLib.source_remove(p["tid"])
+    emit({"t": "agent", "rid": rid, "kind": why, "device": device_addr(p["device"]), "code": ""})
+    p["error"](Canceled("cancelled"))
+
+
+@command
+def cmd_agent(msg, reply):
+    on = bool(msg.get("on"))
+    if on == AGENT["registered"]:
+        return reply(True, data={"already": True})
+    if on:
+        if AGENT["obj"] is None:
+            AGENT["obj"] = Agent(BUS, AGENT_PATH)
+
+        def step2():
+            call(BLUEZ_NAME, "/org/bluez", "org.bluez.AgentManager1", "RequestDefaultAgent", "o", (dbus.ObjectPath(AGENT_PATH),),
+                 lambda: (AGENT.update(registered=True), reply(True)), nm_err(reply))
+        call(BLUEZ_NAME, "/org/bluez", "org.bluez.AgentManager1", "RegisterAgent", "os",
+             (dbus.ObjectPath(AGENT_PATH), "KeyboardDisplay"), step2, nm_err(reply))
+    else:
+        for rid in list(AGENT["pending"]):
+            agent_drop(rid, "cancel")
+
+        def gone(*_):
+            AGENT["registered"] = False
+            reply(True)
+        call(BLUEZ_NAME, "/org/bluez", "org.bluez.AgentManager1", "UnregisterAgent", "o", (dbus.ObjectPath(AGENT_PATH),), gone,
+             lambda e: (AGENT.update(registered=False), reply(True, data={"note": dbus_text(e)})))
+
+
+@command
+def cmd_agent_reply(msg, reply):
+    rid = int(msg.get("rid", 0))
+    p = AGENT["pending"].pop(rid, None)
+    if p is None:
+        return reply(False, "no such question (answered, cancelled or timed out)")
+    GLib.source_remove(p["tid"])
+    if not msg.get("accept"):
+        p["error"](Rejected("rejected by the user"))
+        return reply(True)
+    try:
+        val = p["answer"](msg.get("value"))
+    except Exception as e:
+        p["error"](Rejected("bad answer"))
+        return reply(False, "bad answer: %s" % e)
+    if val is None:
+        p["reply"]()
+    else:
+        p["reply"](val)
+    reply(True)
+
+
+# ---- the keyring ---------------------------------------------------------------------------------------------------------------
+# Proton's CLI keeps its sign-in in the login keyring and opens it on EVERY command, `status` too; while the keyring is locked the Secret
+# Service then raises its password window. The shell starts under the boot lock, a second or more before the password there opens the
+# keyring (SDDM's autologin gave it none), and an open window does not go when the keyring is opened by PAM: it stood on the desktop after
+# every boot (2026-11-22). So the commands the shell runs BY ITSELF wait for an open keyring; one the user clicked may ask.
+# gnome-keyring signals NOTHING when PAM opens it (measured, 51.1; a Lock over D-Bus does signal), so a wait looks again by itself.
+SECRETS_NAME = "org.freedesktop.secrets"
+SECRETS_PATH = "/org/freedesktop/secrets/aliases/default"
+SECRETS_COLL = "org.freedesktop.Secret.Collection"
+KEYRING = {"bus": None, "waiting": False}
+KEYRING_POLL_MS = int(os.environ.get("AERIAL_KEYRING_POLL_MS", "2000"))
+KEYRING_LOCKED = "The keyring is locked"
+
+
+def keyring_connect():
+    """The session bus, for the one question below (the module's own bus is the system's). None: no session bus, nothing to ask."""
+    addr = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
+    try:
+        KEYRING["bus"] = dbus.bus.BusConnection(addr) if addr else None
+    except Exception as e:
+        log("warn", "no session bus: %s" % e)
+
+
+def keyring_locked(cb):
+    """cb(True) while the default collection is locked (or the service does not answer in time), else cb(False): open, or no Secret
+    Service at all. A read: it never starts the service and never prompts."""
+    if KEYRING["bus"] is None:
+        return cb(False)
+
+    def answer(m):
+        if isinstance(m, dbus.lowlevel.MethodReturnMessage):
+            v = m.get_args_list()
+            return cb(bool(v and v[0]))
+        name = m.get_error_name() if isinstance(m, dbus.lowlevel.ErrorMessage) else ""
+        cb(str(name).endswith((".NoReply", ".Timeout", ".TimedOut")))
+    try:
+        q = dbus.lowlevel.MethodCallMessage(SECRETS_NAME, SECRETS_PATH, PROPS, "Get")
+        q.set_auto_start(False)
+        q.append(SECRETS_COLL, "Locked", signature="ss")
+        KEYRING["bus"].send_message_with_reply(q, guarded(answer), 3.0)
+    except Exception as e:
+        log("warn", "the keyring could not be asked: %s" % e)
+        cb(False)
+
+
+def keyring_wait():
+    """A read was refused: say so once, look again until the keyring is open, and say that."""
+    if KEYRING["waiting"]:
+        return
+    KEYRING["waiting"] = True
+    emit({"t": "keyring", "locked": True})
+
+    def seen(locked):
+        if locked:
+            GLib.timeout_add(KEYRING_POLL_MS, guarded(look))
+            return
+        KEYRING["waiting"] = False
+        emit({"t": "keyring", "locked": False})
+
+    def look():
+        keyring_locked(seen)
+        return False
+    GLib.timeout_add(KEYRING_POLL_MS, guarded(look))
+
+
+# ---- ProtonVPN -----------------------------------------------------------------------------------------------------------------
+PROTON = {"queue": [], "busy": False}
+PROTON_READS = ("status", "config")        # what the shell asks by itself: never while the keyring is locked
+SAFE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 #._,'()/-]{0,63}$")
+PROTON_KEYS = ("netshield", "kill-switch", "port-forwarding", "custom-dns", "vpn-accelerator", "moderate-nat", "ipv6",
+               "anonymous-crash-reports")
+
+
+def parse_proton_status(text):
+    kv = {}
+    for line in text.splitlines():
+        m = re.match(r"^\s*([A-Za-z ]+?):\s*(.*?)\s*$", line)
+        if m:
+            kv[m.group(1).strip().lower()] = m.group(2)
+    state = {"connected": "connected", "disconnected": "disconnected"}.get(kv.get("status", "").lower(), "unknown")
+    return {"state": state, "server": parse_proton_server(kv.get("server", "")), "load": parse_load(kv.get("load", "")),
+            "protocol": kv.get("protocol", "")}
+
+
+def parse_load(s):
+    m = re.match(r"^(\d+)\s*%", s or "")
+    return int(m.group(1)) if m else None
+
+
+def parse_proton_server(s):
+    s = (s or "").strip().rstrip(".").strip()
+    if not s:
+        return None
+    m = re.match(r"^(\S+) in (.+?)(?:, via (.+))?$", s)
+    if not m:
+        return {"name": s, "city": "", "country": "", "via": ""}
+    city, rest = m.group(2), ""
+    country = ""
+    if "," in city and not m.group(3):
+        city, country = [x.strip() for x in city.rsplit(",", 1)]
+    return {"name": m.group(1), "city": city, "country": country, "via": m.group(3) or ""}
+
+
+def parse_proton_config(text):
+    out = {}
+    seen_rule = False
+    for line in text.splitlines():
+        if re.match(r"^-{3,}\s+-{3,}", line):
+            seen_rule = True
+            continue
+        if not seen_rule:
+            continue
+        if not line.strip():
+            if out:
+                break
+            continue
+        parts = re.split(r"\s{2,}", line.strip(), maxsplit=1)
+        if len(parts) == 2:
+            out[parts[0]] = parts[1].strip()
+    return out
+
+
+def proton_argv(action, args):
+    argv, to = _proton_argv(action, args)
+    if args.get("timeoutS"):
+        to = max(1, min(120, float(args["timeoutS"])))
+    return argv, to
+
+
+def _proton_argv(action, args):
+    if action == "status":
+        return ["protonvpn", "status"], 15
+    if action == "config":
+        return ["protonvpn", "config", "list"], 15
+    if action == "disconnect":
+        return ["protonvpn", "disconnect"], 20
+    if action == "set":
+        k, v = str(args.get("key", "")), str(args.get("value", ""))
+        if k not in PROTON_KEYS or not SAFE_ARG.match(v):
+            raise ValueError("bad setting")
+        return ["protonvpn", "config", "set", k, v], 15
+    if action == "connect":
+        argv = ["protonvpn", "connect"]
+        for key, flag in (("country", "--country"), ("city", "--city")):
+            if args.get(key):
+                v = str(args[key])
+                if not SAFE_ARG.match(v):
+                    raise ValueError("bad %s" % key)
+                argv += [flag, v]
+        for key, flag in (("securecore", "--securecore"), ("p2p", "--p2p"), ("tor", "--tor"), ("random", "--random")):
+            if args.get(key):
+                argv.append(flag)
+        if args.get("server"):
+            v = str(args["server"])
+            if not SAFE_ARG.match(v):
+                raise ValueError("bad server")
+            argv.append(v)
+        return argv, 60
+    raise ValueError("unknown action")
+
+
+@command
+def cmd_proton(msg, reply):
+    action = str(msg.get("action", ""))
+    args = msg.get("args") or {}
+    try:
+        argv, to = proton_argv(action, args)
+    except ValueError as e:
+        return reply(False, str(e))
+    PROTON["queue"].append((action, argv, to, reply))
+    proton_next()
+
+
+def proton_next():
+    if PROTON["busy"] or not PROTON["queue"]:
+        return
+    action, argv, to, reply = PROTON["queue"].pop(0)
+    PROTON["busy"] = True
+
+    def run():
+        return (yield Run(argv, timeout_s=to))
+
+    def done(res, cancelled):
+        PROTON["busy"] = False
+        guarded(proton_finish)(action, res, reply)
+        GLib.idle_add(lambda: (proton_next(), False)[1])
+
+    def go(locked):
+        if not locked:
+            return Task(run(), done)
+        PROTON["busy"] = False
+        keyring_wait()
+        reply(False, KEYRING_LOCKED)
+        GLib.idle_add(lambda: (proton_next(), False)[1])
+    if action in PROTON_READS:
+        keyring_locked(go)
+    else:
+        go(False)
+
+
+def proton_finish(action, res, reply):
+    if res is None:
+        return reply(False, "cancelled")
+    rc, out, err, timedout = res
+    if timedout:
+        return reply(False, "protonvpn timed out")
+    if rc == 127:
+        return reply(False, "protonvpn is not installed (%s)" % err.strip()[:100])
+    # The CLI's exit status is NOT a fact: `disconnect` exits 1 when it worked (S0). The words are.
+    if action == "status":
+        st = parse_proton_status(out)
+        ok = "status:" in out.lower()
+        emit(dict(st, t="proton", raw=out))
+        return reply(ok, None if ok else (err or out).strip()[:200] or "no status", data=st)
+    if action == "config":
+        cfg = parse_proton_config(out)
+        ok = bool(cfg)
+        emit(dict(cfg, t="proton_config"))
+        return reply(ok, None if ok else (err or out).strip()[:200] or "no config", data=cfg)
+    if action == "disconnect":
+        ok = bool(re.search(r"\bDisconnected\b", out))
+        if ok:
+            emit({"t": "proton", "state": "disconnected", "server": None, "load": None, "protocol": "", "raw": out})
+        return reply(ok, None if ok else (err or out).strip()[:200] or "disconnect failed")
+    if action == "connect":
+        m = re.search(r"Connected to (.+?)\.?\s*$", out, re.M)
+        ok = bool(m)
+        if ok:
+            emit({"t": "proton", "state": "connected", "server": parse_proton_server(m.group(1)), "load": None, "protocol": "",
+                  "raw": out})
+        return reply(ok, None if ok else (out + "\n" + err).strip()[-300:] or "connect failed",
+                     data={"server": parse_proton_server(m.group(1))} if ok else None)
+    ok = rc == 0 and ("has been set" in out or not err.strip() or True)
+    return reply(rc == 0, None if rc == 0 else (err or out).strip()[:200] or "failed", data={"text": out.strip()})
+
+
+# ---- the catalogue -------------------------------------------------------------------------------------------------------------
+ISO_NAMES = {
+    "AD": "Andorra", "AE": "United Arab Emirates", "AF": "Afghanistan", "AL": "Albania", "AM": "Armenia", "AO": "Angola",
+    "AR": "Argentina", "AT": "Austria", "AU": "Australia", "AZ": "Azerbaijan", "BA": "Bosnia and Herzegovina",
+    "BD": "Bangladesh", "BE": "Belgium", "BG": "Bulgaria", "BH": "Bahrain", "BN": "Brunei", "BO": "Bolivia", "BR": "Brazil",
+    "BT": "Bhutan", "BY": "Belarus", "CA": "Canada", "CH": "Switzerland", "CL": "Chile", "CM": "Cameroon", "CN": "China",
+    "CO": "Colombia", "CR": "Costa Rica", "CY": "Cyprus", "CZ": "Czechia", "DE": "Germany", "DK": "Denmark",
+    "DO": "Dominican Republic", "DZ": "Algeria", "EC": "Ecuador", "EE": "Estonia", "EG": "Egypt", "ES": "Spain",
+    "ET": "Ethiopia", "FI": "Finland", "FR": "France", "GB": "United Kingdom", "GE": "Georgia", "GH": "Ghana", "GR": "Greece",
+    "GT": "Guatemala", "HK": "Hong Kong", "HN": "Honduras", "HR": "Croatia", "HU": "Hungary", "ID": "Indonesia",
+    "IE": "Ireland", "IL": "Israel", "IM": "Isle of Man", "IN": "India", "IQ": "Iraq", "IR": "Iran", "IS": "Iceland",
+    "IT": "Italy", "JM": "Jamaica", "JO": "Jordan", "JP": "Japan", "KE": "Kenya", "KG": "Kyrgyzstan", "KH": "Cambodia",
+    "KR": "South Korea", "KW": "Kuwait", "KZ": "Kazakhstan", "LA": "Laos", "LB": "Lebanon", "LI": "Liechtenstein",
+    "LK": "Sri Lanka", "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "MA": "Morocco", "MC": "Monaco", "MD": "Moldova",
+    "ME": "Montenegro", "MK": "North Macedonia", "MM": "Myanmar", "MN": "Mongolia", "MO": "Macao", "MT": "Malta",
+    "MX": "Mexico", "MY": "Malaysia", "NG": "Nigeria", "NI": "Nicaragua", "NL": "Netherlands", "NO": "Norway", "NP": "Nepal",
+    "NZ": "New Zealand", "OM": "Oman", "PA": "Panama", "PE": "Peru", "PH": "Philippines", "PK": "Pakistan", "PL": "Poland",
+    "PR": "Puerto Rico", "PT": "Portugal", "PY": "Paraguay", "QA": "Qatar", "RO": "Romania", "RS": "Serbia", "RU": "Russia",
+    "SA": "Saudi Arabia", "SE": "Sweden", "SG": "Singapore", "SI": "Slovenia", "SK": "Slovakia", "SV": "El Salvador",
+    "TH": "Thailand", "TN": "Tunisia", "TR": "Turkey", "TW": "Taiwan", "TZ": "Tanzania", "UA": "Ukraine", "UG": "Uganda",
+    "US": "United States", "UY": "Uruguay", "UZ": "Uzbekistan", "VE": "Venezuela", "VN": "Vietnam", "ZA": "South Africa",
+    "ZM": "Zambia", "ZW": "Zimbabwe", "CD": "DR Congo", "CI": "Cote d'Ivoire", "CU": "Cuba", "ER": "Eritrea", "GA": "Gabon",
+    "GL": "Greenland", "GN": "Guinea", "HT": "Haiti", "KM": "Comoros", "LY": "Libya", "MR": "Mauritania", "MU": "Mauritius",
+    "MZ": "Mozambique", "PG": "Papua New Guinea", "PS": "Palestine", "RW": "Rwanda", "SD": "Sudan", "SN": "Senegal",
+    "SO": "Somalia", "SS": "South Sudan", "SY": "Syria", "TD": "Chad", "TG": "Togo", "TJ": "Tajikistan", "TM": "Turkmenistan",
+    "UK": "United Kingdom", "XK": "Kosovo", "YE": "Yemen"}
+
+
+def feature_names(mask):
+    return [n for n, b in FEATURE_BITS if mask & b]
+
+
+def digest_serverlist(path):
+    with open(path, "rb") as f:
+        d = json.load(f)
+    tier = int(d.get("MaxTier", 0) or 0)
+    countries = {}
+    for s in d.get("LogicalServers", []):
+        if int(s.get("Tier", 0) or 0) > tier:
+            continue
+        cc = str(s.get("ExitCountry", "")).upper()
+        if not cc:
+            continue
+        c = countries.setdefault(cc, {"cities": {}})
+        city = str(s.get("City") or "") or "-"
+        loc = s.get("Location") or {}
+        ct = c["cities"].setdefault(city, {"lat": [], "lon": [], "servers": []})
+        if "Lat" in loc and "Long" in loc:
+            ct["lat"].append(float(loc["Lat"]))
+            ct["lon"].append(float(loc["Long"]))
+        ct["servers"].append({"name": str(s.get("Name", "")), "load": int(s.get("Load", 0) or 0),
+                              "features": feature_names(int(s.get("Features", 0) or 0)), "status": int(s.get("Status", 0) or 0)})
+    out = []
+
+    def mean(a):
+        return round(sum(a) / len(a), 3) if a else 0.0
+    for cc in sorted(countries):
+        cities = []
+        for name in sorted(countries[cc]["cities"]):
+            ct = countries[cc]["cities"][name]
+            ct["servers"].sort(key=lambda x: (x["load"], x["name"]))
+            cities.append({"name": name, "lat": mean(ct["lat"]), "lon": mean(ct["lon"]), "servers": ct["servers"]})
+        servers = [s for c in cities for s in c["servers"]]
+        feats = sorted({f for s in servers for f in s["features"]}, key=lambda n: [x[0] for x in FEATURE_BITS].index(n))
+        lat = [c["lat"] for c in cities if c["lat"] or c["lon"]]
+        lon = [c["lon"] for c in cities if c["lat"] or c["lon"]]
+        out.append({"code": cc, "name": ISO_NAMES.get(cc, cc), "lat": mean(lat), "lon": mean(lon), "servers": len(servers),
+                    "minLoad": min((s["load"] for s in servers), default=0), "features": feats, "cities": cities})
+    return {"tier": tier, "countries": out}
+
+
+def cache_file():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+    return os.path.join(base, "lares", "aerial", "catalog.json")
+
+
+def load_catalog(path):
+    st = os.stat(path)
+    key = {"srcMtime": int(st.st_mtime), "srcSize": int(st.st_size), "src": path}
+    cf = cache_file()
+    try:
+        with open(cf, "r", encoding="utf-8") as f:
+            c = json.load(f)
+        if all(c.get(k) == v for k, v in key.items()):
+            return {"path": path, "mtime": key["srcMtime"], "tier": c["tier"], "countries": c["countries"], "cached": True}
+    except Exception:
+        pass
+    dig = digest_serverlist(path)
+    try:
+        os.makedirs(os.path.dirname(cf), exist_ok=True)
+        tmp = cf + ".tmp%d" % os.getpid()
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(dict(key, tier=dig["tier"], countries=dig["countries"]), f, separators=(",", ":"), ensure_ascii=False)
+        os.replace(tmp, cf)
+    except Exception as e:
+        log("warn", "catalog cache not written: %s" % e)
+    return {"path": path, "mtime": key["srcMtime"], "tier": dig["tier"], "countries": dig["countries"], "cached": False}
+
+
+@command
+def cmd_catalog(msg, reply):
+    path = str(msg.get("path", ""))
+    if not path:
+        path = os.path.join(os.path.expanduser("~"), ".cache", "Proton", "VPN", "serverlist.json")
+    if not os.path.isfile(path):
+        return reply(False, "no server list at %s" % path)
+    t0 = time.time()
+
+    def work():
+        return load_catalog(path)
+
+    def run():
+        return (yield InThread(work, timeout_s=180.0))
+
+    def done(res, cancelled):
+        if not res or not res[0]:
+            return reply(False, "catalog: %s" % (res[1] if res else "cancelled"))
+        c = res[1]
+        emit(dict(c, t="catalog", digestMs=int((time.time() - t0) * 1000)))
+        reply(True, data={"countries": len(c["countries"]), "cached": c["cached"]})
+    Task(run(), done)
+
+
+# ---- health pads ---------------------------------------------------------------------------------------------------------------
+def pad_event(pid, state, detail, ms):
+    emit({"t": "pad", "id": pid, "state": state, "detail": detail, "ms": int(ms)})
+
+
+def carrying_device():
+    """The device that carries the traffic: an activated wifi / wired device, never a virtual one."""
+    best = None
+    for p in device_paths():
+        d = device_dict(p)
+        if d["type"] not in ("wifi", "ethernet"):
+            continue
+        if d["stateCode"] == 100:
+            if best is None or d["type"] == "ethernet":
+                best = d
+    if best is None:
+        wp = wifi_device_path()
+        if wp:
+            best = device_dict(wp)
+    return best
+
+
+def pad_link():
+    d = carrying_device()
+    if d is None:
+        return "fail", "no network device"
+    if d["stateCode"] == 100:
+        return "ok", "%s is up" % d["iface"]
+    if 40 <= d["stateCode"] < 100:
+        return "warn", "%s is %s" % (d["iface"], d["state"])
+    return "fail", "%s is %s (%s)" % (d["iface"], d["state"], d["stateReason"])
+
+
+def pad_addr():
+    d = carrying_device()
+    if d is None or d["stateCode"] < 70:
+        return "fail", "no address yet"
+    v4 = [a for a in (d["ip4"] or {}).get("addresses", []) if not a["address"].startswith("169.254.")]
+    if v4:
+        return "ok", "%s/%d" % (v4[0]["address"], v4[0]["prefix"])
+    v6 = [a for a in (d["ip6"] or {}).get("addresses", []) if not a["address"].lower().startswith("fe80")]
+    if v6:
+        return "warn", "IPv6 only: %s" % v6[0]["address"]
+    return "fail", "no address"
+
+
+def pad_gateway_target():
+    d = carrying_device()
+    return ((d["ip4"] or {}).get("gateway") or "") if d else ""
+
+
+# A test is a FAIL only when it failed repeatedly: one lost ping is not a dead gateway. The tries of each pad, and the pause between two.
+PAD_TRIES = {"gateway": 3, "dns": 2, "net": 2}
+PAD_RETRY_MS = int(os.environ.get("AERIAL_PAD_RETRY_MS", "700"))
+
+
+def pad_once(pid, url, host):
+    """A generator: ONE try of a pad. Returns (state, detail); emits the portal fact for the net pad."""
+    if pid == "link":
+        return pad_link()
+    if pid == "addr":
+        return pad_addr()
+    if pid == "gateway":
+        gw = pad_gateway_target()
+        if not gw:
+            return "fail", "no gateway"
+        rc, out, err, to = yield Run(["ping", "-c1", "-W1", gw], timeout_s=3.5)
+        m = re.search(r"time[=<]([\d.]+)\s*ms", out or "")
+        if rc == 0:
+            return "ok", "%s answers%s" % (gw, " in %s ms" % m.group(1) if m else "")
+        return "fail", "%s does not answer" % gw
+    if pid == "dns":
+        ok, val = yield InThread(lambda: socket.getaddrinfo(host, 80, proto=socket.IPPROTO_TCP)[0][4][0], timeout_s=3.0)
+        return ("ok", "%s is %s" % (host, val)) if ok else ("fail", "cannot resolve %s" % host if val != "timeout" else
+                                                            "no answer for %s in 3 s" % host)
+    if pid == "net":
+        ok, val = yield InThread(lambda: http_check(url), timeout_s=7.0)
+        if not ok:
+            return "fail", "no internet (%s)" % val
+        kind, text, loc = val
+        if kind == "online":
+            emit({"t": "portal", "present": False, "url": ""})
+            return "ok", "internet reachable"
+        if kind == "portal":
+            emit({"t": "portal", "present": True, "url": loc})
+            return "warn", "a login page stands in the way"
+        return "fail", text
+    return "fail", "unknown pad"
+
+
+def run_pads(ids, url, host):
+    """A generator: the pads in order, stopping at the first fail. Returns the results. A pad stays `testing` between its tries and
+    says `fail` only after the last one; a pass on a later try is a plain `ok`."""
+    results = []
+    for pid in ids:
+        pad_event(pid, "testing", "", 0)
+        t0 = time.time()
+        tries = PAD_TRIES.get(pid, 1)
+        for attempt in range(tries):
+            if attempt:
+                yield Sleep(PAD_RETRY_MS)
+            state, detail = yield from pad_once(pid, url, host)
+            if state != "fail":
+                break
+        ms = (time.time() - t0) * 1000
+        pad_event(pid, state, detail, ms)
+        results.append({"id": pid, "state": state, "detail": detail, "ms": int(ms)})
+        if state == "fail":
+            break
+    return results
+
+
+def http_check(url):
+    """GET with NO redirect following: 200 + the NetworkManager body is online; a 3xx is a portal; else a failure."""
+    import http.client
+    import urllib.parse
+    u = urllib.parse.urlsplit(url)
+    cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+    conn = cls(u.hostname, u.port, timeout=5)
+    try:
+        conn.request("GET", (u.path or "/") + ("?" + u.query if u.query else ""), headers={"User-Agent": "lares-aerial", "Connection": "close"})
+        r = conn.getresponse()
+        body = r.read(2048).decode("utf-8", "replace")
+        if r.status == 200 and "NetworkManager is online" in body:
+            return ("online", "", "")
+        if 300 <= r.status < 400:
+            return ("portal", "", r.getheader("Location", "") or "")
+        return ("other", "HTTP %d" % r.status if r.status != 200 else "unexpected answer", "")
+    finally:
+        conn.close()
+
+
+@command
+def cmd_pad(msg, reply):
+    # CONTRACT QUESTION: `pad {id}` collides with the request's own `id`. The pad's name is `pad` (also `which`); a string `id` is
+    # still taken for a client that numbers its requests differently.
+    pid = str(msg.get("pad") or msg.get("which") or (msg["id"] if isinstance(msg.get("id"), str) else "all"))
+    ids = ["link", "addr", "gateway", "dns", "net"] if pid == "all" else [pid]
+    if any(i not in ("link", "addr", "gateway", "dns", "net") for i in ids):
+        return reply(False, "unknown pad")
+    url = str(msg.get("url") or CHECK["url"])
+    import urllib.parse
+    host = str(msg.get("host") or urllib.parse.urlsplit(url).hostname or "")
+
+    def done(res, cancelled):
+        reply(True, data={"results": res or []})
+    Task(run_pads(ids, url, host), done)
+
+
+# ---- speed test ----------------------------------------------------------------------------------------------------------------
+SPEED = {"task": None, "error": ""}
+SIZES = [100000, 1000000, 10000000, 25000000, 100000000]
+CURL_W = "LARES %{time_starttransfer} %{time_total} %{time_pretransfer} %{size_download} %{size_upload} %{http_code}\\n"
+
+
+def curl_argv(url, up_bytes=None):
+    argv = ["curl", "-sS", "--max-time", "40", "-o", "/dev/null", "-D", "-", "-w", CURL_W]
+    if up_bytes is not None:
+        argv += ["-X", "POST", "-H", "Content-Type: application/octet-stream", "--data-binary", "@-"]
+    return argv + [url]
+
+
+def parse_curl(out):
+    hdr = {}
+    mark_ = None
+    for line in out.splitlines():
+        if line.startswith("LARES "):
+            mark_ = line.split()[1:]
+        elif ":" in line:
+            k, v = line.split(":", 1)
+            hdr[k.strip().lower()] = v.strip()
+    if not mark_ or len(mark_) < 6:
+        return None
+    return {"ttfb": float(mark_[0]), "total": float(mark_[1]), "pretransfer": float(mark_[2]), "down": int(float(mark_[3])),
+            "up": int(float(mark_[4])), "code": int(mark_[5]), "headers": hdr}
+
+
+def server_time_s(headers):
+    m = re.search(r"cfWorker;dur=([\d.]+)|cfSpeedWorker;dur=([\d.]+)", headers.get("server-timing", ""))
+    if m:
+        return float(m.group(1) or m.group(2)) / 1000.0
+    return 0.0
+
+
+def p90(xs):
+    if not xs:
+        return 0.0
+    s = sorted(xs)
+    return s[min(len(s) - 1, int(0.9 * len(s) + 0.9999) - 1)] if len(s) > 1 else s[0]
+
+
+def why_curl(rc, err, to, r):
+    """The reason a curl request gave nothing, in curl's own words (or the server's status)."""
+    err = (err or "").strip().splitlines()
+    if to or rc == 28:
+        return "the request timed out" + (" (%s)" % err[-1][:120] if err else "")
+    if err:
+        return err[-1][:200]
+    if r is not None and r["code"] != 200:
+        return "the server answered HTTP %d" % r["code"]
+    return "curl exited %s with no output" % rc
+
+
+def speed_run(base, cap):
+    base = base.rstrip("/")
+    used = 0
+    colo = ""
+
+    def prog(phase, live):
+        emit({"t": "speed", "phase": phase, "liveMbps": round(live, 2), "result": None})
+
+    def fail(reason):
+        SPEED["error"] = reason
+        emit({"t": "speed", "phase": "failed", "liveMbps": 0, "result": None, "error": reason})
+        return None
+    prog("latency", 0)
+    lats = []
+    last = ""
+    # one lost probe is not a failed test: 20 are asked, the test needs 5 answers
+    for _ in range(20):
+        rc, out, err, to = yield Run(curl_argv(base + "/__down?bytes=0"), timeout_s=10)
+        r = parse_curl(out or "")
+        if rc != 0 or not r or r["code"] != 200:
+            last = "latency: " + why_curl(rc, err, to, r)
+            continue
+        m = re.search(r"-([A-Za-z]{3})\s*$", r["headers"].get("cf-ray", ""))
+        if m:
+            colo = m.group(1).upper()
+        lats.append(max(0.0, (r["ttfb"] - server_time_s(r["headers"])) * 1000.0))
+    if len(lats) < 5:
+        return fail(last or "latency: no answer")
+    jitter = sum(abs(b - a) for a, b in zip(lats, lats[1:])) / max(1, len(lats) - 1)
+    latency = sum(lats) / len(lats)
+    res = {"downMbps": 0.0, "upMbps": 0.0, "latencyMs": round(latency, 2), "jitterMs": round(jitter, 2), "colo": colo, "bytes": 0}
+    for phase in ("down", "up"):
+        prog(phase, 0)
+        speeds = []
+        grew = True
+        last = ""
+        for size in SIZES:
+            if not grew:
+                break
+            slow = False
+            for _ in range(3):
+                if used + size > cap:
+                    grew = False
+                    break
+                r = None
+                for attempt in range(2):          # a transfer that fails outright is asked once more
+                    if phase == "down":
+                        rc, out, err, to = yield Run(curl_argv(base + "/__down?bytes=%d" % size), timeout_s=45)
+                    else:
+                        rc, out, err, to = yield Run(curl_argv(base + "/__up", up_bytes=size), timeout_s=45,
+                                                     feed=["head", "-c", str(size), "/dev/zero"])
+                    r = parse_curl(out or "")
+                    nbytes = (r["down"] if phase == "down" else r["up"]) if r else 0
+                    # a transfer cut by the clock still measured what it moved (a slow link at the larger sizes)
+                    if r and ((rc == 0 and r["code"] == 200) or (rc == 28 and nbytes > 0)):
+                        break
+                    last = "%s: %s" % (phase, why_curl(rc, err, to, r))
+                    r = None
+                if r is None:
+                    grew = False
+                    break
+                nbytes = r["down"] if phase == "down" else r["up"]
+                used += nbytes
+                dur = (r["total"] - r["ttfb"]) if phase == "down" else (r["total"] - r["pretransfer"])
+                mbps = nbytes * 8.0 / max(dur, 1e-3) / 1e6
+                speeds.append(mbps)
+                prog(phase, mbps)
+                # growth stops on the TRANSFER's time: the handshake and latency of a far server are not the link's speed
+                if dur > 1.0 or rc != 0:
+                    slow = True
+            if slow:
+                grew = False
+        if not speeds:
+            return fail(last or "%s: no transfer completed" % phase)
+        res["downMbps" if phase == "down" else "upMbps"] = round(p90(speeds), 2)
+    res["bytes"] = used
+    res["atMs"] = now_ms()
+    emit({"t": "speed", "phase": "done", "liveMbps": 0, "result": res})
+    return res
+
+
+@command
+def cmd_speed(msg, reply):
+    action = str(msg.get("action", "run"))
+    if action == "cancel":
+        t = SPEED["task"]
+        if t is None:
+            return reply(True, data={"was": "idle"})
+        t.cancel()
+        return reply(True)
+    if SPEED["task"] is not None:
+        return reply(False, "a speed test is running")
+    base = str(msg.get("base") or "https://speed.cloudflare.com")
+    cap = int(msg.get("capBytes") or 200 * 1000 * 1000)
+    SPEED["error"] = ""
+
+    def done(res, cancelled):
+        SPEED["task"] = None
+        if cancelled:
+            emit({"t": "speed", "phase": "cancelled", "liveMbps": 0, "result": None})
+        reply(res is not None, None if res is not None else ("cancelled" if cancelled else (SPEED["error"] or "the speed test failed")), data=res)
+    SPEED["task"] = Task(speed_run(base, cap), done)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------
+# stdin
+# --------------------------------------------------------------------------------------------------------------------------------
+STDIN_BUF = {"b": b""}
+LOOP = None
+
+
+def make_reply(mid):
+    state = {"done": False}
+
+    def reply(ok, error=None, data=None):
+        if state["done"]:
+            return
+        state["done"] = True
+        if mid is None:
+            return
+        emit({"t": "reply", "id": mid, "ok": bool(ok), "error": error if not ok else None, "data": data})
+    return reply
+
+
+def handle_line(line):
+    try:
+        msg = json.loads(line)
+        assert isinstance(msg, dict)
+    except Exception:
+        return log("warn", "a command line that is not a JSON object")
+    name = str(msg.get("cmd", ""))
+    reply = make_reply(msg.get("id"))
+    if name == "quit":
+        reply(True)
+        return LOOP.quit()
+    fn = COMMANDS.get(name)
+    if fn is None:
+        return reply(False, "unknown command")
+    try:
+        fn(msg, reply)
+    except Exception as e:
+        tb = traceback.extract_tb(sys.exc_info()[2])[-1]
+        log("error", "cmd %s: %s: %s (line %d)" % (name, type(e).__name__, e, tb.lineno))
+        reply(False, "internal error: %s" % type(e).__name__)
+
+
+def on_stdin(fd, cond):
+    try:
+        data = os.read(fd, 65536)
+    except BlockingIOError:
+        return True
+    except Exception:
+        data = b""
+    if not data:
+        LOOP.quit()
+        return False
+    STDIN_BUF["b"] += data
+    while b"\n" in STDIN_BUF["b"]:
+        line, STDIN_BUF["b"] = STDIN_BUF["b"].split(b"\n", 1)
+        if line.strip():
+            handle_line(line.decode("utf-8", "replace"))
+    return True
+
+
+def cleanup():
+    for p in list(CHILDREN):
+        kill_group(p)
+
+
+def main():
+    global BUS, LOOP
+    addr = None
+    args = sys.argv[1:]
+    while args:
+        a = args.pop(0)
+        if a == "--bus-address" and args:
+            addr = args.pop(0)
+        elif a == "--check-url" and args:
+            CHECK["url"] = args.pop(0)
+    emit({"t": "hello", "v": 1, "pid": os.getpid()})
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        BUS = dbus.bus.BusConnection(addr) if addr else dbus.SystemBus()
+    except Exception as e:
+        log("error", "no bus: %s" % e)
+        emit({"t": "nm", "running": False, "state": 0, "primary": "", "primaryReal": "", "connectivity": 0, "wirelessEnabled": False,
+              "wirelessHardwareEnabled": False, "version": ""})
+        BUS = None
+    keyring_connect()
+    LOOP = GLib.MainLoop()
+    os.set_blocking(0, False)
+    GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, guarded_keep(on_stdin))
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, lambda: (LOOP.quit(), False)[1])
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, lambda: (LOOP.quit(), False)[1])
+    if BUS is not None:
+        BUS.add_signal_receiver(on_properties_changed, "PropertiesChanged", PROPS, path_keyword="path")
+        BUS.add_signal_receiver(on_ap_added, "AccessPointAdded", NM_WIFI, path_keyword="path")
+        BUS.add_signal_receiver(on_ap_removed, "AccessPointRemoved", NM_WIFI, path_keyword="path")
+        BUS.add_signal_receiver(on_new_connection, "NewConnection", NM_SETTINGS)
+        BUS.add_signal_receiver(on_connection_removed, "ConnectionRemoved", NM_SETTINGS)
+        BUS.add_signal_receiver(on_connection_updated, "Updated", NM_SETCONN, path_keyword="path")
+        BUS.add_signal_receiver(on_bz_added, "InterfacesAdded", OBJMAN, bus_name=BLUEZ_NAME)
+        BUS.add_signal_receiver(on_bz_removed, "InterfacesRemoved", OBJMAN, bus_name=BLUEZ_NAME)
+        BUS.watch_name_owner(NM_NAME, on_nm_owner)
+        BUS.watch_name_owner(BLUEZ_NAME, on_bz_owner)
+    ask_reg()
+    mark("nm")
+    try:
+        LOOP.run()
+    finally:
+        cleanup()
+
+
+if __name__ == "__main__":
+    main()

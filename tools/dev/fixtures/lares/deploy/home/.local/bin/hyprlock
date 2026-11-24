@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+TOGGLE_SCRIPT="$HOME/.config/hypr/scripts/hyproled/hyproled-toggle.sh"
+
+bash "$TOGGLE_SCRIPT" suspend
+
+# qs-shell deploy BEGIN hold: the shell holds its toasts while hyprlock is up (the Lares lock holds them itself)
+timeout -k 1 3 quickshell ipc -p /home/user/.local/state/lares/shell/current/shell.qml call notifications hold locked true > /dev/null 2>&1
+# qs-shell deploy END hold
+if command -v screentimed >/dev/null; then screentimed lock-run /usr/bin/hyprlock "$@"; else /usr/bin/hyprlock "$@"; fi
+# qs-shell deploy BEGIN unhold
+timeout -k 1 3 quickshell ipc -p /home/user/.local/state/lares/shell/current/shell.qml call notifications hold locked false > /dev/null 2>&1
+# qs-shell deploy END unhold
+
+bash "$TOGGLE_SCRIPT" resume

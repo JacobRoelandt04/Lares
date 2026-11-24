@@ -1,0 +1,13 @@
+Display 1
+   I2C bus:          /dev/i2c-6
+   Monitor:          ACR:Acer VG240Y:
+
+Display 2
+   I2C bus:          /dev/i2c-8
+   DRM connector:    (unknown)
+   Monitor:          DEL:DELL U2723QE:7ZQ4PX3
+
+Invalid display
+   I2C bus:          /dev/i2c-3
+   DRM connector:    card1-eDP-1
+   Monitor:          SDC::

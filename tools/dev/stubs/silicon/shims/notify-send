@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# notify-send STAND-IN: logs the call (the desktop never sees a notification from a test) and, like
+# `notify-send -p`, prints an id.
+printf '%s %s\n' "$(date +%s%3N)" "$*" >> "${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}/notify-send.log"
+for a in "$@"; do [ "$a" = "-p" ] && echo 1; done
+exit 0

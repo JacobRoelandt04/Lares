@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# systemctl STAND-IN: logs the call and does nothing. A reboot is a line in the log, and a
+# `REBOOT_REQUESTED` file the MUX probe reads as "the user asked for the restart" (it plays the machine going
+# down and coming back itself).
+D="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}"
+printf '%s %s\n' "$(date +%s%3N)" "$*" >> "$D/systemctl.log"
+case "$*" in reboot) printf '%s\n' "$(date +%s%3N)" >> "$D/REBOOT_REQUESTED" ;; esac
+exit 0

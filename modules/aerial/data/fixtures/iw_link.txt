@@ -1,0 +1,11 @@
+Connected to 02:ae:00:00:00:01 (on wlp47s0)
+	SSID: HomeNet-AP
+	freq: 5220.0
+	RX: 8173016 bytes (20816 packets)
+	TX: 6490841 bytes (15619 packets)
+	signal: -58 dBm
+	rx bitrate: 103.2 MBit/s 40MHz HE-MCS 2 HE-NSS 2 HE-GI 0 HE-DCM 0
+	tx bitrate: 344.1 MBit/s 40MHz HE-MCS 7 HE-NSS 2 HE-GI 0 HE-DCM 0
+	bss flags: short-slot-time
+	dtim period: 3
+	beacon int: 100

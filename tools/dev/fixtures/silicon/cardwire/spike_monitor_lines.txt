@@ -1,0 +1,24 @@
+# SYNTHETIC. Written by the silicon stage-0 spike, NOT captured from cardwire.
+# What the real capture (monitor_lines.txt, PowerStateChanged only) does not
+# contain, in the byte shape gdbus 2.88 prints for these signatures:
+#   PropertiesChanged      (iface, a{sv} changed, as invalidated)
+#   ProcessBlockedChanged  (((tu)usus),): LogEntry from cardwire 0.12.3's source
+#                          (interface/logger.rs): ((secs, nanos), pid, comm,
+#                          gpu_id, wayland_app_id)
+#   NewAppAdded            ((s(sasasu)),): (lookup name, DbusAppMetadata) from
+#                          interface/smart.rs + file/sql.rs; Option<String> is a
+#                          0/1-element array, as in GetAppPolicies
+#   Both are typed from the source, not captured: replace them with real lines
+#   (a process blocked in Smart mode) when the user next uses Smart.
+# and the three spellings of the power states: the signal prints the Rust enum's
+# Debug name ('D3Cold', 'D3Hot'), the method returns the sysfs text ('D3cold\n').
+# Lines starting with # are comments; blank lines are skipped.
+/org/opengamingcollective/cardwire: org.freedesktop.DBus.Properties.PropertiesChanged ('org.opengamingcollective.cardwire.Mode', {'Mode': <uint32 3>}, @as [])
+/org/opengamingcollective/cardwire: org.freedesktop.DBus.Properties.PropertiesChanged ('org.opengamingcollective.cardwire.Mode', {'Mode': <uint32 0>}, @as [])
+/org/opengamingcollective/cardwire: org.freedesktop.DBus.Properties.PropertiesChanged ('org.opengamingcollective.cardwire.Config', {'BatteryAutoSwitch': <true>}, @as [])
+/org/opengamingcollective/cardwire: org.freedesktop.DBus.Properties.PropertiesChanged ('org.opengamingcollective.cardwire.Config', {'BatteryAutoSwitchMode': <uint32 0>, 'ExternalDisplayAutoSwitch': <false>}, ['ExperimentalNvidiaBlock'])
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Hot',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3cold\n',)
+/org/opengamingcollective/cardwire/Logger: org.opengamingcollective.cardwire.Logger.ProcessBlockedChanged (((uint64 1790970000, uint32 125000000), uint32 4242, 'blender', uint32 1, 'org.blender.Blender'),)
+/org/opengamingcollective/cardwire: org.opengamingcollective.cardwire.SmartPolicy.NewAppAdded (('steam_app_1295660', ('Steam game 1295660', ['steam_app_1295660'], @as [], uint32 0)),)

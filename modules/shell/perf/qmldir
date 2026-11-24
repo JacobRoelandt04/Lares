@@ -1,0 +1,3 @@
+singleton FrameJournal 1.0 FrameJournal.qml
+FrameJournalHook 1.0 FrameJournalHook.qml
+InkProbe 1.0 InkProbe.qml

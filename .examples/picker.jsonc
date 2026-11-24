@@ -1,0 +1,14 @@
+// picker.jsonc -- the emoji, symbol and icon picker (modules/picker). The template of ~/.config/quickshell/config/picker.jsonc. Every key is
+// optional and every value below IS the default. Read hot (at the next open). Comments are allowed. (The paste key is clipboard.jsonc's.)
+{
+    // The tabs, in order: "emoji" | "symbols" | "nerd" (Nerd Fonts icons; without it their list is never fetched).
+    "tabs": ["emoji", "symbols", "nerd"],
+    // The tab it opens on: one of them, or "last".
+    "openTab": "emoji",
+    // What Enter takes of a Nerd Fonts icon: "glyph" | "name". The other is Ctrl+Enter.
+    "nerdPick": "glyph",
+    // A row of what you picked lately stands above the list.
+    "recents": true,
+    // A pick is "paste" (pasted into the window the picker was opened over, and copied) | "copy" (copied only).
+    "pick": "paste"
+}

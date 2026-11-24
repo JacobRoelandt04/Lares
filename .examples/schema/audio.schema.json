@@ -1,0 +1,52 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "audio.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "pill": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "speakerOpens": {
+     "enum": [
+      "playback",
+      "recording",
+      "sinks",
+      "sources",
+      "cards"
+     ],
+     "default": "sinks",
+     "x-wants": "\"playback\", \"recording\", \"sinks\", \"sources\" or \"cards\"",
+     "description": "Takes \"playback\", \"recording\", \"sinks\", \"sources\" or \"cards\". Default: \"sinks\"."
+    },
+    "micOpens": {
+     "enum": [
+      "playback",
+      "recording",
+      "sinks",
+      "sources",
+      "cards"
+     ],
+     "default": "sources",
+     "x-wants": "\"playback\", \"recording\", \"sinks\", \"sources\" or \"cards\"",
+     "description": "Takes \"playback\", \"recording\", \"sinks\", \"sources\" or \"cards\". Default: \"sources\"."
+    }
+   },
+   "description": "The page of the popup each half of the pill opens: \"playback\" | \"recording\" | \"sinks\" (outputs) | \"sources\" (inputs) | \"cards\"."
+  },
+  "hide": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "Devices the popup does not list: names as `pactl list short sinks` says them, `*` matches any text (\"alsa_output.pci-*.hdmi-*\"). A device\nthat is the default, or that something plays on, is listed whatever this says.\n\nTakes a list of texts. Default: []."
+  }
+ }
+}

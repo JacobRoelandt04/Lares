@@ -1,0 +1,1095 @@
+#!/usr/bin/python3 -I
+"""lares-snapshot-root: the root side of the system snapshots (docs/contracts/snapshots.md).
+
+restic does the copying; this tool owns what goes around it: the repository and its records, the rule, the guards, the retention.
+It runs as root through pacman's hooks, through pkexec for the three verbs the user may ask for, and in a terminal for the rest.
+`python3 -I`: no environment variable and no directory of the caller's can change what it imports. It imports only the files beside
+it (snaprules.py, jsonc.py) and reads the user's config/snapshots.jsonc as DATA, never as paths or programs.
+
+Exit status: 0 done, 1 failed, 2 usage, 3 nothing to do, 4 refused, 5 not root where root is needed.
+A crash inside a hook is exit 70: the wrapper turns that into `skip tool`, so a broken tool never holds pacman up.
+
+Test options `--root <dir>` and `--restic <path>` put every fixed path under <dir> and pick another restic; they are refused for root.
+"""
+import argparse
+import contextlib
+import datetime
+import fcntl
+import json
+import os
+import pwd
+import re
+import secrets
+import select
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import tarfile
+import time
+import traceback
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, HERE)
+import snaprules  # noqa: E402
+
+LIB_DIR = "/usr/local/lib/lares/snapshot"
+STATE_DIR = "/.lares-snapshots"
+RESTIC = "/usr/bin/restic"
+RECORD_IN_SNAPSHOT = "/var/lib/lares/snapshot-record.json"
+REASONS = ("update", "undo", "manual", "rescue")
+HOOK_CRASH = 70
+FIRST_MINUTES = 60
+WAIT_OTHER = 120      # seconds a create waits for a delete or another create
+PRIME_TAG = "lares-prime"
+SKIP_TOKEN_MAX_AGE = 2 * 3600
+CHECK_EVERY = 30 * 86400
+LOG_MAX = 1 << 20
+GB = 1000 ** 3
+
+
+class Failure(Exception):
+    """A snapshot that did not happen: `code` is one of the contract's failed codes."""
+
+    def __init__(self, code, text):
+        super().__init__(text)
+        self.code, self.text = code, text
+
+
+class Skip(Exception):
+    def __init__(self, code, text):
+        super().__init__(text)
+        self.code, self.text = code, text
+
+
+class Busy(Exception):
+    pass
+
+
+def human(n):
+    for unit, size in (("GB", GB), ("MB", 1000 ** 2), ("KB", 1000)):
+        if n >= size:
+            return "%.1f %s" % (n / size, unit)
+    return "%d bytes" % n
+
+
+def packages(n):
+    return "1 package" if n == 1 else "%d packages" % n
+
+
+# ---- where everything is ---------------------------------------------------------------------------------------------------------
+
+class Ctx:
+    def __init__(self, root="", restic=None):
+        self.root = root.rstrip("/")
+        self.test = bool(root or restic)
+        self.restic = restic or RESTIC
+        # a test can make the guards' "GB" a megabyte (the config's lowest value is 1); a root run has no such switch
+        self.unit = int(os.environ.get("LARES_SNAPSHOT_TEST_UNIT", GB)) if self.test else GB
+        self.lib = self.root + LIB_DIR
+        self.state = self.root + STATE_DIR
+        self.repo = self.state + "/repo"
+        self.key = self.state + "/key"
+        self.lock = self.state + "/lock"
+        self.oplock = self.state + "/oplock"
+        self.records = self.state + "/records"
+        self.index = self.state + "/index.tsv"
+        self.statefile = self.state + "/state.json"
+        self.log = self.state + "/log"
+        self._defaults = None
+
+    def p(self, path):
+        return self.root + path
+
+    def is_root(self):
+        return os.geteuid() == 0 or self.test
+
+    def env(self):
+        """Nothing from the caller's environment reaches restic."""
+        return {"PATH": "/usr/bin:/bin", "HOME": self.state, "LC_ALL": "C", "RESTIC_PASSWORD_FILE": self.key}
+
+    def user(self):
+        try:
+            with open(self.lib + "/user", encoding="utf-8") as f:
+                return pwd.getpwnam(f.read().strip())
+        except (OSError, KeyError):
+            if self.test:
+                return pwd.getpwuid(os.getuid())
+            raise Failure("internal", "the user's name is missing from %s/user" % LIB_DIR)
+
+    def defaults(self):
+        if self._defaults is None:
+            self._defaults = snaprules.load_defaults(os.path.join(HERE, "defaults.json"))
+        return self._defaults
+
+    def settings(self):
+        """(settings in force, problems): defaults.json, then the user's file as data."""
+        u = self.user()
+        home = self.root + u.pw_dir
+        cands = snaprules.jsonc.candidates(home + "/.config/quickshell/config/snapshots.jsonc")
+        raw, problems = snaprules.read_config(cands, u.pw_uid)
+        s, more = snaprules.settings_from(raw, self.defaults())
+        return s, problems + more
+
+    def log_line(self, text):
+        try:
+            with open(self.log, "a", encoding="utf-8") as f:
+                f.write("%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
+        except OSError:
+            pass
+
+    def trim_log(self):
+        try:
+            if os.path.getsize(self.log) > LOG_MAX:
+                with open(self.log, "rb") as f:
+                    f.seek(-LOG_MAX // 4, os.SEEK_END)
+                    f.readline()
+                    tail = f.read()
+                write_atomic(self.log, tail, 0o644)
+        except OSError:
+            pass
+
+
+def write_atomic(path, data, mode):
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, mode)
+    try:
+        os.write(fd, data)
+        os.fchmod(fd, mode)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+
+
+def free_bytes(path):
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize
+
+
+# ---- the hook's lines (section 7) -------------------------------------------------------------------------------------------------
+
+class Lines:
+    """At most 25 lines a run, the last one always room; progress rises only, in steps of 5, one a second at most."""
+
+    def __init__(self, out=None, limit=25, clock=time.monotonic):
+        self.out, self.limit, self.clock = out or sys.stdout, limit, clock
+        self.count = 0
+        self.pct = 0
+        self.last_at = None
+
+    def emit(self, kind, text="", final=False):
+        if self.count >= self.limit - (0 if final else 1):
+            return
+        line = "lares-snapshot: %s %s" % (kind, " ".join(str(text).split()))
+        self.out.write(line.rstrip() + "\n")
+        self.out.flush()
+        self.count += 1
+
+    def progress(self, pct):
+        step = int(min(95, pct)) // 5 * 5
+        now = self.clock()
+        if step <= self.pct or (self.last_at is not None and now - self.last_at < 1.0):
+            return
+        self.pct, self.last_at = step, now
+        self.emit("progress", step)
+
+
+# ---- the records (section 5) ------------------------------------------------------------------------------------------------------
+
+def make_record(**kw):
+    rec = {"version": 1, "id": "", "short": "", "time": int(time.time()), "reason": "update", "run": None, "count": 0, "critical": [],
+           "targets": [], "before": {}, "changed": None, "state": "open", "keep": False, "note": "", "added": 0, "addedPacked": 0,
+           "files": 0, "bytes": 0, "seconds": 0, "unreadable": 0, "paths": [], "excludes": [], "kernel": os.uname().release}
+    rec.update(kw)
+    return rec
+
+
+def read_records(ctx):
+    out = []
+    try:
+        names = os.listdir(ctx.records)
+    except OSError:
+        return out
+    for n in names:
+        if n.endswith(".json"):
+            try:
+                with open(os.path.join(ctx.records, n), encoding="utf-8") as f:
+                    r = json.load(f)
+                if isinstance(r, dict) and r.get("short"):
+                    out.append(r)
+            except (OSError, ValueError):
+                ctx.log_line("record %s is unreadable" % n)
+    out.sort(key=lambda r: r.get("time", 0), reverse=True)
+    return out
+
+
+def write_record(ctx, rec):
+    write_atomic("%s/%s.json" % (ctx.records, rec["short"]), json.dumps(rec, indent=1, sort_keys=True), 0o644)
+
+
+def with_undone(recs):
+    """An undo's record knows the snapshot it undid by its note (the short); the title wants that snapshot's date."""
+    times = {r["short"]: r["time"] for r in recs}
+    return [dict(r, undoneTime=times.get(r.get("note"), 0)) if r["reason"] == "undo" else r for r in recs]
+
+
+def write_index(ctx):
+    rows = []
+    for r in with_undone(read_records(ctx)):
+        title = snaprules.title(r).encode("ascii", "replace").decode("ascii")[:snaprules.TITLE_MAX]
+        rows.append("%s\t%d\t%s\t%s\n" % (r["id"], r["time"], r["reason"], title))
+    write_atomic(ctx.index, "".join(rows), 0o644)
+
+
+def find_record(ctx, short):
+    for r in read_records(ctx):
+        if r["short"] == short or (len(short) >= 4 and r["id"].startswith(short)):
+            return r
+    return None
+
+
+def read_state(ctx):
+    try:
+        with open(ctx.statefile, encoding="utf-8") as f:
+            s = json.load(f)
+        return s if isinstance(s, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_state(ctx, **changes):
+    s = read_state(ctx)
+    s.update(changes)
+    write_atomic(ctx.statefile, json.dumps(s), 0o644)
+
+
+def pid_alive(pid):
+    try:
+        with open("/proc/%d/stat" % pid, encoding="utf-8", errors="replace") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except (OSError, IndexError, TypeError):
+        return False
+
+
+def busy_now(ctx):
+    s = read_state(ctx)
+    return s.get("busy", "") if s.get("busy") and pid_alive(s.get("pid", 0)) else ""
+
+
+# ---- restic -----------------------------------------------------------------------------------------------------------------------
+
+_child = None      # the restic a SIGTERM to a tidy must stop with it
+
+
+class Interrupted(Exception):
+    """A tidy told to stop: the hook of a new update wants the repository."""
+
+
+def stop_group(proc):
+    """TERM to restic's whole group, ten seconds, then KILL."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+    except (ProcessLookupError, PermissionError):
+        proc.wait()
+
+
+def restic_call(ctx, args, timeout=900, stdout=subprocess.PIPE):
+    """restic with a clean environment; its stderr goes to the log, never to a caller's screen. (returncode, stdout bytes)."""
+    global _child
+    with open(ctx.log, "ab") as log:
+        proc = subprocess.Popen([ctx.restic, "-r", ctx.repo] + args, stdin=subprocess.DEVNULL, stdout=stdout, stderr=log,
+                                env=ctx.env(), start_new_session=True)
+    _child = proc
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        stop_group(proc)
+        return 124, b""
+    finally:
+        _child = None
+    return proc.returncode, out or b""
+
+
+def restic_json(ctx, args):
+    rc, out = restic_call(ctx, args)
+    if rc != 0:
+        raise Failure("restic", "restic %s stopped with status %d" % (args[0], rc))
+    return json.loads(out.decode("utf-8") or "null")
+
+
+def restic_version(ctx):
+    try:
+        r = subprocess.run([ctx.restic, "version"], stdin=subprocess.DEVNULL, capture_output=True, env=ctx.env(), timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    m = re.match(r"restic (\S+)", r.stdout.decode("utf-8", "replace"))
+    return m.group(1) if r.returncode == 0 and m else ""
+
+
+def list_snapshots(ctx):
+    return restic_json(ctx, ["snapshots", "--json", "--tag", "lares"]) or []
+
+
+def unix_of(iso):
+    try:
+        return int(datetime.datetime.fromisoformat(iso).timestamp())
+    except (ValueError, TypeError):
+        return int(time.time())
+
+
+def fix_modes(ctx):
+    """Make the repository readable for the user's group (it is ciphertext) and say how big it is. The directories are setgid, so what
+    restic writes belongs to the group at once; restic takes the modes of new files from the config file's (0440), and its new
+    directories are always 0700, which is set right here."""
+    gid = ctx.user().pw_gid
+    total = 0
+    for dirpath, dirnames, filenames in os.walk(ctx.repo):
+        for name, want in [(".", 0o2750)] + [(f, 0o440) for f in filenames] + [(d, 0o2750) for d in dirnames]:
+            p = dirpath if name == "." else os.path.join(dirpath, name)
+            try:
+                st = os.lstat(p)
+                if stat.S_ISLNK(st.st_mode):
+                    continue
+                if stat.S_ISREG(st.st_mode):
+                    total += st.st_size
+                if stat.S_IMODE(st.st_mode) != want:
+                    os.chmod(p, want)
+                if os.geteuid() == 0 and st.st_gid != gid:
+                    os.chown(p, 0, gid)
+            except OSError:
+                pass
+    write_state(ctx, repoBytes=total)
+
+
+# ---- exclusive work ---------------------------------------------------------------------------------------------------------------
+
+def preempt_tidy(ctx, fd, wait=30):
+    """A tidy (prime, prune, check) never delays an update: it is told to stop (TERM) and the job lock is taken when it has."""
+    state = read_state(ctx)
+    if not (state.get("preemptible") and busy_now(ctx)):
+        return False
+    with contextlib.suppress(OSError):
+        os.kill(state["pid"], signal.SIGTERM)
+    return wait_for_lock(fd, wait)
+
+
+def wait_for_lock(fd, seconds, on_wait=None):
+    deadline = time.monotonic() + seconds
+    said = False
+    while time.monotonic() < deadline:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if on_wait and not said:
+                said = True
+                on_wait()
+            time.sleep(0.2)
+    return False
+
+
+@contextlib.contextmanager
+def operation(ctx, name, preempt=False, preemptible=False, on_wait=None):
+    """One create / keep / tidy / delete at a time: a flock on `oplock`, a file only root can open (a lock anyone can open is a lock
+    anyone can hold, and a held lock would stop an update). A create that finds a tidy tells it to stop; one that finds a delete or
+    another create waits for it, WAIT_OTHER seconds, and says so once."""
+    fd = os.open(ctx.oplock, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            if not (preempt and (preempt_tidy(ctx, fd) or wait_for_lock(fd, WAIT_OTHER, on_wait))):
+                raise Busy("Another snapshot job (%s) is running." % (busy_now(ctx) or "unknown"))
+        write_state(ctx, busy=name, pid=os.getpid(), preemptible=preemptible)
+        try:
+            yield
+        finally:
+            write_state(ctx, busy="", pid=0, preemptible=False)
+    finally:
+        os.close(fd)
+
+
+@contextlib.contextmanager
+def repo_lock(ctx):
+    """`lock`, exclusive: only a prune and a delete take it (they remove what an upload to Proton Drive may be reading). A create
+    never does, so nothing that holds it can stop an update."""
+    fd = os.open(ctx.lock, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Busy("The repository is in use by an upload to Proton Drive.")
+        yield
+    finally:
+        os.close(fd)
+
+
+# ---- the backup run and its guards ------------------------------------------------------------------------------------------------
+
+def transaction_need(ctx, names):
+    """What the transaction itself will write on the disk: the packages' downloads plus what they grow by. 0 when it cannot be told."""
+    wanted = set(names)
+    total = 0
+    try:
+        old = {}
+        for d in os.listdir(ctx.p("/var/lib/pacman/local")):
+            n = d.rsplit("-", 2)[0]
+            if n in wanted:
+                with open(os.path.join(ctx.p("/var/lib/pacman/local"), d, "desc"), encoding="utf-8", errors="replace") as f:
+                    m = re.search(r"%SIZE%\n(\d+)", f.read())
+                old[n] = int(m.group(1)) if m else 0
+        sync = ctx.p("/var/lib/pacman/sync")
+        for db in os.listdir(sync):
+            if not db.endswith(".db"):
+                continue
+            with tarfile.open(os.path.join(sync, db)) as tf:
+                for m in tf:
+                    if not m.name.endswith("/desc"):
+                        continue
+                    text = tf.extractfile(m).read().decode("utf-8", "replace")
+                    name = re.search(r"%NAME%\n(.+)", text)
+                    if name and name.group(1) in wanted:
+                        c = re.search(r"%CSIZE%\n(\d+)", text)
+                        i = re.search(r"%ISIZE%\n(\d+)", text)
+                        total += (int(c.group(1)) if c else 0) + max(0, (int(i.group(1)) if i else 0) - old.get(name.group(1), 0))
+    except (OSError, tarfile.TarError, ValueError):
+        return 0
+    return total
+
+
+def stop_process(ctx, proc):
+    """Stop restic, then clear the lock the dead restic left."""
+    stop_group(proc)
+    restic_call(ctx, ["unlock"], timeout=60)
+
+
+def ready_repo(ctx):
+    """Before a backup: clear the lock a killed restic left, and index the packs it wrote. restic keeps no record of a backup it did
+    not finish, so without this the next backup writes the same data again (a prime killed half way would be written for nothing)."""
+    restic_call(ctx, ["unlock"], timeout=60)
+    if read_state(ctx).get("unindexed"):
+        rc, _ = restic_call(ctx, ["repair", "index"], timeout=3600)
+        if rc == 0:
+            write_state(ctx, unindexed=False)
+
+
+def run_backup(ctx, args, settings, lines, floor_bytes, first, need, minutes, clock=time.monotonic):
+    """Runs `restic backup`, reads its json, and stops it when a guard says so. Returns the summary message; raises Failure."""
+    offset = os.path.getsize(ctx.log) if os.path.exists(ctx.log) else 0
+    log = open(ctx.log, "ab")
+    write_state(ctx, unindexed=True)       # cleared when this backup ends well; any other end leaves packs restic has not indexed
+    proc = subprocess.Popen([ctx.restic, "-r", ctx.repo] + args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log,
+                            env=ctx.env(), start_new_session=True)
+    log.close()
+    global _child
+    _child = proc
+    start = clock()
+    last_free = start
+    added = 0
+    largest = []      # (bytes added, path): the three largest new files
+    unreadable = 0
+    summary = None
+    stopped = None
+    buf = b""
+
+    def handle(raw):
+        nonlocal added, summary, unreadable
+        try:
+            msg = json.loads(raw)
+        except ValueError:
+            return
+        kind = msg.get("message_type")
+        if kind == "status":
+            done, total = msg.get("bytes_done", 0), max(msg.get("total_bytes", 0), floor_bytes)
+            if total > 0:
+                lines.progress(100.0 * done / total)
+        elif kind == "verbose_status":
+            n = (msg.get("data_size_in_repo") or 0) + (msg.get("metadata_size_in_repo") or 0)
+            added += n
+            item = msg.get("item", "")
+            if n and not item.endswith("/"):
+                largest.append((n, item))
+                largest.sort(reverse=True)
+                del largest[3:]
+        elif kind == "summary":
+            summary = msg
+        elif kind == "error":
+            unreadable += 1
+
+    def guard():
+        nonlocal last_free
+        if clock() - start > minutes * 60:
+            return Failure("time", "The snapshot took longer than %d minutes and was stopped." % minutes)
+        if not first and added > settings["maxAddedGB"] * ctx.unit:
+            names = ", ".join("%s (%s)" % (p, human(n)) for n, p in largest)
+            return Failure("added", "The snapshot grew by more than %d GB and was stopped. The largest new files: %s."
+                           % (settings["maxAddedGB"], names or "unknown"))
+        if clock() - last_free >= 5:
+            last_free = clock()
+            free_now = free_bytes(ctx.state)
+            if free_now - need < settings["minFreeGB"] * ctx.unit:
+                return Failure("space", "%s left, the update needs %s and %d GB must stay free."
+                               % (human(free_now), human(need), settings["minFreeGB"]))
+        return None
+
+    try:
+        fd = proc.stdout.fileno()
+        while True:
+            ready, _, _ = select.select([fd], [], [], 1.0)
+            if ready:
+                chunk = os.read(fd, 1 << 16)
+                if not chunk:
+                    break
+                buf += chunk
+                parts = buf.split(b"\n")
+                buf = parts.pop()
+                for raw in parts:
+                    handle(raw)
+            stopped = guard()
+            if stopped:
+                break
+        if buf:
+            handle(buf)
+    except BaseException:
+        stop_process(ctx, proc)       # whatever went wrong here, no restic is left running
+        raise
+    finally:
+        _child = None
+        proc.stdout.close()
+    if stopped and proc.poll() is None:
+        stop_process(ctx, proc)
+        raise stopped
+    proc.wait()     # a guard that spoke after restic had finished changes nothing: the snapshot stands
+    if proc.returncode == 11:
+        raise Failure("lock", "The snapshot repository is locked by another restic that is still running.")
+    if proc.returncode not in (0, 3) or summary is None:
+        raise Failure("restic", "restic stopped: %s" % (log_tail(ctx, offset) or "status %d" % proc.returncode))
+    write_state(ctx, unindexed=False)
+    summary["unreadable"] = unreadable
+    summary["wall"] = int(clock() - start)
+    return summary
+
+
+def log_tail(ctx, offset):
+    try:
+        with open(ctx.log, "rb") as f:
+            f.seek(offset)
+            rows = [r.strip() for r in f.read().decode("utf-8", "replace").splitlines() if r.strip() and not r.startswith("{")]
+        return rows[-1][:200] if rows else ""
+    except OSError:
+        return ""
+
+
+def backup_paths(ctx, defaults):
+    paths = [ctx.p(p) for p in defaults["paths"] if os.path.isdir(ctx.p(p))]
+    if defaults.get("bootFiles"):
+        try:
+            for e in sorted(os.scandir(ctx.p("/boot")), key=lambda e: e.name):
+                if e.is_file(follow_symlinks=False):
+                    paths.append(e.path)
+        except OSError:
+            pass
+    return paths
+
+
+def backup_args(ctx, settings, *tags):
+    """(restic arguments up to the paths, the paths, the excludes) of one backup: a snapshot and the prime read the same things.
+    `--group-by host` finds the parent among every snapshot of this machine, primes included. Never `--exclude-caches`: a restore
+    deletes what a snapshot does not hold, and restic cannot leave out by tag there, so a tagged folder would come back empty."""
+    defaults = ctx.defaults()
+    paths = backup_paths(ctx, defaults)
+    excludes = [ctx.p(e) for e in defaults["excludes"] + [e for e in settings["exclude"] if e not in defaults["excludes"]]]
+    args = ["backup", "--one-file-system", "--no-cache", "--pack-size", "64", "--read-concurrency", "8", "--json", "-v"]
+    for t in tags:
+        args += ["--tag", t]
+    args += ["--host", socket.gethostname(), "--group-by", "host"]
+    for e in excludes:
+        args += ["--exclude", e]
+    return args, paths, excludes
+
+
+def create_snapshot(ctx, settings, lines, reason, note, targets, run, clock=time.monotonic):
+    """One snapshot, from the first guard to the record. Returns the finished record; raises Failure / Busy."""
+    if not os.path.isfile(ctx.repo + "/config"):
+        raise Skip("repo", "there is no snapshot repository yet")
+    ctx.trim_log()
+    with operation(ctx, "create", preempt=True, on_wait=lambda: lines.emit("notice", "Another snapshot job is running; waiting for it.")):
+        prior = read_records(ctx)
+        first = not prior
+        need = 0
+        free_now = free_bytes(ctx.state)
+        if free_now - settings["minFreeGB"] * ctx.unit < 30 * ctx.unit:
+            need = transaction_need(ctx, targets)
+        if free_now - need < settings["minFreeGB"] * ctx.unit:
+            raise Failure("space", "%s left, the update needs %s and %d GB must stay free."
+                          % (human(free_now), human(need), settings["minFreeGB"]))
+        ready_repo(ctx)
+        wan = snaprules.wants(targets, settings)
+        args, paths, excludes = backup_args(ctx, settings, "lares", reason)
+        rec = make_record(reason=reason, run=run, count=wan["count"], critical=wan["critical"], targets=sorted(set(targets)),
+                          before=snaprules.installed(ctx.root), note=note or "", paths=paths, excludes=excludes,
+                          state="open" if reason == "update" else "done")
+        os.makedirs(os.path.dirname(ctx.p(RECORD_IN_SNAPSHOT)), exist_ok=True)
+        write_atomic(ctx.p(RECORD_IN_SNAPSHOT), json.dumps(rec, indent=1, sort_keys=True), 0o644)
+        if reason in ("update", "undo"):
+            lines.emit("start", "%s%s" % (packages(rec["count"]), ": " + ", ".join(snaprules.notable(rec["critical"])) if rec["critical"] else ""))
+        else:
+            lines.emit("start", "a %s snapshot" % reason)
+        # the first snapshot writes the whole machine to a disk that slows down after a gigabyte: an hour, and no `added` limit
+        summary = run_backup(ctx, args + paths, settings, lines, prior[0]["bytes"] if prior else 0, first, need,
+                             FIRST_MINUTES if first else settings["maxMinutes"], clock)
+        snaps = restic_json(ctx, ["snapshots", "--json", summary.get("snapshot_id", "")])
+        if not snaps:
+            raise Failure("internal", "restic made a snapshot but does not list it.")
+        snap = snaps[0]
+        rec.update(id=snap["id"], short=snap["id"][:8], time=unix_of(snap["time"]), added=summary.get("data_added", 0),
+                   addedPacked=summary.get("data_added_packed", 0), files=summary.get("total_files_processed", 0),
+                   bytes=summary.get("total_bytes_processed", 0), seconds=int(round(summary.get("total_duration", summary["wall"]))),
+                   unreadable=summary["unreadable"])
+        write_record(ctx, rec)
+        write_index(ctx)
+        fix_modes(ctx)
+        if summary.get("unreadable"):
+            lines.emit("notice", "%d files could not be read and are not in the snapshot." % summary["unreadable"])
+        return rec
+
+
+# ---- the hook ---------------------------------------------------------------------------------------------------------------------
+
+def read_targets():
+    return sorted({n.strip() for n in sys.stdin if n.strip()})[:20000]
+
+
+def skip_token(ctx, user):
+    path = ctx.p("/run/user/%d/lares/snapshot-skip" % user.pw_uid)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return False
+    try:
+        st = os.fstat(fd)
+        return stat.S_ISREG(st.st_mode) and st.st_uid == user.pw_uid and time.time() - st.st_mtime <= SKIP_TOKEN_MAX_AGE
+    finally:
+        os.close(fd)
+
+
+def cmd_hook_pre(ctx, args, lines=None):
+    lines = lines or Lines()
+    settings, _ = ctx.settings()
+    try:
+        if os.path.exists(ctx.p("/etc/lares/snapshot.off")) or not settings["enabled"]:
+            raise Skip("off", "snapshots are switched off")
+        if skip_token(ctx, ctx.user()):
+            raise Skip("asked", "this update was started without a snapshot")
+        run = snaprules.run_id(os.getpid(), ctx.p("/proc"))
+        if run and any(r.get("run") == run for r in read_records(ctx)):
+            raise Skip("run", "this update run already has its snapshot")
+        names = read_targets()
+        wan = snaprules.wants(names, settings)
+        if not wan["want"]:
+            raise Skip("small", "%s, nothing important" % packages(wan["count"]))
+        # inside an undo (`lares-snapshot undo <short>` above the hook) the snapshot is the undo's, and names what is undone
+        undone = snaprules.undo_run(os.getpid(), ctx.p("/proc"))
+        try:
+            rec = create_snapshot(ctx, settings, lines, "update" if undone is None else "undo", undone or "", names, run)
+        except Busy as e:
+            raise Failure("lock", str(e))
+        lines.emit("done", "%s added=%d seconds=%d" % (rec["short"], rec["added"], rec["seconds"]), final=True)
+        return 0
+    except Skip as s:
+        lines.emit("skip", "%s %s" % (s.code, s.text), final=True)
+        return 0
+    except Failure as f:
+        ctx.log_line("failed %s: %s" % (f.code, f.text))
+        lines.emit("notice", "To update without a snapshot this once, make the file /etc/lares/snapshot.off as root and remove it afterwards.")
+        lines.emit("failed", "%s %s" % (f.code, f.text), final=True)
+        return 0 if settings["onFail"] == "continue" else 1
+
+
+def spawn_tidy(ctx):
+    """Prune is slow: it runs as a unit of its own, never as a child of pacman's hook."""
+    exe = ctx.p("/usr/bin/systemd-run")
+    if not os.access(exe, os.X_OK):
+        return
+    cmd = [exe, "--no-block", "--quiet", "--collect", "--unit=lares-snapshot-tidy",
+           "-p", "CPUSchedulingPolicy=idle", "-p", "IOSchedulingClass=idle", ctx.p("/usr/bin/python3"), "-I",
+           os.path.join(HERE, "lares-snapshot-root")]
+    if ctx.test:
+        cmd += ["--root", ctx.root, "--restic", ctx.restic]
+    subprocess.run(cmd + ["tidy"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ctx.env(), timeout=30)
+
+
+def cmd_hook_done(ctx, args):
+    if not os.path.isfile(ctx.repo + "/config"):
+        return 0
+    run = snaprules.run_id(os.getpid(), ctx.p("/proc"))
+    now = time.time()
+    # a run we cannot name (no package manager among the ancestors) owns the newest open record of the last 12 hours
+    mine = [r for r in read_records(ctx) if (run and r.get("run") == run) or (not run and r.get("run") is None and r["state"] == "open"
+                                                                              and now - r["time"] < 12 * 3600)]
+    if not mine:
+        return 0
+    rec = mine[0]
+    # the first `from` and the last `to` fall out of comparing what stood before the run with what stands now
+    rec["changed"] = snaprules.changed(rec["before"], snaprules.installed(ctx.root))
+    rec["state"] = "done"
+    write_record(ctx, rec)
+    write_index(ctx)
+    spawn_tidy(ctx)
+    return 0
+
+
+def cmd_hook(ctx, args):
+    return cmd_hook_pre(ctx, args) if args.which == "pre" else cmd_hook_done(ctx, args)
+
+
+# ---- the verbs --------------------------------------------------------------------------------------------------------------------
+
+def need_root(ctx):
+    if not ctx.is_root():
+        print("this verb needs root", file=sys.stderr)
+        raise SystemExit(5)
+
+
+def cmd_status(ctx, args):
+    try:
+        settings, problems = ctx.settings()
+    except Failure as f:
+        settings, problems = ctx.defaults(), [f.text]
+    repo = os.path.isfile(ctx.repo + "/config")
+    recs = read_records(ctx)
+    state = read_state(ctx)
+    img = ctx.p("/boot/lares/rescue.img")
+    rescue = None
+    if os.path.isfile(img):
+        rescue = {"built": int(os.path.getmtime(img)), "kernel": "", "restic": "",
+                  "entry": os.path.isfile(ctx.p("/etc/grub.d/45_lares_rescue"))}
+        try:
+            with open(ctx.lib + "/rescue/built.json", encoding="utf-8") as f:
+                info = json.load(f)
+            rescue.update(kernel=str(info.get("kernel", "")), restic=str(info.get("restic", "")))
+        except (OSError, ValueError):
+            pass
+    try:
+        free = free_bytes(ctx.state if os.path.isdir(ctx.state) else ctx.p("/"))
+    except OSError:
+        free = 0
+    print(json.dumps({"version": 1, "installed": os.path.isfile(ctx.lib + "/lares-snapshot-root") or ctx.test, "repo": repo,
+                      "off": os.path.exists(ctx.p("/etc/lares/snapshot.off")), "enabled": bool(settings["enabled"]),
+                      "restic": restic_version(ctx), "count": len(recs), "newest": recs[0]["short"] if recs else "", "repoBytes": state.get("repoBytes", 0),
+                      "freeBytes": free, "busy": busy_now(ctx), "check": state.get("check"), "rescue": rescue, "settings": settings,
+                      "problems": problems}))
+    return 0
+
+
+def cmd_list(ctx, args):
+    print(json.dumps({"records": [{k: v for k, v in r.items() if k != "before"} for r in with_undone(read_records(ctx))]}))
+    return 0
+
+
+def cmd_create(ctx, args):
+    need_root(ctx)
+    settings, _ = ctx.settings()
+    lines = Lines()
+    try:
+        rec = create_snapshot(ctx, settings, lines, args.reason, (args.note or "")[:200], [], None)
+    except Busy as e:
+        lines.emit("failed", "lock %s" % e, final=True)
+        print(json.dumps({"ok": False, "error": str(e)}))
+        return 4
+    except (Failure, Skip) as e:
+        ctx.log_line("create failed %s: %s" % (e.code, e.text))
+        lines.emit("failed", "%s %s" % (e.code, e.text), final=True)
+        print(json.dumps({"ok": False, "error": e.text}))
+        return 1
+    lines.emit("done", "%s added=%d seconds=%d" % (rec["short"], rec["added"], rec["seconds"]), final=True)
+    print(json.dumps({"ok": True, "short": rec["short"]}))
+    return 0
+
+
+def cmd_keep(ctx, args):
+    need_root(ctx)
+    rec = find_record(ctx, args.short)
+    if not rec:
+        print(json.dumps({"ok": False, "error": "no such snapshot"}))
+        return 3
+    want = args.state == "on"
+    try:
+        with operation(ctx, "tidy"):
+            # not a restic tag: `restic tag` rewrites the snapshot under a NEW id, and the shell names snapshots by theirs
+            marks = set(read_state(ctx).get("keeps", []))
+            marks.add(rec["id"]) if want else marks.discard(rec["id"])
+            write_state(ctx, keeps=sorted(marks))
+            rec["keep"] = want
+            write_record(ctx, rec)
+    except Busy as e:
+        print(json.dumps({"ok": False, "error": str(e)}))
+        return 4
+    print(json.dumps({"ok": True}))
+    return 0
+
+
+def forget_and_sync(ctx, ids):
+    """Forget these snapshots and prune what only they held, then drop their records."""
+    restic_call(ctx, ["unlock"], timeout=60)      # a killed backup's lock would stop the prune
+    rc, _ = restic_call(ctx, ["forget", "--prune", "--max-unused", "20%"] + ids, timeout=7200) if ids else (0, b"")
+    if rc != 0:
+        raise Failure("restic", "restic could not clean up (status %d)" % rc)
+    alive = {s["id"] for s in list_snapshots(ctx)}
+    for r in read_records(ctx):
+        if r["id"] not in alive:
+            os.unlink("%s/%s.json" % (ctx.records, r["short"]))
+    write_index(ctx)
+    fix_modes(ctx)
+
+
+def cmd_delete(ctx, args):
+    need_root(ctx)
+    rec = find_record(ctx, args.short)
+    if not rec:
+        print(json.dumps({"ok": False, "error": "no such snapshot"}))
+        return 3
+    if rec["keep"]:
+        print(json.dumps({"ok": False, "error": "this snapshot is kept; turn keep off first"}))
+        return 4
+    try:
+        with operation(ctx, "delete"), repo_lock(ctx):
+            forget_and_sync(ctx, [rec["id"]])
+    except Busy as e:
+        print(json.dumps({"ok": False, "error": str(e)}))
+        return 4
+    except Failure as f:
+        print(json.dumps({"ok": False, "error": f.text}))
+        return 1
+    print(json.dumps({"ok": True}))
+    return 0
+
+
+def tidy_ids(ctx, settings):
+    """What to forget: the real snapshots past the newest `keep` that are not kept, and the primes nobody needs."""
+    recs = read_records(ctx)
+    ids = [r["id"] for r in recs[settings["keep"]:] if not r["keep"]]
+    primes = sorted(restic_json(ctx, ["snapshots", "--json", "--tag", PRIME_TAG]) or [], key=lambda s: s["time"])
+    # every prime but the newest goes, and none stays once a real snapshot is newer than it (that snapshot holds what it held)
+    newest_real = recs[0]["time"] if recs else 0
+    stale = primes[:-1] if primes and unix_of(primes[-1]["time"]) > newest_real else primes
+    return ids + [p["id"] for p in stale]
+
+
+def prime(ctx, settings):
+    """A backup of what the update brought, tagged `lares-prime` only: no record, no index line, not counted in `keep`. The next real
+    snapshot then finds the data in the repository and is short (the disk's write speed, not restic, makes a snapshot long).
+    With no real snapshot yet there is nothing to prepare for. A prime that fails is one log line."""
+    if not settings["prime"] or not read_records(ctx):
+        return
+    ready_repo(ctx)
+    args, paths, _ = backup_args(ctx, settings, PRIME_TAG)
+    try:
+        s = run_backup(ctx, args + paths, settings, Lines(open(os.devnull, "w")), 0, False, 0, settings["maxMinutes"])
+        ctx.log_line("prime done: %d bytes added" % s.get("data_added", 0))
+    except Failure as f:
+        ctx.log_line("prime failed %s: %s" % (f.code, f.text))
+
+
+def on_term(signum, frame):
+    if _child is not None and _child.poll() is None:
+        stop_group(_child)
+    raise Interrupted()
+
+
+def cmd_tidy(ctx, args):
+    need_root(ctx)
+    settings, _ = ctx.settings()
+    signal.signal(signal.SIGTERM, on_term)
+    try:
+        with operation(ctx, "tidy", preemptible=True):
+            try:
+                prime(ctx, settings)
+                try:
+                    with repo_lock(ctx):
+                        forget_and_sync(ctx, tidy_ids(ctx, settings))
+                except Busy as e:
+                    ctx.log_line("tidy: no prune this time: %s" % e)
+                    fix_modes(ctx)
+                check = read_state(ctx).get("check")
+                if not check or time.time() - check.get("time", 0) > CHECK_EVERY:
+                    rc, _ = restic_call(ctx, ["check", "--read-data-subset=5%"], timeout=7200)
+                    write_state(ctx, check={"time": int(time.time()), "ok": rc == 0, "text": "checked 5% of the data" if rc == 0
+                                            else "restic check found a problem (status %d)" % rc})
+            except Interrupted:
+                # an update wants the repository: leave it clean (what a half-written prime stored is reused by the next backup)
+                restic_call(ctx, ["unlock"], timeout=60)
+                return 3
+    except (Busy, Interrupted):
+        return 3
+    except Failure as f:
+        ctx.log_line("tidy failed: %s" % f.text)
+        return 1
+    return 0
+
+
+def cmd_init(ctx, args):
+    need_root(ctx)
+    user = ctx.user()
+    for d, mode in ((ctx.state, 0o755), (ctx.records, 0o755)):
+        os.makedirs(d, exist_ok=True)
+        os.chmod(d, mode)
+    for f in (ctx.lock, ctx.log, ctx.index, ctx.statefile):
+        if not os.path.exists(f):
+            write_atomic(f, "{}" if f == ctx.statefile else "", 0o644)
+    if not os.path.exists(ctx.oplock):
+        write_atomic(ctx.oplock, "", 0o600)
+    if not os.path.exists(ctx.key):
+        write_atomic(ctx.key, secrets.token_urlsafe(32) + "\n", 0o600)
+    if not os.path.isfile(ctx.repo + "/config"):
+        os.umask(0o027)
+        os.makedirs(ctx.repo, exist_ok=True)
+        os.chmod(ctx.repo, 0o2750)       # setgid before restic writes anything: its files and folders get the user's group
+        if os.geteuid() == 0:
+            os.chown(ctx.repo, 0, user.pw_gid)
+        rc, _ = restic_call(ctx, ["init", "--repository-version", "2"], timeout=120)
+        if rc != 0:
+            print("restic could not make the repository (see %s)" % ctx.log, file=sys.stderr)
+            return 1
+    fix_modes(ctx)
+    print("the snapshot repository is ready in %s (group %s may read it)" % (ctx.repo, user.pw_name))
+    return 0
+
+
+def snapshot_record_of(ctx, snap, keeps):
+    rec = {}
+    rc, blob = restic_call(ctx, ["dump", snap["id"], ctx.p(RECORD_IN_SNAPSHOT)])
+    if rc == 0:
+        with contextlib.suppress(ValueError):
+            rec = json.loads(blob.decode("utf-8"))
+    tags = snap.get("tags") or []
+    s = snap.get("summary") or {}
+    seconds = 0
+    if s.get("backup_start") and s.get("backup_end"):
+        seconds = int(unix_of(s["backup_end"]) - unix_of(s["backup_start"]))
+    return make_record(id=snap["id"], short=snap["id"][:8], time=unix_of(snap["time"]),
+                       reason=next((t for t in tags if t in REASONS), rec.get("reason", "update")), run=rec.get("run"),
+                       count=rec.get("count", 0), critical=rec.get("critical", []), targets=rec.get("targets", []),
+                       before=rec.get("before", {}), changed=None, state="done", keep=snap["id"] in keeps, note=rec.get("note", ""),
+                       added=s.get("data_added", 0), addedPacked=s.get("data_added_packed", 0), files=s.get("total_files_processed", 0),
+                       bytes=s.get("total_bytes_processed", 0), seconds=seconds, paths=snap.get("paths", rec.get("paths", [])),
+                       excludes=snap.get("excludes", rec.get("excludes", [])), kernel=rec.get("kernel", ""))
+
+
+def cmd_reindex(ctx, args):
+    need_root(ctx)
+    os.makedirs(ctx.records, exist_ok=True)
+    try:
+        with operation(ctx, "tidy"):
+            snaps = list_snapshots(ctx)
+            keeps = set(read_state(ctx).get("keeps", []))
+            have = {r["id"]: r for r in read_records(ctx)}
+            for s in snaps:
+                rec = have.get(s["id"])
+                if rec is None:
+                    rec = snapshot_record_of(ctx, s, keeps)
+                    write_record(ctx, rec)
+                elif rec["keep"] != (s["id"] in keeps):
+                    rec["keep"] = s["id"] in keeps
+                    write_record(ctx, rec)
+            alive = {s["id"] for s in snaps}
+            for r in have.values():
+                if r["id"] not in alive:
+                    os.unlink("%s/%s.json" % (ctx.records, r["short"]))
+            write_index(ctx)
+            fix_modes(ctx)
+    except Busy as e:
+        print(e, file=sys.stderr)
+        return 4
+    except Failure as f:
+        print(f.text, file=sys.stderr)
+        return 1
+    print("%d snapshots indexed" % len(snaps))
+    return 0
+
+
+def cmd_password(ctx, args):
+    need_root(ctx)
+    with open(ctx.key, encoding="utf-8") as f:
+        sys.stdout.write(f.read())
+    return 0
+
+
+def cmd_dump(ctx, args):
+    need_root(ctx)
+    rec = find_record(ctx, args.short)
+    if not rec:
+        print("no such snapshot", file=sys.stderr)
+        return 3
+    sys.stdout.flush()
+    r = subprocess.run([ctx.restic, "-r", ctx.repo, "dump", rec["id"], args.path], stdin=subprocess.DEVNULL, env=ctx.env())
+    return 0 if r.returncode == 0 else 1
+
+
+def cmd_rescue_build(ctx, args):
+    """Stream B's: the rescue image is built by the script installed beside this tool."""
+    need_root(ctx)
+    build = ctx.lib + "/rescue/build"
+    os.execv(build, [build] + list(args.rest))
+
+
+# ---- the command line -------------------------------------------------------------------------------------------------------------
+
+def parser():
+    ap = argparse.ArgumentParser(prog="lares-snapshot-root")
+    ap.add_argument("--root")
+    ap.add_argument("--restic")
+    sub = ap.add_subparsers(dest="verb", required=True)
+    sub.add_parser("status").set_defaults(fn=cmd_status)
+    sub.add_parser("list").set_defaults(fn=cmd_list)
+    c = sub.add_parser("create")
+    c.add_argument("--note")
+    c.add_argument("--reason", choices=("manual", "undo"), default="manual")
+    c.set_defaults(fn=cmd_create)
+    k = sub.add_parser("keep")
+    k.add_argument("short")
+    k.add_argument("state", choices=("on", "off"))
+    k.set_defaults(fn=cmd_keep)
+    d = sub.add_parser("delete")
+    d.add_argument("short")
+    d.set_defaults(fn=cmd_delete)
+    h = sub.add_parser("hook")
+    h.add_argument("which", choices=("pre", "done"))
+    h.set_defaults(fn=cmd_hook)
+    for name, fn in (("tidy", cmd_tidy), ("init", cmd_init), ("reindex", cmd_reindex), ("password", cmd_password)):
+        sub.add_parser(name).set_defaults(fn=fn)
+    r = sub.add_parser("rescue-build")
+    r.add_argument("rest", nargs="*")
+    r.set_defaults(fn=cmd_rescue_build)
+    p = sub.add_parser("dump")
+    p.add_argument("short")
+    p.add_argument("path")
+    p.set_defaults(fn=cmd_dump)
+    return ap
+
+
+def main(argv):
+    args = parser().parse_args(argv)
+    if (args.root or args.restic) and os.geteuid() == 0:
+        print("--root and --restic are for tests and are refused for root", file=sys.stderr)
+        return 4
+    ctx = Ctx(args.root or "", args.restic)
+    try:
+        return args.fn(ctx, args)
+    except Exception:
+        # a hook that crashes must not hold pacman up: the wrapper reads status 70 as "the tool is broken, let the update through"
+        traceback.print_exc(file=sys.stderr)
+        with contextlib.suppress(Exception):
+            ctx.log_line("crash: " + traceback.format_exc().strip().splitlines()[-1])
+        return HOOK_CRASH if args.verb == "hook" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

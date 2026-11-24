@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# stub iw, replaying the captures (scrubbed) or $AERIAL_STUB_DIR/<name>.txt when a case put one there:
+#   iw dev <if> link          -> iw_link.txt
+#   iw dev <if> station dump  -> iw_station.txt
+#   iw reg get                -> iw_reg.txt
+echo "$*" >> "$AERIAL_STUB_DIR/iw.log"
+show() { local f="$AERIAL_STUB_DIR/$1"; [ -e "$f" ] || f="$AERIAL_FIXTURES/$1"; cat "$f"; exit 0; }
+if [ "$1" = dev ] && [ "$3" = link ]; then show iw_link.txt; fi
+if [ "$1" = dev ] && [ "$3" = station ] && [ "$4" = dump ]; then show iw_station.txt; fi
+if [ "$1" = reg ] && [ "$2" = get ]; then show iw_reg.txt; fi
+echo "stub iw: unexpected $*" >&2; exit 2

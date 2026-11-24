@@ -1,0 +1,320 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "weather.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "locations": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "lat": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90,
+      "x-wants": "a number -90 .. 90"
+     },
+     "lon": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180,
+      "x-wants": "a number -180 .. 180"
+     },
+     "elevation": {
+      "type": "number",
+      "minimum": -500,
+      "maximum": 9000,
+      "x-wants": "a number -500 .. 9000"
+     },
+     "query": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "home": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     }
+    }
+   },
+   "default": [
+    {
+     "name": "Brussels",
+     "lat": 50.85,
+     "lon": 4.35,
+     "elevation": 25
+    }
+   ],
+   "x-wants": "a list of objects",
+   "description": "The saved places, in the popup's order. Each entry is { \"name\", \"lat\", \"lon\" } or { \"query\" }, plus optional keys:\n  name       what the popup shows; a query entry without one takes the name the geocoder answers with\n  lat, lon   decimal degrees (WGS84), lat -90 .. 90, lon -180 .. 180; needed unless \"query\" is given\n  elevation  metres above sea level (Open-Meteo corrects temperature and pressure to it); left out, it is looked\n             up once through Open-Meteo and remembered\n  query      a place name, optionally \", CC\" with an ISO country code (\"Leuven, BE\"), resolved once through\n             Open-Meteo's geocoder and remembered; change the text to resolve it anew\n  default    true: the place the current location shows while geoclue has no fix and there is no hometown (else the\n             first entry); with the current location off the popup starts on the first entry\n  home       true: the hometown, shown while geoclue has no fix; with none marked, the first accepted fix is kept\nAn entry with neither lat + lon nor a query is skipped. Default: Brussels, below. For example:\n  \"locations\": [\n    { \"name\": \"Antwerp\", \"lat\": 51.22, \"lon\": 4.40, \"elevation\": 7, \"default\": true },\n    { \"name\": \"Leuven\", \"query\": \"Leuven, BE\" }\n  ],\n\nTakes a list of objects. Default: [{\"name\":\"Brussels\",\"lat\":50.85,\"lon\":4.35,\"elevation\":25}]."
+  },
+  "currentLocation": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "maxAccuracyM": {
+     "type": "number",
+     "minimum": 1,
+     "default": 3000,
+     "x-wants": "a number, 1 and up",
+     "description": "Takes a number, 1 and up. Default: 3000."
+    },
+    "nearSavedKm": {
+     "type": "number",
+     "minimum": 0.001,
+     "default": 5,
+     "x-wants": "a number, 0.001 and up",
+     "description": "Takes a number, 0.001 and up. Default: 5."
+    }
+   },
+   "description": "The machine's own position, from geoclue, shown first in the list.\n  enabled       ask geoclue at all. Default true.\n  maxAccuracyM  a fix coarser than this many metres is refused (an IP fix is tens of km, a WiFi fix a few\n                hundred m). Default 3000; a number above 0.\n  nearSavedKm   a fix within this many km of a saved place takes that place's name. Default 5; a number above 0."
+  },
+  "units": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "temperature": {
+     "enum": [
+      "c",
+      "f"
+     ],
+     "default": "c",
+     "x-wants": "\"c\" or \"f\"",
+     "description": "\"c\" | \"f\"\n\nTakes \"c\" or \"f\". Default: \"c\"."
+    },
+    "wind": {
+     "enum": [
+      "bft",
+      "speed"
+     ],
+     "default": "bft",
+     "x-wants": "\"bft\" or \"speed\"",
+     "description": "\"bft\" (Beaufort) | \"speed\" (a figure in the \"speed\" unit)\n\nTakes \"bft\" or \"speed\". Default: \"bft\"."
+    },
+    "speed": {
+     "enum": [
+      "kmh",
+      "ms",
+      "mph",
+      "kn"
+     ],
+     "default": "kmh",
+     "x-wants": "\"kmh\", \"ms\", \"mph\" or \"kn\"",
+     "description": "\"kmh\" | \"ms\" | \"mph\" | \"kn\"\n\nTakes \"kmh\", \"ms\", \"mph\" or \"kn\". Default: \"kmh\"."
+    },
+    "pressure": {
+     "enum": [
+      "hpa",
+      "mbar",
+      "mmhg",
+      "inhg"
+     ],
+     "default": "hpa",
+     "x-wants": "\"hpa\", \"mbar\", \"mmhg\" or \"inhg\"",
+     "description": "\"hpa\" | \"mbar\" | \"mmhg\" | \"inhg\"\n\nTakes \"hpa\", \"mbar\", \"mmhg\" or \"inhg\". Default: \"hpa\"."
+    },
+    "precipitation": {
+     "enum": [
+      "mm",
+      "in"
+     ],
+     "default": "mm",
+     "x-wants": "\"mm\" or \"in\"",
+     "description": "\"mm\" | \"in\"\n\nTakes \"mm\" or \"in\". Default: \"mm\"."
+    },
+    "distance": {
+     "enum": [
+      "km",
+      "mi"
+     ],
+     "default": "km",
+     "x-wants": "\"km\" or \"mi\"",
+     "description": "\"km\" | \"mi\" (visibility)\n\nTakes \"km\" or \"mi\". Default: \"km\"."
+    },
+    "airQuality": {
+     "enum": [
+      "ugm3"
+     ],
+     "default": "ugm3",
+     "x-wants": "\"ugm3\"",
+     "description": "\"ugm3\" (pollutant concentrations, the only choice)\n\nTakes \"ugm3\". Default: \"ugm3\"."
+    },
+    "co": {
+     "enum": [
+      "mgm3",
+      "ugm3"
+     ],
+     "default": "mgm3",
+     "x-wants": "\"mgm3\" or \"ugm3\"",
+     "description": "\"mgm3\" | \"ugm3\" (carbon monoxide)\n\nTakes \"mgm3\" or \"ugm3\". Default: \"mgm3\"."
+    },
+    "clock": {
+     "enum": [
+      "24h",
+      "12h"
+     ],
+     "default": "24h",
+     "x-wants": "\"24h\" or \"12h\"",
+     "description": "\"24h\" | \"12h\"\n\nTakes \"24h\" or \"12h\". Default: \"24h\"."
+    },
+    "date": {
+     "enum": [
+      "dd/MM",
+      "MM/dd",
+      "d MMM"
+     ],
+     "default": "dd/MM",
+     "x-wants": "\"dd/MM\", \"MM/dd\" or \"d MMM\"",
+     "description": "\"dd/MM\" | \"MM/dd\" | \"d MMM\" (the week's first day is calendars.jsonc's weekStart)\n\nTakes \"dd/MM\", \"MM/dd\" or \"d MMM\". Default: \"dd/MM\"."
+    }
+   }
+  },
+  "view": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "start": {
+     "enum": [
+      "mini",
+      "normal",
+      "detailed"
+     ],
+     "default": "mini",
+     "x-wants": "\"mini\", \"normal\" or \"detailed\"",
+     "description": "Takes \"mini\", \"normal\" or \"detailed\". Default: \"mini\"."
+    },
+    "remember": {
+     "enum": [
+      "session",
+      "never"
+     ],
+     "default": "session",
+     "x-wants": "\"session\" or \"never\"",
+     "description": "Takes \"session\" or \"never\". Default: \"session\"."
+    }
+   },
+   "description": "The popup's view: the one it starts a session on (\"mini\" | \"normal\" | \"detailed\"), and whether it comes back as you left it for the rest of the\nsession (\"session\") or opens on that one every time (\"never\")."
+  },
+  "look": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "secondarySide": {
+     "enum": [
+      "start",
+      "end",
+      "far"
+     ],
+     "default": "end",
+     "x-wants": "\"start\", \"end\" or \"far\"",
+     "description": "Takes \"start\", \"end\" or \"far\". Default: \"end\"."
+    }
+   },
+   "description": "Where a day's detail opens beside the popup: \"end\" (the right of a top bar's popup) | \"start\" (the left) | \"far\" (below it)."
+  },
+  "glyphSet": {
+   "enum": [
+    "ink",
+    "carved"
+   ],
+   "default": "ink",
+   "x-wants": "\"ink\" or \"carved\"",
+   "description": "TEMPORARY, while the redesigned icons are on trial: \"ink\" (the drawn set: solid icons in the bar's ink with one\ncoloured part) | \"carved\" (the legacy carved, full-colour set). Read live. Default \"ink\". The key goes when the\nlegacy set does.\n\nTakes \"ink\" or \"carved\". Default: \"ink\"."
+  },
+  "aqiIndex": {
+   "enum": [
+    "eaqi",
+    "belaqi"
+   ],
+   "default": "eaqi",
+   "x-wants": "\"eaqi\" or \"belaqi\"",
+   "description": "The air quality index: \"eaqi\" (the European index, Open-Meteo / CAMS) | \"belaqi\" (IRCEL-CELINE's Belgian index,\n1 .. 10). Default \"eaqi\".\n\nTakes \"eaqi\" or \"belaqi\". Default: \"eaqi\"."
+  },
+  "sources": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "openMeteo": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "model": {
+       "type": "string",
+       "pattern": "^[a-z0-9_]+$",
+       "default": "best_match",
+       "x-wants": "a text like best_match",
+       "description": "Takes a text like best_match. Default: \"best_match\"."
+      }
+     },
+     "description": "An Open-Meteo model id (lower case, digits, _): \"best_match\", \"knmi_harmonie_arome_netherlands\", \"icon_d2\",\n\"meteofrance_arome_france_hd\", \"ecmwf_ifs025\", ... Default \"best_match\"."
+    },
+    "kmi": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      }
+     },
+     "description": "The KMI app API: observation, warnings, pollen note, radar nowcast, KMI's daily text. Default true."
+    }
+   }
+  },
+  "refreshMinutes": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "forecast": {
+     "type": "number",
+     "minimum": 0.1,
+     "default": 15,
+     "x-wants": "a number, 0.1 and up",
+     "description": "Takes a number, 0.1 and up. Default: 15."
+    },
+    "airQuality": {
+     "type": "number",
+     "minimum": 0.1,
+     "default": 60,
+     "x-wants": "a number, 0.1 and up",
+     "description": "Takes a number, 0.1 and up. Default: 60."
+    },
+    "kmi": {
+     "type": "number",
+     "minimum": 0.1,
+     "default": 15,
+     "x-wants": "a number, 0.1 and up",
+     "description": "Takes a number, 0.1 and up. Default: 15."
+    },
+    "nowcastWhileOpen": {
+     "type": "number",
+     "minimum": 0.1,
+     "default": 5,
+     "x-wants": "a number, 0.1 and up",
+     "description": "Takes a number, 0.1 and up. Default: 5."
+    }
+   },
+   "description": "Minutes each source may age before it is fetched again; nowcastWhileOpen is KMI's cadence while the popup is open.\nDefaults 15, 60, 15, 5; each a number above 0."
+  }
+ }
+}

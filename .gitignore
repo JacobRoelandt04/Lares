@@ -1,0 +1,86 @@
+package-lock.json
+.qmlls.ini
+
+# User's private calendar config — holds shared-link URLs with access tokens.
+/calendars.jsonc
+/calendars.json
+
+# The user's weather config (locations, units); .examples/weather.jsonc is the template.
+/weather.jsonc
+/weather.json
+
+# Runtime state: mockup control-panel profiles, and the derived default.json
+# the framework rewrites at every launch.
+mockup_profiles/
+
+__pycache__/
+
+# The user's portfolio (holdings, actions, alerts); .examples/stocks.jsonc is the template.
+/stocks.jsonc
+/stocks.json
+
+# An old secrets file (the wiki's JEV_API_KEY lived here until 2026-11-23; it is `jevKey` in config/wiki.jsonc now). Never tracked.
+.env
+
+# The user's wiki config (thresholds, sources, judge); .examples/wiki.jsonc is the template.
+/wiki.jsonc
+/wiki.json
+
+# The user's lockscreen and locale configs; .examples/<name>.jsonc are the templates.
+/lockscreen.jsonc
+/lockscreen.json
+/locale.jsonc
+/locale.json
+
+# The user's silicon config (profile-linked values, idle ladder, sounds, look); .examples/silicon.jsonc is the template.
+/silicon.jsonc
+/silicon.json
+
+# THE USER'S CONFIGS (2026-11-12): every hand-edited <name>.jsonc lives in config/ (.examples/<name>.jsonc are the templates).
+# The root names below are where they lived before; the shell still reads a file not moved yet.
+/config/
+
+# The user's screentime daemon config; .examples/screentime.jsonc is the template.
+/screentime.jsonc
+/screentime.json
+
+# The user's clipboard config (limits, secrets, paste keys); .examples/clipboard.jsonc is the template.
+/clipboard.jsonc
+/clipboard.json
+
+# The user's REAL UPower charge-history captures (a week of when the pack was plugged in and full); silicon's gates replay a synthetic week
+# (tools/silicon/make_upower_fixture.py -> tools/dev/fixtures/silicon/upower/) always and these too when this folder is present.
+tools/dev/fixtures/silicon/upower_local/
+
+# The user's notifications, OSD, window-title/tray and album-art configs; .examples/<name>.jsonc are the
+# templates (lares trial on copies a missing one from its example, never over an existing one).
+/notifications.jsonc
+/notifications.json
+/osd.jsonc
+/osd.json
+/windowtray.jsonc
+/windowtray.json
+
+# The launcher's and the system update's optional settings (the older .json names are still read).
+/launcher.jsonc
+/launcher.json
+/system_update.jsonc
+/system_update.json
+
+# The shell's layout config (bars per output, island lengths, zone order), written live by
+# mockups/shell.qml's Layout tab; .examples/shell.jsonc is the template.
+/shell.jsonc
+/shell.json
+
+# The user's idle and LLM settings (moved out of shell.jsonc); .examples/idle.jsonc and .examples/llm.jsonc are the templates.
+/idle.jsonc
+/idle.json
+/llm.jsonc
+/llm.json
+
+/feedback/phone_photos/
+
+# Shell state that once lived in the repo's root (the favourites, until 2026-11-23). It is under $XDG_STATE_HOME/lares/<module>/ now;
+# FavoritesStore copies an old file over once, and these old copies are left for you to delete.
+/system_update_favorites.json
+/launcher_favorites.json

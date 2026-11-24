@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+# Stub of tools/panorama/lares-cast for tools/dev/cast_service_probe.sh: canned JSON lines, the scenario chosen by the LAST OCTET of --device
+# (wfd:00:00:00:00:00:NN), scan by --seconds (8 ok, 7 error, 6 slow). Handles TERM like the real tool: stopping, ended 0.
+import json, signal, sys, time
+
+a = sys.argv[1:]
+def out(o):
+    sys.stdout.write(json.dumps(o, separators=(",", ":")) + "\n"); sys.stdout.flush()
+def raw(s):
+    sys.stdout.write(s); sys.stdout.flush()
+def arg(k, d=""):
+    return a[a.index(k) + 1] if k in a else d
+
+class Stop(Exception):
+    pass
+def h(*_):
+    raise Stop()
+signal.signal(signal.SIGTERM, h)
+signal.signal(signal.SIGINT, h)
+signal.signal(signal.SIGUSR1, h)       # the stop of a restart (the real tool keeps its Wi-Fi hold)
+
+if a[:1] == ["restore"]:
+    sys.exit(0)
+if a[:1] == ["scan"]:
+    secs = arg("--seconds", "8")
+    if secs == "7":
+        out({"event": "error", "reason": "scan", "detail": "NetworkManager has no Wi-Fi Direct device"}); sys.exit(1)
+    if secs == "6":
+        time.sleep(1.5)
+    out({"devices": [{"id": "wfd:02:AE:00:00:0A:01", "index": 0, "mac": "02:AE:00:00:0A:01", "name": "[TV] Living Room OLED 65", "protocol": "wfd", "capable": True, "note": ""},
+                     {"id": "wfd:6E:11:22:33:44:55", "index": 1, "mac": "6E:11:22:33:44:55", "name": "Pixel 9", "protocol": "wfd", "capable": False, "note": "not advertising Wi-Fi Display"}],
+         "fluxcast": "0.3.0", "shim": True, "protocols": ["wfd"]})
+    sys.exit(0)
+
+sc = int(arg("--device").split(":")[-1], 16)
+def st(s): out({"event": "state", "state": s})
+def stats(n):              # the tool's own form (lares-cast, class Figures)
+    out({"event": "stats", "age": n, "reconnects": 0, "fps": 30.0, "dropped": n, "repeated": 2 * n, "behindMs": 12, "kbps": 8312, "rttMs": 4.1, "signalDbm": -52, "linkMbps": 866.7})
+def stream(count=None):
+    st("negotiating"); out({"event": "mode", "width": 1920, "height": 1080, "fps": 30}); st("streaming")
+    n = 0
+    while count is None or n < count:
+        n += 1; stats(n); time.sleep(0.15)
+
+try:
+    st("scanning"); st("connecting")
+    if sc == 1:
+        stream()
+    elif sc == 2:
+        st("negotiating"); raw('{"event":"mode","width":1920,'); time.sleep(0.4); raw('"height":1080,"fps":30}\n'); st("streaming")
+        while True:
+            stats(1); time.sleep(0.15)
+    elif sc == 3:
+        time.sleep(0.2)
+        out({"event": "failed", "reason": "activation", "detail": "Timed out waiting for NetworkManager Wi-Fi Direct activation. Last status: unknown"})
+        st("ended"); out({"event": "ended", "code": 1}); sys.exit(1)
+    elif sc == 4:
+        time.sleep(300)
+    elif sc == 5:
+        time.sleep(0.2); sys.exit(9)
+    elif sc == 6:
+        stream(3)
+        out({"event": "failed", "reason": "peer-gone", "detail": "the display ended the session"})
+        st("ended"); out({"event": "ended", "code": 1}); sys.exit(1)
+    elif sc == 7:
+        out({"event": "retry", "n": 1}); st("scanning"); st("connecting"); stream()
+    elif sc == 8:
+        stream(2)
+        out({"event": "failed", "reason": "capture", "detail": "wf-recorder exited immediately during WFD streaming."})
+        out({"event": "ended", "code": 1}); out({"event": "ended", "code": 1}); sys.exit(1)
+except Stop:
+    st("stopping"); st("ended"); out({"event": "ended", "code": 0}); sys.exit(0)

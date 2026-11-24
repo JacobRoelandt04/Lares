@@ -1,0 +1,185 @@
+0ad
+1password
+2 fast 2 furious
+2048
+2fa
+3d viewer
+4k video downloader
+7-zip
+7zip
+9pm
+a
+A Wine application
+abs
+Access Prompt
+Advanced Network Configuration
+Android File Transfer (MTP)
+Anki
+b
+Balatro
+bin
+bitwarden
+Blender
+blender 4.2
+blue
+Bluetooth Adapters
+Bluetooth Manager
+brussels
+btop
+btop++
+c
+c++
+Cardwire
+Cartes
+Claude Code URL Handler
+CMake
+code
+color
+colour
+cs2
+day
+days
+Deepin Camera
+Divinity: Original Sin Enhanced Edition
+Document Viewer
+dolphin
+doom 3
+dota 2
+e
+EasyTAG
+eur
+f1 2024
+Geoclue Demo agent
+gimp 3
+GNU Image Manipulation Program
+Google Maps
+gta v
+GTK Settings
+half-life 2
+Hardware Locality lstopo
+hd player
+hex
+hexchat
+hh
+htop
+Image Viewer
+inkscape
+java 17
+k
+k3b
+KDE Connect
+KDE Connect Indicator
+KDE Connect SMS
+KDE Wallet Service
+Keyboard Layout
+KIO
+kitty
+kitty URL Launcher
+krita
+KTelnetService
+LibreOffice
+libreoffice 24
+LibreOffice Base
+LibreOffice Calc
+LibreOffice Draw
+LibreOffice Impress
+LibreOffice Math
+LibreOffice Writer
+LibreOffice XSLT based filters
+log
+london
+LSHW
+m
+mame
+Manage Printing
+MaterialX Graph Editor
+MaterialX Viewer
+mod
+Modrinth App
+mpv
+mpv Media Player
+MusicBrainz Picard
+MySQL Workbench
+Neovim
+NetworkManager Applet
+nfs 2015
+nmap
+node 22
+notepad++
+now
+nvtop
+OBS Studio
+obsidian
+one
+openscad
+OpenStreetMap
+Oracle VirtualBox
+pi
+Pinentry
+PolicyKit Authentication Agent
+Portal
+portal 2
+Postman
+Print Preview
+Proton Pass
+ProtonUp-Qt
+python 3
+Qt Assistant
+Qt D-Bus Viewer
+qt designer
+Qt Linguist
+Qt V4L2 test Utility
+Qt V4L2 video capture utility
+Qt Widgets Designer
+quake 3
+Quickshell
+r
+red
+rlr
+rundll32
+scrcpy
+scrcpy (console)
+Sid Meier's Civilization VII
+Signal
+sin
+sqrt
+Steam
+steam
+steam deck
+Stremio
+Swappy
+tau
+ten
+time
+Timeshift
+today
+tokyo
+two
+unix
+usd
+USD view
+Vesktop
+View file
+Visual Studio Code
+Visual Studio Code - URL Handler
+vlc
+VLC media player
+VLC media player (Audio CD)
+VLC media player (Blu-ray)
+VLC media player (DVD)
+VLC media player (VCD)
+Volume Control
+week
+wheelmap.org
+Where am I?
+Windows
+Wine Installer
+winhlp32
+wscript
+x
+x11
+x2go
+Xwayland
+Yazi File Manager
+Zen Browser
+Zenity

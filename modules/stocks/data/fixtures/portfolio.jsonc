@@ -1,0 +1,115 @@
+// The stocks mock's portfolio (StocksMock: the stocks mockup and the mock shell): a stocks.jsonc that uses every field,
+// on the symbols modules/stocks/data/fixtures/ holds captured data for. .examples/stocks.jsonc documents the keys and their defaults.
+{
+    // Totals are reported in this currency. Only "EUR" is supported for now;
+    // every stock is still SHOWN in the currency it trades in.
+    "currency": "EUR",
+
+    // Inflation: Eurostat's HICP for this country (ISO code), monthly. Real
+    // figures are every cash flow re-expressed in today's euros with it.
+    "inflation": { "geo": "BE" },
+
+    // Share of every dividend kept back as tax (0.30 = Belgian 30 %
+    // roerende voorheffing). Dividends are found automatically.
+    "dividendWithholding": 0.30,
+
+    // The summary card's cycling index cells, in any order (hovering them
+    // shows the biggest movers). Yahoo symbols; an object may give an alias.
+    "indices": [{ "symbol": "^BFX",      "alias": "BEL 20" },
+                { "symbol": "^AEX",      "alias": "AEX" },
+                { "symbol": "^STOXX50E", "alias": "Euro Stoxx 50" },
+                { "symbol": "^GSPC",     "alias": "S&P 500" },
+                { "symbol": "^IXIC",     "alias": "Nasdaq" },
+                { "symbol": "EURUSD=X",  "alias": "EUR/USD" }],
+
+    // Desktop notifications, once per crossing (re-armed when the price has
+    // moved back by alertHysteresis, a fraction). dayMove is |day %|.
+    "alertHysteresis": 0.005,
+    "alerts": [
+        { "symbol": "ASML.AS", "above": 1600 },
+        { "symbol": "AAPL",    "below": 300 },
+        { "symbol": "*",       "dayMove": 5 }
+    ],
+
+    // Sudden moves: a stock you hold or watch that moves at least `pct` % within `minutes` minutes,
+    // while its market is open -- once per direction per day. A symbol may have thresholds of its
+    // own, or `false` for none. (Which stocks, and whether it speaks at all: notifications.jsonc,
+    // sources.stocks.) Defaults: 3 % within 30 minutes.
+    "sudden": {
+        "pct": 3,
+        "minutes": 30,
+        "bySymbol": {
+            "NVDA": { "pct": 5, "minutes": 15 }
+            // "KBC.BR": false
+        }
+    },
+
+    // symbol   Yahoo Finance symbol (search for it in the popup to find it:
+    //          ASML.AS is Amsterdam, KBC.BR Brussels, VOD.L London, AAPL NASDAQ)
+    // alias    optional, shown instead of the symbol
+    // image    optional, a local .svg/.png used instead of the fetched logo
+    // isin     optional, lets the logo be found when the symbol is not
+    // cnbc     optional, CNBC's symbol when the automatic one is wrong
+    //          (the detail's market cap / P/E / EPS / yield / beta come from CNBC)
+    // actions  every buy and sell, in any order:
+    //   type     "buy" | "sell"
+    //   date     "YYYY-MM-DD", the trade date
+    //   shares   as bought -- BEFORE any later split (splits are applied for you)
+    //   price    per share, in the currency the stock is QUOTED in. London
+    //            quotes in PENCE (GBp): 93.30 means 93.30 p, not £93.30.
+    //   fees     optional, broker fee + stock-exchange tax, same unit as price
+    //   comment  optional, shown in the detail and on the chart marker
+    "holdings": [
+        {
+            "symbol": "ASML.AS", "alias": "ASML",
+            "actions": [
+                { "type": "buy",  "date": "2023-03-15", "shares": 8, "price": 568.00, "fees": 7.50, "comment": "first tranche" },
+                { "type": "buy",  "date": "2024-11-04", "shares": 4, "price": 618.20, "fees": 7.50 },
+                { "type": "sell", "date": "2025-06-02", "shares": 2, "price": 646.20, "fees": 7.50, "comment": "rebalance" }
+            ]
+        },
+        {
+            "symbol": "KBC.BR",
+            "actions": [
+                { "type": "buy", "date": "2022-05-10", "shares": 30, "price": 53.96, "fees": 7.50 },
+                { "type": "buy", "date": "2024-02-12", "shares": 10, "price": 62.98, "fees": 7.50 }
+            ]
+        },
+        {
+            "symbol": "AAPL", "alias": "Apple",
+            "actions": [
+                { "type": "buy", "date": "2021-02-01", "shares": 10, "price": 134.14, "fees": 9.00 },
+                { "type": "buy", "date": "2023-08-14", "shares": 5,  "price": 179.46, "fees": 9.00 }
+            ]
+        },
+        {
+            "symbol": "NVDA",
+            "actions": [
+                { "type": "buy",  "date": "2022-10-03", "shares": 5,  "price": 125.10, "fees": 9.00, "comment": "before the 10:1 split" },
+                { "type": "sell", "date": "2024-12-02", "shares": 20, "price": 138.63, "fees": 9.00 }
+            ]
+        },
+        {
+            "symbol": "VOD.L", "alias": "Vodafone",
+            "actions": [
+                { "type": "buy", "date": "2023-01-16", "shares": 500, "price": 93.30, "fees": 1200 }
+            ]
+        },
+        {
+            "symbol": "IWDA.AS", "alias": "MSCI World", "isin": "IE00B4L5Y983",
+            "actions": [
+                { "type": "buy", "date": "2021-06-07", "shares": 20, "price": 67.47, "fees": 2.00 },
+                { "type": "buy", "date": "2022-06-13", "shares": 20, "price": 68.28, "fees": 2.00 },
+                { "type": "buy", "date": "2023-06-12", "shares": 20, "price": 76.46, "fees": 2.00 },
+                { "type": "buy", "date": "2024-06-10", "shares": 20, "price": 93.45, "fees": 2.00 }
+            ]
+        },
+        {
+            "symbol": "UCB.BR",
+            "actions": [
+                { "type": "buy",  "date": "2021-03-08", "shares": 15, "price": 78.46,  "fees": 7.50 },
+                { "type": "sell", "date": "2024-03-11", "shares": 15, "price": 108.65, "fees": 7.50, "comment": "closed" }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# pw-play STAND-IN: nothing in the data layer plays a sound; a call here is a failure the runner reports.
+printf '%s %s\n' "$(date +%s%3N)" "$*" >> "${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}/pw-play.log"
+exit 0

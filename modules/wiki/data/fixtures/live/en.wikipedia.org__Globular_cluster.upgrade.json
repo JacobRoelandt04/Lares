@@ -1,0 +1,14 @@
+{
+ "ev": "upgrade",
+ "id": "en.wikipedia.org/Globular_cluster",
+ "intro": {
+  "text": "A globular cluster is a tight ball of thousands to millions of stars, held together by their own gravity and orbiting a galaxy's centre like a small moon. The Milky Way has about 150 of them, and they hold some of the oldest stars in the universe, which is why astronomers use them to date the galaxy itself. Their stars are packed so closely that near the core neighbours can be a thousand times nearer than the Sun's nearest star, and collisions and near misses reshape the cluster over billions of years. M87 has around 15,000 of them, a hundred times as many.",
+  "words": 103,
+  "provenance": "generated",
+  "stripped": [],
+  "model": "jev-1.13+ornith-1.5:9b",
+  "grounded": true,
+  "locator": null,
+  "links": []
+ }
+}

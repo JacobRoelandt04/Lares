@@ -1,0 +1,24 @@
+// node tools/dev/panorama_ddc_parse_cases.js -- DdcParse.js's pure resolver on a real NVIDIA-style detect block (no connector line)
+const fs = require("fs");
+const src = fs.readFileSync(__dirname + "/../../modules/panorama/data/DdcParse.js", "utf8").replace(/^\.pragma library/m, "");
+const P = new Function(src + "; return { parseDetect, parseBusMap, resolveDisplays, signature, parseGetvcp };")();
+let fails = 0;
+const ck = (n, ok, d) => { if (!ok) fails++; console.log("DDCPARSE " + (ok ? "ok  " : "FAIL") + " " + n + (ok ? "" : "  [" + JSON.stringify(d) + "]")); };
+const txt = fs.readFileSync(__dirname + "/fixtures/panorama/ddcutil_detect_nvidia_noconnector.txt", "utf8");
+const list = P.parseDetect(txt);
+ck("three blocks, '(unknown)' and a missing line both read as no connector", list.length === 3 && list[0].connector === "" && list[1].connector === "" && list[2].connector === "eDP-1", list);
+const outs = [{ name: "eDP-1", description: "Sharp 0x1" }, { name: "DP-3", description: "Acer Technologies VG240Y 0x0001", model: "VG240Y" }, { name: "HDMI-A-1", description: "Dell Inc. DELL U2723QE 7ZQ4PX3" }];
+let r = P.resolveDisplays(list, outs, {});
+ck("EDID model matches the one output that carries it", r.map["DP-3"] && r.map["DP-3"].bus === 6 && r.map["HDMI-A-1"] && r.map["HDMI-A-1"].bus === 8 && !r.map["eDP-1"], Object.keys(r.map));
+r = P.resolveDisplays(list, outs, { 6: "DP-9" });
+ck("the sysfs bus map wins over EDID", r.map["DP-9"] && r.map["DP-9"].bus === 6 && !r.map["DP-3"], Object.keys(r.map));
+r = P.resolveDisplays(list, [{ name: "DP-1", description: "Acer VG240Y a" }, { name: "DP-2", description: "Acer VG240Y b" }], {});
+ck("two identical models, no serial: unresolved, never guessed", Object.keys(r.map).length === 0 && r.unresolved.length === 2, r);
+const two = P.parseDetect("Display 1\n   I2C bus: /dev/i2c-6\n   Monitor: ACR:VG240Y:SER2\n");
+r = P.resolveDisplays(two, [{ name: "DP-1", description: "Acer VG240Y SER1" }, { name: "DP-2", description: "Acer VG240Y SER2" }], {});
+ck("two identical models: the serial tells", r.map["DP-2"] && !r.map["DP-1"], Object.keys(r.map));
+ck("busmap parse", JSON.stringify(P.parseBusMap("card1-DP-1 i2c-5\ncard0-HDMI-A-1 i2c-12\nnoise\n")) === '{"5":"DP-1","12":"HDMI-A-1"}', 0);
+ck("signature is order free", P.signature([{ name: "b" }, { name: "a" }]) === "a,b", 0);
+ck("getvcp max", JSON.stringify(P.parseGetvcp("VCP 10 C 30 255")) === '{"ok":true,"cur":30,"max":255}', 0);
+console.log("DDCPARSE RESULT " + (fails === 0 ? "PASS" : "FAIL"));
+process.exit(fails ? 1 : 0);

@@ -1,0 +1,4 @@
+36 29 0:32 / /run/user/1000/1d3a8f5c9b2e4a77 rw,nosuid,nodev,relatime shared:1 - fuse.sshfs kdeconnect@192.168.0.240:/ rw,user_id=1000,group_id=1000
+41 29 0:40 / /mnt/android rw,nosuid,nodev,relatime shared:2 - fuse aft-mtp-mount rw,user_id=1000,group_id=1000
+44 29 0:44 / /mnt/with\040space rw,relatime - ext4 /dev/sda1 rw
+29 1 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw

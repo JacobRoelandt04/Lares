@@ -1,0 +1,31 @@
+format = """
+[](#CCD9F5)\
+[](fg:#A9C2F5 bg:#CCD9F5)\
+[](fg:#88ADF5 bg:#A9C2F5)\
+[](fg:#6092F4 bg:#88ADF5)\
+[  ](fg:#4480F4 bg:#6092F4)\
+[   ](fg:#EAEDF5 bg:#4480F4)\
+[](fg:#4480F4 bg:#6092F4)\
+$directory\
+[](fg:#6092F4 bg:#88ADF5)\
+[](fg:#88ADF5 bg:#A9C2F5)\
+[](fg:#A9C2F5 bg:#CCD9F5)\
+[](#CCD9F5)\
+\n$character"""
+
+[directory]
+style = "fg:#EAEDF5 bg:#6092F4"
+format = "[ $path ]($style)"
+truncation_length = 14
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰧮"
+"Downloads" = ""
+"Music" = ""
+"Pictures" = ""
+".config" = ""
+
+[character]
+success_symbol = '[❯](bold #44C145) '
+error_symbol = '[❯](bold #EC0000) '

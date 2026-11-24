@@ -1,0 +1,150 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "clock.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "open": {
+   "enum": [
+    "auto",
+    "calendar",
+    "timers",
+    "last"
+   ],
+   "default": "auto",
+   "x-wants": "\"auto\", \"calendar\", \"timers\" or \"last\"",
+   "description": "The tab the popup opens on. \"auto\": the timers when one has finished and you have not looked, or when you were there last and one is in\nprogress; else the calendar. \"last\": the one you were on. A timer that finished unseen always wins.\n\"auto\" | \"calendar\" | \"timers\" | \"last\".\n\nTakes \"auto\", \"calendar\", \"timers\" or \"last\". Default: \"auto\"."
+  },
+  "seconds": {
+   "enum": [
+    "hover",
+    "always",
+    "never"
+   ],
+   "default": "hover",
+   "x-wants": "\"hover\", \"always\" or \"never\"",
+   "description": "The seconds beside the bar's time: \"hover\" (while the pointer is on the clock) | \"always\" | \"never\".\n\nTakes \"hover\", \"always\" or \"never\". Default: \"hover\"."
+  },
+  "timers": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "snoozeMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 120,
+     "default": 9,
+     "x-wants": "a number 1 .. 120",
+     "description": "What Snooze adds, in minutes. 1 .. 120.\n\nTakes a number 1 .. 120. Default: 9."
+    },
+    "sounds": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "countdown": {
+       "type": "string",
+       "default": "alarm-clock-elapsed.oga",
+       "x-wants": "a path",
+       "description": "Takes a path. Default: \"alarm-clock-elapsed.oga\"."
+      },
+      "pomodoro": {
+       "type": "string",
+       "default": "complete.oga",
+       "x-wants": "a path",
+       "description": "Takes a path. Default: \"complete.oga\"."
+      },
+      "alarm": {
+       "type": "string",
+       "default": "alarm-clock-elapsed.oga",
+       "x-wants": "a path",
+       "description": "Takes a path. Default: \"alarm-clock-elapsed.oga\"."
+      }
+     },
+     "description": "The sound of each: a file name of /usr/share/sounds/freedesktop/stereo, a path (~ is your home), or \"none\". A file that is not there is\nthe one written here."
+    },
+    "volume": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1,
+     "default": -1,
+     "x-wants": "a number -1 .. 1",
+     "description": "How loud, 0 .. 1; -1 plays it at the level of the sound server's stream.\n\nTakes a number -1 .. 1. Default: -1."
+    },
+    "ringSec": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 3600,
+     "default": 60,
+     "x-wants": "a whole number 1 .. 3600",
+     "description": "A countdown or an alarm rings for this many seconds at most. 1 .. 3600.\n\nTakes a whole number 1 .. 3600. Default: 60."
+    },
+    "soundUnderDnd": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "They sound while do-not-disturb is on. true | false (the card is shown either way).\n\nTakes true or false. Default: true."
+    },
+    "countdownMin": {
+     "type": "number",
+     "minimum": 0.1,
+     "maximum": 1440,
+     "default": 5,
+     "x-wants": "a number 0.1 .. 1440",
+     "description": "The countdown's first time in a session, minutes. Read as the shell starts.\n\nTakes a number 0.1 .. 1440. Default: 5. Read as the shell starts."
+    },
+    "focusMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 240,
+     "default": 25,
+     "x-wants": "a number 1 .. 240",
+     "description": "The pomodoro's focus, short break and long break, minutes: where they start, and what a right click on one puts back.\n\nTakes a number 1 .. 240. Default: 25. Read as the shell starts."
+    },
+    "shortMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 120,
+     "default": 5,
+     "x-wants": "a number 1 .. 120",
+     "description": "Takes a number 1 .. 120. Default: 5. Read as the shell starts."
+    },
+    "longMin": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 240,
+     "default": 30,
+     "x-wants": "a number 1 .. 240",
+     "description": "Takes a number 1 .. 240. Default: 30. Read as the shell starts."
+    },
+    "missedHours": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 168,
+     "default": 12,
+     "x-wants": "a number 0 .. 168",
+     "description": "An alarm missed by more than this many hours (the machine was off) is not reported. 0 .. 168.\n\nTakes a number 0 .. 168. Default: 12."
+    }
+   }
+  },
+  "look": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "secondarySide": {
+     "enum": [
+      "start",
+      "end",
+      "far"
+     ],
+     "default": "end",
+     "x-wants": "\"start\", \"end\" or \"far\"",
+     "description": "Takes \"start\", \"end\" or \"far\". Default: \"end\"."
+    }
+   },
+   "description": "Where the wiki's card opens beside the popup: \"end\" (the right of a top bar's popup) | \"start\" (the left) | \"far\" (below it)."
+  }
+ }
+}

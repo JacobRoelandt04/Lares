@@ -1,0 +1,23 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "locale.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "timeFormat": {
+   "type": "string",
+   "default": "HH:mm",
+   "x-wants": "a text",
+   "description": "The time, as a Qt format string (Qt.formatDateTime): HH / H hour 0-23, hh / h hour 1-12 (add AP for AM / PM),\nmm minutes, ss seconds. Default \"HH:mm\".\n\nTakes a text. Default: \"HH:mm\"."
+  },
+  "dateFormat": {
+   "type": "string",
+   "default": "dddd d MMMM",
+   "x-wants": "a text",
+   "description": "The date, as a Qt format string: d / dd day, ddd / dddd weekday (short / full), M / MM / MMM / MMMM month\n(number / short / full name), yy / yyyy year. Default \"dddd d MMMM\".\n\nTakes a text. Default: \"dddd d MMMM\"."
+  }
+ }
+}

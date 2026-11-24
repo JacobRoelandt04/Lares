@@ -1,0 +1,69 @@
+#version 440
+
+// =============================================================================
+// silicon_particles.vert -- every particle of the silicon scene from ONE ShaderEffect and ONE
+// GridMesh: no per-particle item, no texture, no state. The geometry is generated from SceneGeometry.js
+// (tools/dev/silicon_shader_gen.js), the motion of each emitter is particles_common.glsl.
+//
+// THE MESH. The effect's GridMesh is one column wide and 4*N - 1 cells deep: two vertices a row and
+// 4*N rows (8*N vertices; the 16-bit index limit makes N <= 8192 per mesh, and past it the excess is
+// lost SILENTLY). This shader moves each row onto its particle's quad:
+//
+//     row 4k      particle k's "top"    edge   (left, right)
+//     row 4k+1    particle k's "bottom" edge   (left, right)
+//     row 4k+2    both at particle k's bottom-left
+//     row 4k+3    both at particle k+1's top-left   (at k's own bottom-left for the last)
+//
+// The cell between rows 4k and 4k+1 is the particle's quad; every other cell has two coincident
+// vertices on each of its rows (or all four), so it rasterises nothing. A dead particle collapses
+// all its corners onto one point off screen.
+// The uniform block is particles_ubo.glsl's, shared with the fragment stage.
+// =============================================================================
+
+layout(location = 0) in vec4 qt_Vertex;
+layout(location = 1) in vec2 qt_MultiTexCoord0;
+
+layout(location = 0) out vec2 vQuad;      // (-1 tail .. +1 head, -1 .. +1 across)
+layout(location = 1) out vec4 vCol;       // rgb the colour, a the alpha (life x edge x gate)
+layout(location = 2) out vec4 vFx;        // x spine half length px, y head radius px, z halo radius px, w heat
+layout(location = 3) out vec2 vSize;      // the quad's half extents px
+
+// @@INCLUDE particles_ubo.glsl
+
+// @@GEOM
+
+// @@INCLUDE particles_common.glsl
+
+void main() {
+    float rows = cfgMesh.x;
+    float line = floor(qt_MultiTexCoord0.y * rows + 0.5);
+    float right = step(0.5, qt_MultiTexCoord0.x);
+    float k = floor(line * 0.25);
+    float m = line - 4.0 * k;
+    float nMesh = (rows + 1.0) * 0.25;
+
+    Pt p = particle(k);
+    float qa = p.L + p.R + 2.4 * p.H;
+    float qb = p.R + 2.4 * p.H;
+    vec2 n = vec2(-p.d.y, p.d.x);
+    float sa = right > 0.5 ? 1.0 : -1.0;
+    float sb = m < 0.5 ? 1.0 : -1.0;
+
+    vec2 pos;
+    if (m < 1.5) {
+        pos = p.c + sa * qa * p.d + sb * qb * n;
+    } else if (m < 2.5) {
+        pos = p.c - qa * p.d - qb * n;
+    } else if (k + 1.0 < nMesh) {
+        Pt q = particle(k + 1.0);
+        pos = q.c - (q.L + q.R + 2.4 * q.H) * q.d + (q.R + 2.4 * q.H) * vec2(-q.d.y, q.d.x);
+    } else {
+        pos = p.c - qa * p.d - qb * n;
+    }
+
+    vQuad = vec2(sa, sb);
+    vCol = vec4(p.col, p.alpha);
+    vFx = vec4(p.L, p.R, p.H, p.heat);
+    vSize = vec2(qa, qb);
+    gl_Position = qt_Matrix * vec4(pos, 0.0, 1.0);
+}

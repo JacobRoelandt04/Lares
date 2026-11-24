@@ -1,0 +1,12 @@
+[repository]
+name = "hypr-group-tabs"
+authors = ["Jacob Roelandt"]
+commit_pins = []
+
+[hypr-group-tabs]
+description = "Group tab indicators drawn on the window border; they reserve no space."
+authors = ["Jacob Roelandt"]
+output = "hypr-group-tabs.so"
+build = [
+    "make all",
+]

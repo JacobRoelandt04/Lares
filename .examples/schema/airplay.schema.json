@@ -1,0 +1,53 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "airplay.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "powersave": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "While sound flows into an AirPlay speaker, turn the Wi-Fi radio's power save OFF (it sleeps between beacons, and the stream drops\nout) and put it back after. Needs the silicon helper's `wifi-powersave` verb and its polkit rule (`lares setup`, R3 and R4); without\nthem nothing is changed and the log says so once. A power save that was already off when sound started is yours: never touched.\n\nTakes true or false. Default: true."
+  },
+  "graceSec": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 3600,
+   "default": 60,
+   "x-wants": "a number 0 .. 3600",
+   "description": "Seconds after the last sound before power save is put back (a track change or a pause is not the end). 0 .. 3600.\n\nTakes a number 0 .. 3600. Default: 60."
+  },
+  "delay": {
+   "anyOf": [
+    {
+     "enum": [
+      "auto"
+     ],
+     "default": "auto",
+     "x-wants": "\"auto\""
+    },
+    {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 60000,
+     "x-wants": "a number 0 .. 60000"
+    }
+   ],
+   "default": "auto",
+   "x-wants": "\"auto\", or a number 0 .. 60000",
+   "description": "How long the SOUND lags what the player knows, in ms: the track card (OSD), the bar glyph's new-song flourish and the lyrics'\nactive line wait this long, only while mpd plays into an AirPlay speaker.\n  \"auto\"  the speaker's own buffer, read from the PipeWire module that made it: raop.latency.ms + sess.latency.msec\n          (~/.config/pipewire/pipewire.conf.d/raop-discover.conf)\n  number  that many ms instead (0 .. 60000; 0 = never wait)\n\nTakes \"auto\", or a number 0 .. 60000. Default: \"auto\"."
+  },
+  "delayExtraMs": {
+   "type": "number",
+   "minimum": -60000,
+   "maximum": 60000,
+   "default": 0,
+   "x-wants": "a number -60000 .. 60000",
+   "description": "Added to either (can be negative; the total never goes below 0): the speaker's buffer is not always the whole of what you hear.\n\nTakes a number -60000 .. 60000. Default: 0."
+  }
+ }
+}

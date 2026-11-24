@@ -1,0 +1,364 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "idle.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "dimAfter": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 86400,
+   "default": 120,
+   "x-wants": "a number 0 .. 86400",
+   "description": "Seconds without input until the panel dims. 1 .. 86400; 0 = never.\n\nTakes a number 0 .. 86400. Default: 120."
+  },
+  "deepAfter": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 86400,
+   "default": 180,
+   "x-wants": "a number 0 .. 86400",
+   "description": "Seconds without input until the deeper step. 1 .. 86400; 0 = never.\n\nTakes a number 0 .. 86400. Default: 180."
+  },
+  "dimLevel": {
+   "type": "number",
+   "minimum": 0.01,
+   "maximum": 1,
+   "default": 0.7,
+   "x-wants": "a number 0.01 .. 1",
+   "description": "How bright the dimmed panel LOOKS, as a share of how bright it looked: on the brightness keys' own curve (osd.jsonc\n\"brightness\" \"gamma\"; 0.7 is about half the raw value). 0.01 .. 1 (1 = no dimming).\n\nTakes a number 0.01 .. 1. Default: 0.7."
+  },
+  "deepLevel": {
+   "type": "number",
+   "minimum": 0.01,
+   "maximum": 1,
+   "default": 0.5,
+   "x-wants": "a number 0.01 .. 1",
+   "description": "The same for the deeper step (0.5: about a quarter of the raw value); never brighter than dimLevel. 0.01 .. 1.\n\nTakes a number 0.01 .. 1. Default: 0.5."
+  },
+  "ddcDim": {
+   "type": [
+    "boolean",
+    "null"
+   ],
+   "default": null,
+   "x-wants": "true or false or null",
+   "description": "EXTERNAL DISPLAYS, over DDC/CI (the monitor's own brightness): dimmed at the same two times. true | false; null (or no key) = only on a\nmachine with no laptop panel (a desktop).\n\nTakes true or false or null. Default: null."
+  },
+  "ddcDimLevel": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1,
+   "default": 0.35,
+   "x-wants": "a number 0 .. 1",
+   "description": "The dimmed monitor's brightness figure as a share of what it was (100 -> 35). 0 .. 1 (1 = no dimming).\n\nTakes a number 0 .. 1. Default: 0.35."
+  },
+  "ddcDeepLevel": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1,
+   "default": 0,
+   "x-wants": "a number 0 .. 1",
+   "description": "The same for the deeper step; never brighter than ddcDimLevel. 0 .. 1 (an LCD at 0 is still lit; a monitor whose 0 is black: raise it).\n\nTakes a number 0 .. 1. Default: 0."
+  },
+  "awayAfter": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 86400,
+   "default": 300,
+   "x-wants": "a number 0 .. 86400",
+   "description": "With an external output connected: seconds with the focus on another output until the laptop panel dims (to dimLevel).\n1 .. 86400; 0 = never.\n\nTakes a number 0 .. 86400. Default: 300."
+  },
+  "panel": {
+   "type": "string",
+   "default": "eDP",
+   "x-wants": "a text",
+   "description": "The laptop panel: the output whose name starts with this.\n\nTakes a text. Default: \"eDP\"."
+  },
+  "script": {
+   "type": "string",
+   "default": "~/.config/hypr/scripts/brightness.sh",
+   "x-wants": "a path",
+   "description": "Your own brightness script: soft gives the brightness back through its --resume. ~ is your home.\n\nTakes a path. Default: \"~/.config/hypr/scripts/brightness.sh\"."
+  },
+  "stateFile": {
+   "type": "string",
+   "default": "/tmp/idle_backlight_value",
+   "x-wants": "a path",
+   "description": "Where that script keeps the brightness it saved: soft writes the full raw value there before it dims, so --resume\nrestores it exactly.\n\nTakes a path. Default: \"/tmp/idle_backlight_value\"."
+  },
+  "brightnessctl": {
+   "type": "string",
+   "default": "brightnessctl",
+   "x-wants": "a text",
+   "description": "The program soft reads and sets the brightness with.\n\nTakes a text. Default: \"brightnessctl\"."
+  },
+  "zeroIsBlack": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "boolean",
+    "x-wants": "true or false"
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "The panel's backlight is found by the shell (the GPU that drives the eDP: intel_backlight in Hybrid, nvidia_0 in dGPU-only).\nDoes raw 0 turn that panel BLACK? The shell's table says yes for the raw intel one and no for nvidia_0; where it is no, the lid\nclosed and the sleep fade write the lowest value and also draw black over the panel. Name a device to override the table.\n\nDefault: {}."
+  },
+  "lidRestore": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 30,
+   "default": 2.5,
+   "x-wants": "a number 0 .. 30",
+   "description": "HARD IDLE, LID CLOSED: the panel goes to 0 with the lid. Seconds it takes to climb back to its old brightness when the lid\nopens, evenly in how bright it looks; a brightness key pressed during the climb wins at once. 0 .. 30 (0 = at once).\n\nTakes a number 0 .. 30. Default: 2.5."
+  },
+  "sleepFade": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "THE SLEEP FADE (every mode): when the machine is about to sleep, once the lock's veil is up, the laptop panel dims to 0 along\nthe brightness curve while the sleep veil closes over every screen, and only then may the machine sleep; it wakes at the same\npace (type at once; an unlock skips the rest). true | false: false turns all of it off, and the shell then holds no sleep\ninhibitor.\n\nTakes true or false. Default: true."
+  },
+  "sleepFadeTime": {
+   "type": "number",
+   "minimum": 0.3,
+   "maximum": 3,
+   "default": 1.5,
+   "x-wants": "a number 0.3 .. 3",
+   "description": "Seconds of the fall and of the climb back. 0.3 .. 3 (the fall is cut to fit logind's 5 s wait).\n\nTakes a number 0.3 .. 3. Default: 1.5."
+  },
+  "sleepFallTime": {
+   "type": "number",
+   "minimum": 0.3,
+   "maximum": 3,
+   "x-wants": "a number 0.3 .. 3",
+   "description": "Takes a number 0.3 .. 3."
+  },
+  "sleepClimbTime": {
+   "type": "number",
+   "minimum": 0.3,
+   "maximum": 3,
+   "x-wants": "a number 0.3 .. 3",
+   "description": "Takes a number 0.3 .. 3."
+  },
+  "sleepFadeStrength": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1,
+   "default": 1,
+   "x-wants": "a number 0 .. 1",
+   "description": "The fall alone (the screen going dark) and the climb alone (the screen coming back), same range. Absent: sleepFadeTime.\n  \"sleepFallTime\": 1.5,\n  \"sleepClimbTime\": 1.5,\nThe sleep veil's effect (defocus, colour split, the picture sinking). 0 .. 1 (0 = no veil, the light alone).\n\nTakes a number 0 .. 1. Default: 1."
+  },
+  "auto": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "normal",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "something is being watched (a program asks for the screen to stay on)\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"normal\"."
+    },
+    "share": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "normal",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "the screen is shared or recorded\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"normal\"."
+    },
+    "update": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "a system update runs from the popup\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "llm": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "the chat is answering\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "timer": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "a timer or a pomodoro runs\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "wiki": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "a wiki batch runs\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "bridge": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "the phone is mirrored, or files go over\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "download": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "a download grows (below)\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "pkg": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "a package is built or installed outside the popup (below)\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    },
+    "music": {
+     "enum": [
+      "off",
+      "soft",
+      "normal",
+      "hard"
+     ],
+     "default": "soft",
+     "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\"",
+     "description": "the player plays\n\nTakes \"off\", \"soft\", \"normal\" or \"hard\". Default: \"soft\"."
+    }
+   },
+   "description": "THE AUTO LAYER: what raises the idle mode by itself, and to what: \"off\" (never) | \"soft\" | \"normal\" | \"hard\". The highest cause that holds wins, and your\nown mode is never lowered by one."
+  },
+  "items": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "off",
+     "soft",
+     "normal",
+     "hard"
+    ],
+    "x-wants": "\"off\", \"soft\", \"normal\" or \"hard\""
+   },
+   "default": [
+    "off",
+    "soft",
+    "normal",
+    "hard"
+   ],
+   "x-wants": "a list of words (\"off\", \"soft\", \"normal\" or \"hard\")",
+   "description": "The modes the idle reel offers, of \"off\" | \"soft\" | \"normal\" | \"hard\"; they stand in that order whatever the order here, and \"off\" is\nalways there. A mode left out is never in force: a start (or \"last\") on one goes to the nearest offered mode below it, and a cause\nabove that asks for one gets the nearest offered mode above it (with none above, the highest). Read as the shell starts.\n\nTakes a list of words (\"off\", \"soft\", \"normal\" or \"hard\"). Default: [\"off\",\"soft\",\"normal\",\"hard\"]. Read as the shell starts."
+  },
+  "start": {
+   "enum": [
+    "off",
+    "soft",
+    "normal",
+    "hard",
+    "last"
+   ],
+   "default": "off",
+   "x-wants": "\"off\", \"soft\", \"normal\", \"hard\" or \"last\"",
+   "description": "The mode the shell starts in: \"off\" | \"soft\" | \"normal\" | \"hard\", or \"last\" (the one you left in this session of Hyprland: a restart of the\nshell keeps it, a new login starts at \"off\").\n\nTakes \"off\", \"soft\", \"normal\", \"hard\" or \"last\". Default: \"off\"."
+  },
+  "download": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "minMinutes": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 120,
+     "default": 2,
+     "x-wants": "a number 0 .. 120",
+     "description": "Takes a number 0 .. 120. Default: 2."
+    },
+    "folder": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a path",
+     "description": "Takes a path. Default: \"\"."
+    }
+   },
+   "description": "A download counts once it has grown this many minutes without a break; the folder that is watched (\"\" = your Downloads folder, as\n`xdg-user-dir DOWNLOAD` says). 0 .. 120."
+  },
+  "packages": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "minMinutes": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 120,
+     "default": 2,
+     "x-wants": "a number 0 .. 120",
+     "description": "Takes a number 0 .. 120. Default: 2."
+    }
+   },
+   "description": "A package build or installation counts once it has run this many minutes without a break. 0 .. 120."
+  },
+  "autoTell": {
+   "enum": [
+    "cinematic",
+    "quiet"
+   ],
+   "default": "cinematic",
+   "x-wants": "\"cinematic\" or \"quiet\"",
+   "description": "How a change the auto layer made is shown: \"cinematic\" (the reel's strip comes out, turns and says why) | \"quiet\" (the cell turns;\nhovering the reel says why).\n\nTakes \"cinematic\" or \"quiet\". Default: \"cinematic\"."
+  },
+  "contentIgnore": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [
+    "sdl-freerdp3",
+    "sdl-freerdp",
+    "com.freerdp.client.sdl3",
+    "com.freerdp.client.sdl",
+    "org.kdeconnect.daemon"
+   ],
+   "x-wants": "a list of texts",
+   "description": "CONTENT THAT IS NOT CONTENT: programs whose request to keep the screen on does not count as something being watched (the auto layer\nwould raise the mode, soft would not dim). SDL programs call ScreenSaver.Inhibit for their whole life whatever they show, FreeRDP's\nSDL client (the Windows VM's window) included. Exact names, any case, never a substring; matched against a D-Bus holder's application\nname (the shell's log says `LARES idle content holds: <name>` / `ignored: <name>`), a window's class and logind's `who`. Your list\nREPLACES this one: keep the entries you still want. [] ignores nothing.\n\nTakes a list of texts. Default: [\"sdl-freerdp3\",\"sdl-freerdp\",\"com.freerdp.client.sdl3\",\"com.freerdp.client.sdl\",\"org.kdeconnect.daemon\"]."
+  }
+ }
+}

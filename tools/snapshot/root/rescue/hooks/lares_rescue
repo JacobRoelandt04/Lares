@@ -1,0 +1,5 @@
+#!/usr/bin/ash
+# Runtime hook: after udev and the keyboard and disk modules are in, hand the machine to the menu. It never returns to the normal boot.
+run_hook() {
+    exec /bin/sh /lares/rescue.sh
+}

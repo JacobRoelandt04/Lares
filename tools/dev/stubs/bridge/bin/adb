@@ -1,0 +1,411 @@
+#!/usr/bin/env python3
+"""A stand-in for `adb` (tools/dev/bridge_tool_probe.sh): real-format output for the calls the bridge makes, logged to $BRIDGE_STUB_LOG.
+
+Reads $BRIDGE_WORLD (adb.devices: `devices -l` lines, adb.mdns: tab lines, adb.connectable: addresses `adb connect` accepts,
+adb.pushStepMs: the pause between progress steps, adb.wm.<serial>: {physical, override, physicalDensity, overrideDensity} for `wm size` / `wm density`
+(default 1216x2688 at 480), adb.phone: THE FAKE PHONE'S LOCK -- {locked, pin, autoConfirm, keyguardFocus, awake, bouncer, pending, fails}: wake / `wm dismiss-keyguard` /
+`input text` / keyevents change it as Android's keyguard does (see phone() below; KEYCODE_SLEEP darkens it), adb.settings: `settings get / put
+<ns> <name>` ("system/screen_off_timeout" is 60000 until put), what the phone RECEIVED on stdin and as keys goes to
+$BRIDGE_PHONE_LOG (never to the argv log: a PIN typed over stdin is not an argv). For the cast: `forward` answers $BRIDGE_CAST_PORT and an
+`shell ... app_process` becomes tools/dev/stubs/bridge/fake_scrcpy_server.py (the adb shell child IS the fake phone; $BRIDGE_CAST_LOG, $BRIDGE_CAST_DIR).
+`start-server` starts fake_adb_server.py on $ANDROID_ADB_SERVER_PORT (unless one
+listens); `kill-server` ends the one it started. Never reaches a real adb.
+
+THE KNOBS OF BRIDGE FUNCTIONAL ROUND 6 (the cast's lock, a dropped link, the USB functions); every name is fixed, the QML probes use them:
+  * THE EVENTS LOG. `adb -s S logcat -b events -v epoch -T '<MM-DD hh:mm:ss.mmm>' -s <tag>...` prints `--------- beginning of events`, then streams the
+    lines of the file $BRIDGE_PHONE_EVENTS whose tag is one of the -s tags and whose epoch is not before the -T time (the host's local clock stands
+    for the phone's), and goes on following the file as lines are appended; it ends when the link drops (below). Append lines with
+    tools/dev/stubs/bridge/phone_events.py (`keyguard <shown> [aod goingAway occluded]`, `screen on|off`, `raw <text>`; `--world <world.json>` also sets
+    the world's adb.phone locked / awake), in the real format `<epoch> <pid> <tid> I <tag>: [..]`. The lock script (`echo ==now; date ...; echo
+    ==epoch; date +%s.%N; echo ==trust ...`) is answered from world adb.phone as before, with the host's clock for ==now / ==epoch. A phone
+    with `trustedKeyguard: true` is unlocked by trust (deviceLocked=0) while its lock screen still shows; wake + `wm dismiss-keyguard` clears it.
+  * THE DROP. Touch the file <$BRIDGE_CAST_DIR>/drop: fake_scrcpy_server.py ends every stream and exits as an adbd restart would (it deletes `drop` and
+    writes <$BRIDGE_CAST_DIR>/dropped); for the next 300 ms `adb devices` lists the world's devices as `offline`, `adb -s S get-state` says offline and
+    every other `adb -s S ...` call prints `error: device offline` and exits 1; then it is `device` again. A running logcat ends at the drop.
+  * THE USB FUNCTIONS, in the world file's adb.usb = {unlocked: "MTP" | "PTP" | "" (the `screen_unlocked_functions=` line of `dumpsys usb`; "" = no
+    line), functions: "adb" | "mtp,adb" ..., onMtp: [make_sysfs.py add args after the root: name vid pid serial product iface...]}.
+    `svc usb setScreenUnlockedFunctions [x]` sets unlocked (upper-cased; no argument = ""), `svc usb getFunctions` prints functions, `svc usb
+    setFunctions mtp` sets functions to "mtp,adb" and, with onMtp and LARES_BRIDGE_SYS, puts that device on the fake cable (an MTP interface
+    appearing, as a re-enumeration: removed, then added), `dumpsys usb | grep screen_unlocked_functions` prints the line when unlocked is set, and the facts blob gets its `==usb` section.
+"""
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+WORLD = os.environ.get("BRIDGE_WORLD", "")
+LOG = os.environ.get("BRIDGE_STUB_LOG", "")
+PORT = int(os.environ.get("ANDROID_ADB_SERVER_PORT", "5037"))
+PIDFILE = os.environ.get("BRIDGE_ADB_PIDFILE", "/tmp/bridge-adb-server.pid")
+if not WORLD:
+    sys.exit("adb stub: BRIDGE_WORLD is not set; refusing to run")
+
+
+def log(args):
+    if LOG:
+        with open(LOG, "a") as f:
+            f.write("adb " + " ".join(args) + "\n")
+
+
+def world():
+    try:
+        with open(WORLD) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save(w):
+    tmp = WORLD + ".adb.tmp"
+    with open(tmp, "w") as f:
+        json.dump(w, f)
+    os.replace(tmp, WORLD)
+
+
+PHONE_LOG = os.environ.get("BRIDGE_PHONE_LOG", "")
+
+
+def phone_log(text):
+    if PHONE_LOG:
+        with open(PHONE_LOG, "a") as f:
+            f.write(text + "\n")
+
+
+def phone_clock():
+    """The fake phone's clock = the host's (the cast's lock follower asks for it and follows the events log from it)."""
+    t = time.time()
+    return time.strftime("%m-%d %H:%M:%S.000", time.localtime(t)), "%.9f" % t
+
+
+def offline_now():
+    """True for 300 ms after the fake server was dropped (<BRIDGE_CAST_DIR>/dropped): adbd's restart."""
+    d = os.environ.get("BRIDGE_CAST_DIR", "")
+    try:
+        return bool(d) and 0 <= time.time() - os.stat(os.path.join(d, "dropped")).st_mtime < 0.3
+    except OSError:
+        return False
+
+
+def usb_of(w):
+    return w.setdefault("adb", {}).setdefault("usb", {})
+
+
+def usb_text(w):
+    u = usb_of(w).get("unlocked") or ""
+    return ("      screen_unlocked_functions=%s\n" % u) if u else ""
+
+
+def usb_cmd(w, c):
+    """`svc usb ...` and `dumpsys usb`: True when handled."""
+    u = usb_of(w)
+    if c[:3] == ["svc", "usb", "setScreenUnlockedFunctions"]:
+        u["unlocked"] = c[3].upper() if len(c) > 3 else ""
+    elif c[:3] == ["svc", "usb", "getFunctions"]:
+        print(u.get("functions", "adb"))
+        return True
+    elif c[:3] == ["svc", "usb", "setFunctions"]:
+        u["functions"] = "mtp,adb" if "mtp" in c[3:] else (c[3] if len(c) > 3 else "adb")
+        if "mtp" in c[3:] and u.get("onMtp") and os.environ.get("LARES_BRIDGE_SYS"):
+            mk = [sys.executable, os.path.join(HERE, "..", "make_sysfs.py"), os.environ["LARES_BRIDGE_SYS"]]
+            subprocess.run(mk + ["remove", u["onMtp"][0]])      # the phone re-enumerates: gone, then back with the new interface
+            subprocess.run(mk + ["add"] + list(u["onMtp"]))
+    else:
+        return False
+    save(w)
+    return True
+
+
+def lock_text(p):
+    """dumpsys's lines as the real phone printed them (Android 16, 2026-11-19), cut by the grep the tool runs on the phone."""
+    locked, awake = bool(p.get("locked")), bool(p.get("awake"))
+    shown = locked or bool(p.get("trustedKeyguard"))
+    kg_front = shown and p.get("keyguardFocus", True)
+    focus = "NotificationShade" if kg_front else "com.example.app/com.example.app.Main"
+    return "\n".join([
+        "==trust",
+        ' User "Owner" (id=0, flags=0x4c13) (current): trustState=UNTRUSTED, trustManaged=0, deviceLocked=%d, isActiveUnlockRunning=0, strongAuthRequired=0x0' % locked,
+        "==window",
+        "  mCurrentFocus=Window{1a9a528 u0 %s}" % focus,
+        "    mShowingDream=false mDreamingLockscreen=%s" % str(locked and not awake).lower(),
+        "    isKeyguardShowing=%s" % str(shown).lower(),
+        "==power", "  mWakefulness=%s" % ("Awake" if awake else "Dozing"),
+        "==idle", "  mScreenOn=%s" % str(awake).lower(), "  mScreenLocked=%s" % str(locked).lower()]) + "\n"
+
+
+def phone(w, cmd, stdin_lines=()):
+    """The fake keyguard. Returns True when it handled the command. A secure keyguard with the screen on takes typed text only after its PIN pad
+    is up (`wm dismiss-keyguard`) and only while it has the focus (keyguardFocus); with autoConfirm the right PIN unlocks at once, otherwise it
+    waits for Enter; a wrong PIN counts in `fails`. Text and Enter that no keyguard takes land in the app on top (logged as such)."""
+    p = w.get("adb", {}).get("phone")
+    if p is None:
+        return False
+    taking = p.get("locked") and p.get("awake") and p.get("bouncer") and p.get("keyguardFocus", True)
+
+    def enter():
+        entered, p["pending"] = p.get("pending", ""), ""
+        if entered == p.get("pin"):
+            p.update(locked=False, bouncer=False)
+        else:
+            p["fails"] = p.get("fails", 0) + 1
+    if cmd[:2] == ["input", "keyevent"]:
+        code = cmd[2]
+        phone_log("key " + code)
+        if code in ("KEYCODE_WAKEUP", "224"):
+            p["awake"] = True
+        elif code in ("KEYCODE_SLEEP", "223"):
+            p["awake"] = False
+        elif code in ("KEYCODE_ENTER", "66"):
+            if taking:
+                enter()
+            else:
+                phone_log("enter-into-app")
+        else:
+            return False
+    elif cmd[:2] == ["wm", "dismiss-keyguard"]:
+        phone_log("dismiss-keyguard")
+        if p.get("locked") and p.get("awake"):
+            p["bouncer"] = True
+        elif p.get("trustedKeyguard") and p.get("awake"):
+            p["trustedKeyguard"] = False        # trust unlocked it: the swipe-only lock screen goes
+    elif cmd[:2] == ["input", "text"] or stdin_lines:
+        for line in (stdin_lines or [" ".join(cmd)]):
+            f = line.split()
+            if f[:2] != ["input", "text"]:
+                continue
+            phone_log("text " + f[2])
+            taking = p.get("locked") and p.get("awake") and p.get("bouncer") and p.get("keyguardFocus", True)
+            if taking:
+                if p.get("autoConfirm"):
+                    p["pending"] = f[2]
+                    enter()
+                else:
+                    p["pending"] = f[2]
+            else:
+                phone_log("text-into-app")
+    else:
+        return False
+    save(w)
+    return True
+
+
+def events_log(a):
+    """`logcat -b events -v epoch -T <time> -s tags...`: the header, then the events file's lines (see the header of this stub)."""
+    path = os.environ.get("BRIDGE_PHONE_EVENTS", "")
+    since, tags = 0.0, []
+    if "-T" in a:
+        try:
+            since = time.mktime(time.strptime("%d-%s" % (time.localtime().tm_year, a[a.index("-T") + 1].split(".")[0]), "%Y-%m-%d %H:%M:%S"))
+        except (ValueError, IndexError):
+            since = 0.0
+    if "-s" in a:
+        tags = a[a.index("-s") + 1:]
+    started = time.time()
+    print("--------- beginning of events", flush=True)
+    d = os.environ.get("BRIDGE_CAST_DIR", "")
+    dropped = os.path.join(d, "dropped") if d else ""
+    fh = None
+    try:
+        while True:
+            if dropped and os.path.exists(dropped) and os.stat(dropped).st_mtime >= started:
+                return
+            if fh is None and path and os.path.exists(path):
+                fh = open(path)
+            line = fh.readline() if fh else ""
+            if not line.endswith("\n"):
+                if line and fh:
+                    fh.seek(fh.tell() - len(line))      # half a line: wait for the rest
+                time.sleep(0.03)
+                continue
+            f = line.split()
+            try:
+                t, tag = float(f[0]), f[4].rstrip(":")
+            except (ValueError, IndexError):
+                continue
+            if t >= since and (not tags or tag in tags):
+                print(line.rstrip("\n"), flush=True)
+    except (BrokenPipeError, OSError):
+        return
+
+
+def listening():
+    try:
+        socket.create_connection(("127.0.0.1", PORT), timeout=0.5).close()
+        return True
+    except OSError:
+        return False
+
+
+def main():
+    a = sys.argv[1:]
+    log(a)
+    serial = None
+    if len(a) >= 2 and a[0] == "-s":
+        serial, a = a[1], a[2:]
+    cmd = a[0] if a else ""
+    if serial and offline_now() and cmd not in ("devices", "get-state", "start-server", "kill-server"):
+        print("error: device offline", file=sys.stderr)
+        sys.exit(1)
+    if cmd == "get-state":
+        print("offline" if offline_now() else "device")
+    elif cmd == "logcat":
+        events_log(a)
+    elif cmd == "start-server":
+        if not listening():
+            p = subprocess.Popen([sys.executable, os.path.join(HERE, "..", "fake_adb_server.py"), str(PORT)],
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True,
+                                 env=dict(os.environ))
+            p.stdout.readline()
+            with open(PIDFILE, "w") as f:
+                f.write(str(p.pid))
+            print("* daemon not running; starting now at tcp:%d" % PORT, file=sys.stderr)
+            print("* daemon started successfully", file=sys.stderr)
+    elif cmd == "kill-server":
+        try:
+            with open(PIDFILE) as f:
+                os.kill(int(f.read()), 15)
+            os.unlink(PIDFILE)
+        except (OSError, ValueError):
+            pass
+    elif cmd == "devices":
+        print("List of devices attached")
+        for l in world().get("adb", {}).get("devices", []):
+            print(l.replace("\tdevice ", "\toffline ", 1) if offline_now() else l)
+        print()
+    elif cmd == "connect":
+        addr = a[1]
+        w = world()
+        if addr in w.get("adb", {}).get("connectable", []):
+            devs = w["adb"].setdefault("devices", [])
+            if not any(l.startswith(addr + "\t") for l in devs):
+                devs.append("%s\tdevice product:NX789J model:NX789J device:NX789J transport_id:9" % addr)
+                save(w)
+            print("connected to %s" % addr)
+        else:
+            print("failed to connect to '%s': Connection refused" % addr)
+            sys.exit(1)
+    elif cmd == "tcpip":
+        # the phone remembers it listens (service.adb.tcp.port), as adbd does after `adb tcpip`
+        w = world()
+        w.setdefault("adb", {}).setdefault("armed", {})[serial or ""] = a[1]
+        save(w)
+        print("restarting in TCP mode port: %s" % a[1])
+    elif cmd == "usb":
+        w = world()
+        w.setdefault("adb", {}).setdefault("armed", {}).pop(serial or "", None)
+        save(w)
+        print("restarting in USB mode")
+    elif cmd == "mdns" and a[1:2] == ["services"]:
+        print("List of discovered mdns services")
+        for l in world().get("adb", {}).get("mdns", []):
+            print(l)
+    elif cmd == "push":
+        srcs, dest = a[1:-1], a[-1]
+        step = world().get("adb", {}).get("pushStepMs", 120) / 1000.0
+        tty = sys.stdout.isatty()
+        total = 0
+        for s in srcs:
+            remote = dest.rstrip("/") + "/" + os.path.basename(s)
+            size = os.path.getsize(s) if os.path.exists(s) else 0
+            total += size
+            if tty:
+                for p in (0, 25, 50, 75, 100):
+                    sys.stdout.write("[%3d%%] %s\r" % (p, remote))
+                    sys.stdout.flush()
+                    time.sleep(step)
+                sys.stdout.write("\n")
+        print("%s: %d file%s pushed, 0 skipped. 35.2 MB/s (%d bytes in 0.028s)" % (dest, len(srcs), "" if len(srcs) == 1 else "s", total))
+    elif cmd == "exec-out" and a[1:3] == ["screencap", "-p"]:
+        import base64
+        sys.stdout.buffer.write(base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+    elif cmd == "forward":
+        port = os.environ.get("BRIDGE_CAST_PORT", "")
+        if a[1:2] == ["--remove"]:
+            open(os.environ.get("BRIDGE_CAST_FWD", os.devnull), "w").write("")
+        else:
+            open(os.environ.get("BRIDGE_CAST_FWD", os.devnull), "a").write(port + "\n")
+            print(port)
+    elif cmd == "shell" and "app_process" in a:
+        # the cast's server: the adb shell child IS the fake phone; everything after the version is the server's key=value parameters
+        i = a.index("com.genymobile.scrcpy.Server")
+        params = a[i + 2:]
+        c = [sys.executable, os.path.join(HERE, "..", "fake_scrcpy_server.py"), "--port", os.environ["BRIDGE_CAST_PORT"], "--log",
+             os.environ["BRIDGE_CAST_LOG"], "--control-dir", os.environ.get("BRIDGE_CAST_DIR", ""), "--server-args", " ".join(params)]
+        if "audio=true" in params:
+            c.append("--audio")
+        os.execvp(c[0], c)
+    elif cmd == "shell":
+        w = world()
+        if len(a) > 1 and (a[1:3] == ["wm", "size"] or a[1].startswith("wm size")):
+            wm = (w.get("adb", {}).get("wm") or {}).get(serial or "") or {}
+            print("Physical size: %s" % wm.get("physical", "1216x2688"))
+            if wm.get("override"):
+                print("Override size: %s" % wm["override"])
+            print("Physical density: %s" % wm.get("physicalDensity", 480))
+            if wm.get("overrideDensity"):
+                print("Override density: %s" % wm["overrideDensity"])
+            return
+        if len(a) > 1 and "echo ==trust" in a[1]:
+            p = w.get("adb", {}).get("phone")
+            if p is not None and a[1].startswith("echo ==now"):
+                now, epoch = phone_clock()
+                sys.stdout.write("==now\n%s\n==epoch\n%s\n" % (now, epoch))
+            sys.stdout.write(lock_text(p) if p is not None else "")
+            return
+        if len(a) > 1 and a[1].startswith("dumpsys usb"):
+            sys.stdout.write(usb_text(w))
+            if not usb_text(w) and a[1].rstrip().endswith("grep screen_unlocked_functions"):
+                sys.exit(1)     # the real phone: `adb shell` exits with grep's status, 1 when the line is absent (the setting is off)
+            return
+        if len(a) > 1 and usb_cmd(w, a[1:]):
+            return
+        if a[1:3] in (["settings", "get"], ["settings", "put"]) and len(a) >= 5:
+            # the phone's settings (world adb.settings "<ns>/<name>"; screen_off_timeout defaults to the user's 60000): get prints it,
+            # put prints nothing, as the real phone does
+            st = w.setdefault("adb", {}).setdefault("settings", {})
+            k = a[3] + "/" + a[4]
+            if a[2] == "put":
+                st[k] = a[5] if len(a) > 5 else ""
+                save(w)
+            else:
+                print(st.get(k, "60000" if k == "system/screen_off_timeout" else "null"))
+            return
+        if a[1:2] == ["-T"]:
+            if not phone(w, [], [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]):
+                sys.stdin.read()
+            return
+        if phone(w, a[1:]):
+            return
+        if len(a) > 1 and a[1] == "input":
+            return
+        if len(a) > 1 and a[1] == "getprop service.adb.tcp.port":
+            print((world().get("adb", {}).get("armed") or {}).get(serial or "", ""))
+            return
+        if len(a) > 1 and a[1].startswith("echo ==ip"):
+            # the bridge's ident (parse.IDENT_SCRIPT): the phone's `ip -o -4 addr show` and its device name, in the
+            # captured format (2026-11-18); adb.ident.<serial> = {addresses, name}
+            i = (world().get("adb", {}).get("ident") or {}).get(serial or "") or {}
+            print("==ip\n1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever")
+            for n, ad in enumerate(i.get("addresses") or []):
+                print("%d: wlan%d    inet %s/24 brd x scope global wlan%d\\       valid_lft forever preferred_lft forever" % (30 + n, n, ad, n))
+            print("==name\n%s" % (i.get("name") or "null"))
+            return
+        blob = world().get("adb", {}).get("factsBlob") or (
+              "==model\nNX789J\n==android\n15\n==battery\n  health: 2\n  level: 81\n  temperature: 287\n==df\n"
+              "Filesystem       1K-blocks     Used Available Use% Mounted on\n/dev/block/dm-9  226455396 98213412 128102476  44% /data")
+        print(blob)
+        if len(a) > 1 and "==usb" in a[1]:
+            sys.stdout.write("==usb\n" + usb_text(w))
+            if not usb_text(w) and a[1].rstrip().endswith("grep screen_unlocked_functions"):
+                sys.exit(1)     # as above: the facts script's last command is that grep
+    elif cmd == "version":
+        print("Android Debug Bridge version 1.0.41")
+    else:
+        print("adb stub: unhandled %s" % " ".join(a), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

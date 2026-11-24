@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly weather forecast accuracy logging (at :05, catching up after sleep)
+
+[Timer]
+OnCalendar=*-*-* *:05:00
+Persistent=true
+AccuracySec=30s
+Unit=weather-accuracy.service
+
+[Install]
+WantedBy=timers.target

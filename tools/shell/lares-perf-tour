@@ -1,0 +1,666 @@
+#!/usr/bin/env python3
+"""lares-perf-tour -- one fixed scripted pass over the shell, so two runs can be compared, and what the frame journal says of it.
+
+    lares-perf-tour [run] [--fresh] [--boost-ab] [--no-theme] [--no-windows] [--no-hop] [--label TEXT]
+    lares-perf-tour --list            the script of actions, nothing is run
+    lares-perf-tour --dry             validate the environment (tty, lock, package job, shell, tools), run nothing
+    lares-perf-tour compare A.json B.json     two tours side by side, per group
+
+THE USER RUNS THIS, in a terminal on his real session. It refuses without a tty (an agent never runs it on the desktop) and while
+a package transaction runs or the session is locked. KEEP YOUR HANDS OFF the keyboard and the pointer for about 2.5 minutes (a
+--fresh tour adds the shell's start, a --boost-ab tour is two tours). Everything it changes it puts back:
+
+  popups     every owner's popup opened and closed (the shell's global shortcut where there is one: launcher, clipboard, picker,
+             notes; `quickshell ipc call shell toggle <owner>` for the rest -- a shell older than that call skips them, one line says so)
+  toasts     three test notifications (app name lares-tour), posted, then withdrawn (CloseNotification)
+  windows    two throwaway kitty windows (class lares-tour-a / -b): focus changes, OSC 2 title changes of different widths, then a
+             width-neutral title loop (a terminal spinner); both closed
+  workspace  a hop to an empty workspace and back to where you were
+  OSD        volume up x3 then down x3, brightness up x3 then down x3 (the OSD service's own tap, the key's code path without a held
+             key: a `hyprctl` global gives a press and no release, which would repeat), the mic muted twice (the key's global)
+  theme      switched twice (only where the shell can be told from outside; otherwise skipped with a line; --no-theme skips it)
+
+Marks (wall ms) and the machine's facts go to ~/.local/state/lares/perf/tours/<stamp>.json, then frame_journal_report.py is run on the
+span: frames, missed per 1000, the groups, the first 30 s after a load, the start phases.
+
+  --fresh      FIRST `lares restart`, measure the ms to each phase from the shell's log (Launching config, LARES shown / ready /
+               settled and the start / prewarm lines), run a MINI tour the moment `ready` is said (three popups, a toast, an OSD step,
+               a title change: "right after loading"), wait for `settled`, then the full tour
+  --boost-ab   the full tour twice, the interaction boost off and then on. The tour never edits your config: it prints the line and
+               waits for Enter between the halves (silicon.jsonc "interactionBoost")
+
+Environment (for the nested probe; unset on the desktop): TOUR_HYPRCTL (hyprctl command prefix), TOUR_QS (quickshell), TOUR_QML (the
+shell's path as given to quickshell), TOUR_RUN (prefix for kitty), TOUR_TOGGLE_FN (toggle | hook-toggle), TOUR_NOTIFY (notify-send |
+hook), TOUR_THEME (skip | hook), TOUR_JOURNAL (journal path), TOUR_STATE (state dir), TOUR_NO_TTY_OK=1, TOUR_LARES, TOUR_REPORT,
+TOUR_SHELL_LOG, TOUR_SKIP_SYSTEM=1 (no lock / package checks).
+"""
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import threading
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+HOME = os.path.expanduser("~")
+STATE = os.environ.get("TOUR_STATE") or os.path.join(os.environ.get("XDG_STATE_HOME") or HOME + "/.local/state", "lares")
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+HYPRCTL = shlex.split(os.environ.get("TOUR_HYPRCTL", "hyprctl"))
+QS = shlex.split(os.environ.get("TOUR_QS", "quickshell"))
+QML = os.environ.get("TOUR_QML") or os.environ.get("QS_CONFIG_PATH") or STATE + "/shell/current/shell.qml"
+RUNPFX = shlex.split(os.environ.get("TOUR_RUN", ""))
+TOGGLE_FN = os.environ.get("TOUR_TOGGLE_FN", "toggle")
+NOTIFY = os.environ.get("TOUR_NOTIFY", "notify-send")
+THEME = os.environ.get("TOUR_THEME", "skip")
+JOURNAL = os.environ.get("TOUR_JOURNAL") or STATE + "/perf/frame-journal.jsonl"
+SHELL_LOG = os.environ.get("TOUR_SHELL_LOG") or RUNTIME + "/lares/shell.log"
+TOURS = STATE + "/perf/tours"
+
+OWNERS = ["clock", "weather", "player", "stocks", "silicon", "bridge", "panorama", "notes", "launcher", "clipboard", "picker",
+          "notifications", "aerial", "windowtray", "llm", "audio", "theme", "update"]
+SHORTCUT = {"launcher": "launcher", "clipboard": "clipboard", "picker": "picker", "notes": "notes"}   # ShortcutRouter's names
+OPEN_S, CLOSE_S = 1.6, 1.2
+MINI = ["clock", "weather", "player"]
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def say(*a):
+    print(*a, flush=True)
+
+
+def run(cmd, timeout=15):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, str(e)
+
+
+def hypr(*args):
+    return run(HYPRCTL + list(args))
+
+
+def dispatch(lua):
+    rc, out = hypr("dispatch", lua)
+    return rc == 0 and "error" not in out.lower(), out.strip()
+
+
+def ipc(*args):
+    return run(QS + ["ipc", "--path", QML, "call"] + list(args))
+
+
+def glob(name):
+    return dispatch('hl.dsp.global("lares:%s")' % name)
+
+
+# ---- the environment ------------------------------------------------------------------------------------------------------------
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def which(name):
+    for d in os.environ.get("PATH", "").split(":"):
+        p = os.path.join(d, name)
+        if os.access(p, os.X_OK) and os.path.isfile(p):
+            return p
+    return None
+
+
+def boost_state():
+    for cand in (HOME + "/.config/quickshell/config/silicon.jsonc", HOME + "/.config/quickshell/config/silicon.json"):
+        t = read(cand)
+        if t is None:
+            continue
+        t = re.sub(r"^\s*//.*$", "", t, flags=re.M)
+        m = re.search(r'"interactionBoost"\s*:\s*(true|false)', t)
+        return m.group(1) == "true" if m else None
+    return None
+
+
+def facts():
+    f = {"platform_profile": read("/sys/firmware/acpi/platform_profile")}
+    ac = bat = None
+    try:
+        for d in sorted(os.listdir("/sys/class/power_supply")):
+            base = "/sys/class/power_supply/" + d
+            t = read(base + "/type")
+            if t == "Mains" and read(base + "/online") is not None:
+                ac = read(base + "/online") == "1"
+            if t == "Battery":
+                bat = {"status": read(base + "/status"), "capacity": read(base + "/capacity"), "energy_now": read(base + "/energy_now")}
+    except OSError:
+        pass
+    f["ac"], f["battery"] = ac, bat
+    rc, out = hypr("-j", "monitors")
+    try:
+        f["monitors"] = [{"name": m["name"], "refresh": round(m["refreshRate"], 1), "scale": m["scale"], "size": "%dx%d" % (m["width"], m["height"])}
+                         for m in json.loads(out)]
+    except (ValueError, KeyError, TypeError):
+        f["monitors"] = None
+    snap = os.path.realpath(STATE + "/shell/current")
+    f["snapshot"] = os.path.basename(snap) if os.path.isdir(snap) else None
+    return f
+
+
+def rapl():
+    rc, out = run(["sudo", "-n", "cat", "/sys/class/powercap/intel-rapl:0/energy_uj"], timeout=5)
+    return int(out.strip()) if rc == 0 and out.strip().isdigit() else None
+
+
+def find_report():
+    for c in (os.environ.get("TOUR_REPORT"), HERE + "/../dev/perf/frame_journal_report.py",
+              HOME + "/.config/quickshell/tools/dev/perf/frame_journal_report.py"):
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def check_env(need_tty):
+    """The refusals and the notes: (problems, notes)."""
+    bad, notes = [], []
+    if need_tty and not (sys.stdin.isatty() and sys.stdout.isatty()) and os.environ.get("TOUR_NO_TTY_OK") != "1":
+        bad.append("no tty: the tour is run by the user, in a terminal (an agent never runs it on the desktop)")
+    if os.environ.get("TOUR_SKIP_SYSTEM") != "1":
+        if os.path.exists("/var/lib/pacman/db.lck"):
+            bad.append("a package transaction runs (/var/lib/pacman/db.lck)")
+        rc, out = run(["ps", "-eo", "args"], timeout=5)
+        for line in out.splitlines():
+            if re.match(r"\s*(/usr/bin/)?(pacman|yay|paru)\s", line) and re.search(r"\s-(S|U|R)", line) and "-Q" not in line:
+                bad.append("a package job runs: " + line.strip()[:80])
+                break
+        held = STATE + "/lock/current/tools/lockscreen/lares-lock-held"
+        if os.access(held, os.X_OK) and run([held], timeout=5)[0] == 0:
+            bad.append("the session is locked")
+    rc, out = ipc("shell", "ping")
+    if "ok" not in out:
+        bad.append("the shell does not answer on %s (ipc shell.ping: %s)" % (QML, out.strip()[:80]))
+    if hypr("version")[0] != 0:
+        bad.append("hyprctl does not answer")
+    if not RUNPFX and which("kitty") is None:
+        notes.append("kitty is not installed: the window part is skipped")
+    if not find_report():
+        notes.append("frame_journal_report.py was not found (TOUR_REPORT): the report is skipped")
+    return bad, notes
+
+
+# ---- the actions ----------------------------------------------------------------------------------------------------------------
+class Tour:
+    def __init__(self, theme=True, windows=True, hop=True, mini=False):
+        self.theme, self.windows, self.do_hop, self.mini = theme, windows, hop, mini
+        self.log = []
+        self.toggle_ok = None    # None: not asked yet; False: the shell lacks the call
+        self.kitties = []
+        self.ids = []
+
+    def act(self, name, fn, rest=0.0):
+        t0 = now_ms()
+        try:
+            ok, note = fn()
+        except Exception as e:           # a failing step is a line, never the end of the tour
+            ok, note = False, "%s: %s" % (type(e).__name__, e)
+        self.log.append({"name": name, "t0": t0, "t1": now_ms(), "ok": bool(ok), "note": note or ""})
+        say("  %-34s %s%s" % (name, "ok" if ok else "SKIPPED/FAILED", (" -- " + note) if note and not ok else ""))
+        if rest:
+            time.sleep(rest)
+
+    def popup(self, owner, want):
+        if owner in SHORTCUT:
+            ok, out = glob(SHORTCUT[owner])
+            return ok, "" if ok else out
+        if self.toggle_ok is False:
+            return False, "this shell has no shell.toggle: skipped"
+        args = ["shell", "hook", "toggle", owner] if TOGGLE_FN == "hook-toggle" else ["shell", "toggle", owner]
+        rc, out = ipc(*args)
+        out = out.strip()
+        if rc != 0 or out not in ("open", "shut", "none"):
+            if self.toggle_ok is None:
+                self.toggle_ok = False
+                return False, "this shell has no shell.toggle (%s): the popups without a shortcut are skipped" % out[:60]
+            return False, out[:80]
+        self.toggle_ok = True
+        if out == "none":
+            return False, "no popup for %s on this shell" % owner
+        return out == want, "answered %s" % out
+
+    def open_state(self):
+        rc, out = ipc("shell", "probe")
+        try:
+            j = json.loads(out.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return None
+        scr = j.get("screens") if isinstance(j, dict) else None
+        busy = []
+        for name, s in (scr or {}).items():
+            if isinstance(s, dict) and (s.get("popup") or {}).get("open"):
+                busy.append((name, s["popup"].get("owner")))
+        return busy
+
+    def sweep_popups(self):
+        busy = self.open_state()
+        if busy is None:
+            return True, "the probe did not answer: close not verified"
+        for _ in range(3):
+            if not busy:
+                return True, ""
+            for _scr, owner in busy:
+                if owner:
+                    self.popup(owner, "shut")
+            glob("popup-escape")
+            time.sleep(1.4)
+            busy = self.open_state() or []
+        return False, "still open: %s" % busy
+
+    def toast(self, i):
+        if NOTIFY == "hook":
+            rc, out = ipc("shell", "hook", "notify", "lares-tour %d" % i)
+            return rc == 0, out.strip()[:60]
+        rc, out = run(["notify-send", "-p", "-a", "lares-tour", "Lares tour %d" % i, "a test notification, withdrawn at once"])
+        if rc == 0 and out.strip().isdigit():
+            self.ids.append(out.strip())
+            return True, ""
+        return False, out.strip()[:80]
+
+    def withdraw(self):
+        if NOTIFY == "hook":
+            return True, "hook toasts leave on their own"
+        bad = 0
+        for i in self.ids:
+            rc, _ = run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
+                         "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.CloseNotification", i])
+            bad += rc != 0
+        self.ids = []
+        return bad == 0, "%d withdrawals failed" % bad
+
+    def kitty(self, cls, body):
+        if not RUNPFX and which("kitty") is None:
+            return False, "kitty is not installed"
+        p = subprocess.Popen(RUNPFX + ["kitty", "--class", cls, "--title", "lares tour", "sh", "-c", body],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, start_new_session=True)
+        self.kitties.append(p)
+        return True, ""
+
+    def focus_class(self, cls):
+        rc, out = hypr("-j", "clients")
+        try:
+            addr = [c["address"] for c in json.loads(out) if c.get("class") == cls][0]
+        except (ValueError, IndexError, KeyError):
+            return False, "no window of class %s" % cls
+        return dispatch('hl.dsp.focus({ window = "address:%s" })' % addr)
+
+    def close_kitties(self):
+        for p in self.kitties:
+            try:
+                os.killpg(p.pid, 15)
+            except OSError:
+                pass
+        for p in self.kitties:
+            try:
+                p.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(p.pid, 9)
+                except OSError:
+                    pass
+        self.kitties = []
+        return True, ""
+
+    def hop_ws(self):
+        rc, out = hypr("-j", "activeworkspace")
+        try:
+            here = int(json.loads(out)["id"])
+            rc, out = hypr("-j", "workspaces")
+            used = {int(w["id"]) for w in json.loads(out)}
+        except (ValueError, KeyError, TypeError):
+            return False, "workspaces unreadable"
+        if here < 1:
+            return False, "the active workspace is a special one: hop skipped"
+        free = [n for n in range(1, 40) if n not in used]
+        if not free:
+            return False, "no empty workspace"
+        ok1, o1 = dispatch("hl.dsp.focus({ workspace = %d })" % free[0])
+        time.sleep(1.5)
+        ok2, o2 = dispatch("hl.dsp.focus({ workspace = %d })" % here)
+        return ok1 and ok2, ("%s %s" % (o1, o2)).strip()
+
+    def osd(self, kind, verb):
+        rc, out = ipc("osd", kind, verb)
+        return "true" in out, out.strip()[:60]
+
+    def themeclick(self):
+        if THEME != "hook":
+            rc, out = ipc("shell", "theme")     # the live IPC (a shell older than it has none: skipped with a line)
+            if rc != 0 or "asked" not in out:
+                return False, "the theme cannot be switched from outside on this shell (no IPC for it): skipped"
+            return True, "asked"
+        rc, out = ipc("shell", "hook", "themeclick")
+        return rc == 0, out.strip()[:60]
+
+    def rep(self, fn, n):
+        ok, note = True, ""
+        for _ in range(n):
+            a, b = fn()
+            ok, note = ok and a, b
+            time.sleep(0.35)
+        return ok, note
+
+    def script(self):
+        """[(name, callable, rest seconds)]: the fixed script; identical on every run."""
+        S = [("rest", lambda: (True, ""), 0.5 if self.mini else 3.0)]
+        for o in (MINI if self.mini else OWNERS):
+            S.append(("popup open %s" % o, lambda o=o: self.popup(o, "open"), OPEN_S))
+            S.append(("popup close %s" % o, lambda o=o: self.popup(o, "shut"), CLOSE_S))
+        S.append(("popups all closed", self.sweep_popups, 0.5))
+        for i in range(1, (1 if self.mini else 3) + 1):
+            S.append(("toast %d" % i, lambda i=i: self.toast(i), 1.5))
+        S.append(("toasts withdrawn", self.withdraw, 1.5))
+        if self.windows:
+            spin = ('i=0; while [ $i -lt 24 ]; do i=$((i+1)); case $((i % 4)) in 0) c=a;; 1) c=b;; 2) c=c;; *) c=d;; esac; '
+                    'printf "\\033]2;spin %s work\\007" "$c"; sleep 0.12; done; sleep 30')
+            titles = ('for t in "tour" "tour title longer" "tour t" "a much longer tour title for the island" "tour"; do '
+                      'printf "\\033]2;%s\\007" "$t"; sleep 0.7; done; ' + spin)
+            S.append(("kitty a (titles, spinner)", lambda: self.kitty("lares-tour-a", titles), 1.5))
+            if not self.mini:
+                S.append(("kitty b", lambda: self.kitty("lares-tour-b", "sleep 120"), 1.5))
+                for k, c in enumerate(["lares-tour-b", "lares-tour-a", "lares-tour-b", "lares-tour-a"]):
+                    S.append(("focus %s #%d" % (c, k + 1), lambda c=c: self.focus_class(c), 0.8))
+            S.append(("title loop plays out", lambda: (True, ""), 1.5 if self.mini else 2.5))
+            S.append(("close kitties", self.close_kitties, 1.0))
+        if self.do_hop and not self.mini:
+            S.append(("workspace hop and back", self.hop_ws, 1.5))
+        S.append(("osd volume up x3", lambda: self.rep(lambda: self.osd("volume", "up"), 3), 0.2))
+        S.append(("osd volume down x3", lambda: self.rep(lambda: self.osd("volume", "down"), 3), 3.5))
+        if not self.mini:
+            S.append(("osd brightness up x3", lambda: self.rep(lambda: self.osd("brightness", "up"), 3), 0.2))
+            S.append(("osd brightness down x3", lambda: self.rep(lambda: self.osd("brightness", "down"), 3), 3.5))
+            S.append(("osd mic mute", lambda: glob("osd-mic-mute"), 1.0))
+            S.append(("osd mic unmute", lambda: glob("osd-mic-mute"), 3.0))
+            if self.theme:
+                S.append(("theme switch 1", self.themeclick, 6.0))      # the curtain, themectl and every app's repaint
+                S.append(("theme switch back", self.themeclick, 6.0))
+        return S
+
+    def execute(self):
+        try:
+            for name, fn, rest in self.script():
+                self.act(name, fn, rest)
+        finally:
+            self.close_kitties()
+
+
+# ---- one tour, the marks, the report --------------------------------------------------------------------------------------------
+def make_report(begin, end, out_json):
+    rep = find_report()
+    if not rep:
+        return None, ""
+    jf = [JOURNAL.replace(".jsonl", "") + ".1.jsonl", JOURNAL]
+    return run([sys.executable, rep] + jf + ["--since-ms", str(begin), "--until-ms", str(end), "--json", out_json, "--top", "6"], timeout=60)
+
+
+def tour_once(label, opts, fresh=False):
+    os.makedirs(TOURS, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    path = "%s/%s%s.json" % (TOURS, stamp, ("-" + re.sub(r"[^A-Za-z0-9]+", "-", label)) if label else "")
+    rec = {"stamp": stamp, "label": label, "facts": facts(), "fresh": None, "actions": [], "boost": boost_state()}
+    e0 = rapl()
+    b0 = (rec["facts"].get("battery") or {}).get("energy_now")
+    rc_s, out_s = ipc("shell", "perfSum")       # the journal's counters at the span's start (a shell older than the call has none)
+    rec["sums"] = rc_s == 0 and "ok" in out_s
+    if rec["sums"]:
+        time.sleep(0.4)
+    begin = now_ms()
+    rec["begin_ms"] = begin
+    say("\nTOUR %s%s: hands off for ~150 s" % (stamp, " (" + label + ")" if label else ""))
+    if fresh:
+        rec["fresh"] = fresh_phase(opts, rec)
+    else:
+        T = Tour(**opts)
+        T.execute()
+        rec["actions"] += T.log
+    if rec["sums"]:
+        ipc("shell", "perfSum")
+        time.sleep(0.6)
+    end = now_ms()
+    rec["end_ms"] = end
+    e1 = rapl()
+    rec["energy_uj"] = e1 - e0 if e0 is not None and e1 is not None and e1 >= e0 else None
+    b1 = (facts().get("battery") or {}).get("energy_now")
+    rec["battery_energy_delta_uWh"] = int(b1) - int(b0) if b0 and b1 and b0.isdigit() and b1.isdigit() else None
+    if rec["energy_uj"] is None:
+        rec["energy_note"] = "no RAPL reading: run `sudo -v` first (the tour reads /sys/class/powercap/intel-rapl:0/energy_uj through sudo -n)"
+    say("  waiting for the journal's quiet flush (6 s) ...")
+    time.sleep(6.0)
+    out_json = path.replace(".json", ".report.json")
+    rc, text = make_report(begin, end, out_json)
+    rec["report_text"] = text
+    try:
+        with open(out_json) as f:
+            rec["report"] = json.load(f)
+    except (OSError, ValueError):
+        rec["report"] = None
+    with open(path, "w") as f:
+        json.dump(rec, f, indent=1)
+    summary(rec, path)
+    return path
+
+
+def fresh_phase(opts, rec):
+    lares = os.environ.get("TOUR_LARES") or (HERE + "/lares" if os.access(HERE + "/lares", os.X_OK) else which("lares"))
+    if not lares:
+        say("  --fresh: no `lares` command found (TOUR_LARES)")
+        return None
+    try:
+        off = os.path.getsize(SHELL_LOG)
+    except OSError:
+        off = 0
+    phases = {}
+    t0 = time.time()
+    stop = threading.Event()
+    want = [("launching", r"Launching config"), ("shown", r"LARES shown"), ("start", r"LARES start"), ("prewarm", r"LARES prewarm"),
+            ("ready", r"LARES ready"), ("settled", r"LARES settled")]
+
+    def watch():
+        pos, buf = off, b""
+        while not stop.is_set():
+            try:
+                with open(SHELL_LOG, "rb") as f:
+                    f.seek(pos)
+                    d = f.read()
+                    pos += len(d)
+            except OSError:
+                d = b""
+            buf += d
+            lines = buf.split(b"\n")
+            buf = lines.pop()
+            ts = int((time.time() - t0) * 1000)
+            for ln in lines:
+                s = ln.decode("utf8", "replace")
+                for key, pat in want:
+                    if re.search(pat, s):
+                        phases.setdefault(key, []).append([ts, s.strip()[:120]])
+            time.sleep(0.05)
+
+    th = threading.Thread(target=watch, daemon=True)
+    th.start()
+    say("  lares restart ...")
+    rc, out = run([lares, "restart"], timeout=180)
+    phases["restart_rc"] = rc
+    if rc != 0:
+        say("  lares restart refused or failed (rc %d): %s" % (rc, out.strip()[:200]))
+        stop.set()
+        return phases
+    deadline = time.time() + 120
+    while "ready" not in phases and time.time() < deadline:
+        time.sleep(0.05)
+    if "ready" in phases:
+        say("  ready at %d ms: the mini tour, right after loading" % phases["ready"][0][0])
+        T = Tour(**dict(opts, mini=True))
+        T.execute()
+        rec["actions"] += T.log
+    deadline = time.time() + 300
+    while "settled" not in phases and time.time() < deadline:
+        time.sleep(0.2)
+    time.sleep(3.0)
+    stop.set()
+    th.join(1)
+    say("  start phases (ms after the restart command): " + ", ".join("%s %s" % (k, v[0][0]) for k, v in phases.items() if isinstance(v, list)))
+    if "settled" in phases:
+        T = Tour(**opts)
+        T.execute()
+        rec["actions"] += T.log
+    else:
+        say("  never said settled within 300 s: no full tour")
+    return phases
+
+
+def summary(rec, path):
+    say("\n" + "=" * 100)
+    f = rec["facts"]
+    say("TOUR %s: profile %s, ac %s, boost %s, snapshot %s, monitors %s" % (rec["stamp"], f.get("platform_profile"), f.get("ac"), rec.get("boost"),
+                                                                           (f.get("snapshot") or "?")[:9], f.get("monitors")))
+    bad = [a for a in rec["actions"] if not a["ok"]]
+    say("  actions: %d, %d skipped or failed%s" % (len(rec["actions"]), len(bad), "".join("\n    %s: %s" % (a["name"], a["note"]) for a in bad[:10])))
+    if rec.get("energy_uj") is not None:
+        say("  energy: %.1f J (RAPL package) in %.0f s" % (rec["energy_uj"] / 1e6, (rec["end_ms"] - rec["begin_ms"]) / 1000))
+    elif rec.get("energy_note"):
+        say("  energy: " + rec["energy_note"])
+    if rec.get("battery_energy_delta_uWh") is not None:
+        say("  battery energy delta: %d uWh (negative = discharged)" % rec["battery_energy_delta_uWh"])
+    if rec.get("fresh"):
+        say("  start phases: " + json.dumps({k: v[0][0] for k, v in rec["fresh"].items() if isinstance(v, list)}))
+    say(rec.get("report_text") or "  (no report)")
+    say("\n  marks and report: %s" % path)
+
+
+def compare(a, b):
+    with open(a) as fa_, open(b) as fb_:
+        A, B = json.load(fa_), json.load(fb_)
+
+    def totals(r):
+        ws = (r.get("report") or {}).get("windows", [])
+        return sum(w.get("frames", 0) for w in ws), sum(w.get("missed", 0) for w in ws)
+
+    row = "%-46s %-30s %-30s"
+    say(row % ("", "A " + os.path.basename(a)[:26], "B " + os.path.basename(b)[:26]))
+    for k in ("platform_profile", "ac"):
+        say(row % (k, A["facts"].get(k), B["facts"].get(k)))
+    say(row % ("boost", A.get("boost"), B.get("boost")))
+    say(row % ("snapshot", (A["facts"].get("snapshot") or "?")[:9], (B["facts"].get("snapshot") or "?")[:9]))
+    fa, ma = totals(A)
+    fb, mb = totals(B)
+    say(row % ("frames / missed / per 1000", "%d / %d / %.1f" % (fa, ma, 1000.0 * ma / fa if fa else 0),
+               "%d / %d / %.1f" % (fb, mb, 1000.0 * mb / fb if fb else 0)))
+    va, vb = A.get("energy_uj"), B.get("energy_uj")
+    say(row % ("energy J", "%.1f" % (va / 1e6) if va else "-", "%.1f" % (vb / 1e6) if vb else "-"))
+    ga = {g["context"]: g for g in (A.get("report") or {}).get("groups", [])}
+    gb = {g["context"]: g for g in (B.get("report") or {}).get("groups", [])}
+    say("\n" + row % ("GROUP (count: missed, worst gap ms)", "A", "B"))
+
+    def cell(g):
+        return "-" if not g else "%d: %d, %d" % (g["count"], g["missed"], g["gapWorst"])
+    for ctx in sorted(set(ga) | set(gb), key=lambda c: -max((ga.get(c) or {}).get("missed", 0), (gb.get(c) or {}).get("missed", 0))):
+        say(row % (ctx[:46], cell(ga.get(ctx)), cell(gb.get(ctx))))
+    pa, pb = A.get("fresh") or {}, B.get("fresh") or {}
+    if pa or pb:
+        say("\nSTART PHASES (ms after the restart)")
+        for ph in ("launching", "shown", "start", "prewarm", "ready", "settled"):
+            say(row % (ph, pa[ph][0][0] if isinstance(pa.get(ph), list) else None, pb[ph][0][0] if isinstance(pb.get(ph), list) else None))
+
+
+def boost_manual_lines():
+    """The boost needs its service (lares setup, step R6). Without it the same question is answered by a FIXED floor for the whole
+    half: the lines below raise it and put it back (docs/silicon.md, "The interaction boost")."""
+    if os.path.exists("/run/lares-boost/sock"):
+        say("  the boost service is up: the key in silicon.jsonc is all there is to set.")
+        return
+    say("  the boost service is not installed (lares setup, step R6). Without it, a fixed floor for the boost-on half:")
+    say("    G=$(ls /sys/class/drm/card*/gt/gt0/rps_min_freq_mhz | head -1); C=/sys/devices/system/cpu/intel_pstate/min_perf_pct")
+    say("    echo \"back: $(cat $G) $(cat $C)\"                     # note the two numbers")
+    say("    echo 1600 | sudo tee $G; echo 30 | sudo tee $C        # boost-on half")
+    say("    echo <first number> | sudo tee $G; echo <second> | sudo tee $C    # after it")
+
+
+def list_script(opts):
+    say("THE SCRIPT (fixed pacing; the pause is after each action)")
+    t = 0.0
+    for name, _, rest in Tour(**opts).script():
+        say("  %6.1f s  %s" % (t, name))
+        t += rest
+    say("  ~%d s of pauses, plus each call's own time" % t)
+    say("  --fresh: `lares restart` first, a mini tour (%s popups, a toast, an OSD step, a title) at `ready`, then this script after `settled`" % "/".join(MINI))
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if args and args[0] == "compare":
+        if len(args) != 3:
+            print("usage: lares-perf-tour compare A.json B.json", file=sys.stderr)
+            return 2
+        compare(args[1], args[2])
+        return 0
+    if args and args[0] == "run":
+        args = args[1:]
+    label = ""
+    if "--label" in args:
+        i = args.index("--label")
+        label = args[i + 1] if i + 1 < len(args) else ""
+        del args[i:i + 2]
+    flags = set(args)
+    unknown = flags - {"--fresh", "--boost-ab", "--no-theme", "--no-windows", "--no-hop", "--list", "--dry"}
+    if unknown:
+        print("lares-perf-tour: unknown option %s" % ", ".join(sorted(unknown)), file=sys.stderr)
+        return 2
+    opts = {"theme": "--no-theme" not in flags, "windows": "--no-windows" not in flags, "hop": "--no-hop" not in flags}
+    if "--list" in flags:
+        list_script(opts)
+        return 0
+    dry = "--dry" in flags
+    bad, notes = check_env(need_tty=not dry)
+    for n in notes:
+        say("note: " + n)
+    if dry:
+        say("DRY: tty=%s, shell ipc %s, report %s, toggle %s" % (sys.stdin.isatty(), QML, find_report() or "-", TOGGLE_FN))
+        for b in bad:
+            say("DRY would refuse: " + b)
+        say("DRY %s" % ("FAIL" if bad else "OK"))
+        return 1 if bad else 0
+    if bad:
+        for b in bad:
+            print("lares-perf-tour: refused: " + b, file=sys.stderr)
+        return 3
+    say("Lares performance tour. Keep your hands off the keyboard and the pointer until it ends (about 2.5 minutes).")
+    interactive = os.environ.get("TOUR_NO_TTY_OK") != "1"
+    if interactive:
+        input("Press Enter to start (Ctrl+C to cancel) ... ")
+    if "--boost-ab" in flags:
+        paths = []
+        for half, want in (("boost-off", False), ("boost-on", True)):
+            say("\nHALF %s: set silicon.jsonc \"interactionBoost\": %s (it reads %s now)." % (half, str(want).lower(), boost_state()))
+            boost_manual_lines()
+            if interactive:
+                input("Press Enter when it is set (the shell reads it hot) ... ")
+            paths.append(tour_once((label + " " + half).strip(), opts, fresh="--fresh" in flags))
+        say("\nCOMPARE")
+        compare(paths[0], paths[1])
+        return 0
+    tour_once(label, opts, fresh="--fresh" in flags)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        say("\ncancelled (any kitty window it opened is closed; the popups may be left open: press Escape)")
+        sys.exit(130)

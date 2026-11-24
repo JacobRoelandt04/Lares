@@ -1,0 +1,225 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "clipboard.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "maxItems": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 1000,
+   "x-wants": "a whole number, 0 and up",
+   "description": "---- the history (unpinned entries; pinned ones are never dropped) ---------------------------------\nAt most this many entries; the oldest go first. Default 1000; a whole number, 0 and up.\n\nTakes a whole number, 0 and up. Default: 1000."
+  },
+  "maxAgeDays": {
+   "type": "number",
+   "minimum": 0,
+   "default": 30,
+   "x-wants": "a number, 0 and up",
+   "description": "An entry not copied again for this many days is dropped. Default 30; a whole number, 0 and up.\n\nTakes a number, 0 and up. Default: 30."
+  },
+  "maxImageMB": {
+   "type": "number",
+   "minimum": 0,
+   "default": 25,
+   "x-wants": "a number, 0 and up",
+   "description": "An image larger than this (MB) is not recorded at all. Default 25; a whole number, 0 and up.\n(Any other non-text copy has a fixed cap of 8 MB.)\n\nTakes a number, 0 and up. Default: 25."
+  },
+  "maxTotalMB": {
+   "type": "number",
+   "minimum": 0,
+   "default": 500,
+   "x-wants": "a number, 0 and up",
+   "description": "The bytes of all entries together stay under this (MB); the oldest go first. Default 500; a whole number, 0 and up.\n\nTakes a number, 0 and up. Default: 500."
+  },
+  "thumbPx": {
+   "type": "integer",
+   "minimum": 1,
+   "default": 320,
+   "x-wants": "a whole number, 1 and up",
+   "description": "An image's thumbnail fits in a square of this many px (never enlarged). Default 320; a whole number, 1 and up.\n\nTakes a whole number, 1 and up. Default: 320."
+  },
+  "thumbsMax": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 48,
+   "x-wants": "a whole number, 0 and up",
+   "description": "Only the newest this many images keep a thumbnail (pinned ones always do); 0 = no thumbnails. Default 48; 0 and up.\n\nTakes a whole number, 0 and up. Default: 48."
+  },
+  "textIndexKB": {
+   "type": "number",
+   "minimum": 1,
+   "default": 16,
+   "x-wants": "a number, 1 and up",
+   "description": "Text longer than this (KB) is kept in the index cut to this length, with the full text in a file beside it.\nDefault 16; a whole number, 1 and up.\n\nTakes a number, 1 and up. Default: 16."
+  },
+  "secrets": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "ttlS": {
+     "type": "number",
+     "minimum": 1,
+     "default": 120,
+     "x-wants": "a number, 1 and up",
+     "description": "Seconds a sealed copy stays available. Default 120; a number above 0.\n\nTakes a number, 1 and up. Default: 120."
+    },
+    "dropOnLock": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Drop every sealed copy when the screen locks. Default true.\n\nTakes true or false. Default: true."
+    },
+    "dropOnSourceClear": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Drop every sealed copy when the app it came from clears the clipboard. Default true.\n\nTakes true or false. Default: true."
+    },
+    "heuristic": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Seal single-line text that looks like a credential (a known token shape, a password-shaped string, a passphrase).\nfalse: only \"sealApps\" and an app's own sensitive hint seal a copy. Default true.\n\nTakes true or false. Default: true."
+    },
+    "threshold": {
+     "type": "number",
+     "minimum": 0,
+     "default": 0.5,
+     "x-wants": "a number, 0 and up",
+     "description": "The password shape needs at least 4 x threshold + 0.5 bits of entropy per character (2.5 at 0.5); higher seals\nfewer strings. Default 0.5; a number, 0 and up (not clamped; about 1.5 asks for 6.5 bits, the most a\nstring of printable ASCII reaches).\n\nTakes a number, 0 and up. Default: 0.5."
+    }
+   },
+   "description": "---- secrets (a sealed copy is held in the shell's memory only, never written to disk) ---------------"
+  },
+  "ignoreApps": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "Window classes whose copies are not recorded at all (matched whole, case-insensitive; \"sealApps\" below keeps them for a while). Default none.\n\nTakes a list of texts. Default: []."
+  },
+  "sealApps": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [
+    "Proton Pass",
+    "proton-pass"
+   ],
+   "x-wants": "a list of texts",
+   "description": "Window classes whose copies are always sealed (matched whole, case-insensitive). Default the two below.\n\nTakes a list of texts. Default: [\"Proton Pass\",\"proton-pass\"]."
+  },
+  "pasteKeys": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "default": {
+     "type": "string",
+     "pattern": "^[A-Z ]*,[^,]+$",
+     "default": "CTRL,V",
+     "x-wants": "a text like CTRL SHIFT,V",
+     "description": "Takes a text like CTRL SHIFT,V. Default: \"CTRL,V\"."
+    },
+    "classes": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^[A-Z ]*,[^,]+$",
+      "x-wants": "a text like CTRL SHIFT,V"
+     },
+     "default": {
+      "kitty": "CTRL SHIFT,V",
+      "foot": "CTRL SHIFT,V",
+      "Alacritty": "CTRL SHIFT,V",
+      "org.wezfurlong.wezterm": "CTRL SHIFT,V",
+      "com.mitchellh.ghostty": "CTRL SHIFT,V"
+     },
+     "x-wants": "an object",
+     "description": "Per window class (exact, then case-insensitive). Classes listed here are added to the defaults below, which stay.\n\nDefault: {\"kitty\":\"CTRL SHIFT,V\",\"foot\":\"CTRL SHIFT,V\",\"Alacritty\":\"CTRL SHIFT,V\",\"org.wezfurlong.wezterm\":\"CTRL SHIFT,V\",\"com.mitchellh.ghostty\":\"CTRL SHIFT,V\"}."
+    }
+   },
+   "description": "---- pasting -------------------------------------------------------------------------------------------\nThe key the paste sends to the window the popup was opened over, as Hyprland writes a shortcut:\n\"MODS,KEY\" (modifiers space-separated: CTRL, SHIFT, ALT, SUPER). Default \"CTRL,V\"."
+  },
+  "reofferOnClose": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "When the app that owned the clipboard closes and the clipboard empties, put that entry back. Default true.\n\nTakes true or false. Default: true."
+  },
+  "openOverFullscreen": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "The popup's shortcut (and the picker's) also opens it while the active window is fullscreen. Default true; false: it does nothing then.\n\nTakes true or false. Default: true."
+  },
+  "pasteDelayMs": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 120,
+   "x-wants": "a whole number, 0 and up",
+   "description": "Milliseconds between the popup letting go of the keyboard and the paste key. Default 120; 0 and up.\n\nTakes a whole number, 0 and up. Default: 120."
+  },
+  "enter": {
+   "enum": [
+    "paste",
+    "copy"
+   ],
+   "default": "paste",
+   "x-wants": "\"paste\" or \"copy\"",
+   "description": "What Enter (and a double click on the shelf) does with the entry: \"paste\" | \"copy\".\n\nTakes \"paste\" or \"copy\". Default: \"paste\"."
+  },
+  "joiner": {
+   "type": "string",
+   "default": "\n",
+   "x-wants": "a text",
+   "description": "What stands between several entries pasted as one. Default a line break.\n\nTakes a text. Default: \"\\n\"."
+  },
+  "copyOnClose": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Closing the popup by Escape copies the entry you chose (moved to, or clicked); one the popup opened on is not chosen. Default true.\n\nTakes true or false. Default: true."
+  },
+  "restoreAtStart": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "At the shell's start, when the clipboard is empty, the newest entry is put back on it. Default true.\n\nTakes true or false. Default: true."
+  },
+  "pinnedFirst": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "---- the list ------------------------------------------------------------------------------------------\nPinned entries stand first. false: every entry where its time puts it. Default true.\n\nTakes true or false. Default: true."
+  },
+  "openOn": {
+   "enum": [
+    "all",
+    "text",
+    "image",
+    "link",
+    "pinned"
+   ],
+   "default": "all",
+   "x-wants": "\"all\", \"text\", \"image\", \"link\" or \"pinned\"",
+   "description": "The filter it opens on: \"all\" | \"text\" | \"image\" | \"link\" | \"pinned\".\n\nTakes \"all\", \"text\", \"image\", \"link\" or \"pinned\". Default: \"all\"."
+  },
+  "undoSec": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 120,
+   "default": 8,
+   "x-wants": "a number 1 .. 120",
+   "description": "How long a deletion can be undone, seconds. Default 8; 1 .. 120.\n\nTakes a number 1 .. 120. Default: 8."
+  }
+ }
+}

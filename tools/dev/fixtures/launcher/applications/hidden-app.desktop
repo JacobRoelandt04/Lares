@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Hidden Tool
+Comment=Deleted by the user: Hidden=true
+Exec=hidden-tool
+Icon=utilities-terminal
+Hidden=true

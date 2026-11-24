@@ -1,0 +1,44 @@
+// system_update.jsonc -- the system update's bar icon (modules/bar/system_update). The template of ~/.config/quickshell/config/system_update.jsonc.
+// Every key is optional: the value written here IS the default, and a missing key (or one with a bad value) takes it.
+// Keep only what you change; comments are allowed. The file is re-read when it is saved; a file that does not parse
+// keeps the previous settings and the shell log says where.
+{
+    // The icon's colour when updates are waiting: the muted ink below "accentAt" updates, the accent
+    // from "accentAt", the warn colour from "warnAt", the error colour from "errorAt" on. The count is the
+    // status count: a package group (three or more packages of one repo sharing a prefix, qemu-* for one)
+    // counts as ONE update here, and every other package as one. The popup and the lockscreen show the
+    // real number of packages.
+    "icon": {
+        // Default 1 (any update colours the icon); a whole number, 1 and up.
+        "accentAt": 1,
+        // Default 30; a whole number, not below "accentAt".
+        "warnAt": 30,
+        // Default 150; a whole number, not below "warnAt". Out of order, all three take their defaults.
+        "errorAt": 150
+    },
+
+    "check": {
+        // Minutes between two checks for updates; 0: only when you ask. Default 15; 0 .. 1440.
+        "everyMin": 15,
+        // Opening the popup checks again when the last check is at least this many minutes old. Default 5; 0 .. 1440.
+        "staleMin": 5,
+        // What is asked: the official repositories, the AUR, flatpak. One that is false is never asked and never listed.
+        "official": true,
+        "aur": true,
+        "flatpak": true
+    },
+
+    // The view the popup opens on when no update runs: "quiet" | "normal" | "verbose", or "last" (the one you left). While an update runs, and until
+    // its end has been seen, it is the run's own.
+    "view": "quiet",
+
+    "list": {
+        // This many packages of one repository with a common prefix become one group (qemu-*). 0: no groups. Default 3; 0, 2 .. 20.
+        "groupMin": 3,
+        // The categories whose lists are open when the popup opens: "core", "extra", "multilib", "aur", "flatpak" ..., or "all".
+        "open": []
+    },
+
+    // Options handed to yay after -Syu, each a flag of its own ("--devel", "--answerdiff=None"). Default ["--sudoloop"] (the password is asked once).
+    "run": { "flags": ["--sudoloop"] }
+}

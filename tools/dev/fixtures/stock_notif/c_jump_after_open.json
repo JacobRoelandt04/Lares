@@ -1,0 +1,24 @@
+{
+ "symbol": "UCB",
+ "label": "UCB",
+ "currency": "EUR",
+ "priceHint": 2,
+ "prevClose": 50.0,
+ "nowMin": 9,
+ "bars": [
+  [
+   0,
+   50.2
+  ],
+  [
+   5,
+   50.6
+  ]
+ ],
+ "live": 51.95,
+ "kind": "sudden",
+ "level": null,
+ "pct": 3,
+ "minutes": 30,
+ "name": "c_jump_after_open"
+}

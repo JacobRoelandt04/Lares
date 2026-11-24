@@ -1,0 +1,14 @@
+# The dictation helper's private environment (tools/stt/setup.sh installs it into ~/.local/share/lares/stt/venv).
+# Pinned to what the bench of 2026-11-08 ran (Python 3.14.9); every one ships cp314 wheels.
+# onnxruntime-gpu is onnxruntime with the CUDA provider beside the CPU one (CUDA 13: the system's /opt/cuda serves its libraries;
+# cuDNN, which Arch does not ship, comes from nvidia-cudnn-cu13, installed by setup.sh without its pip CUDA copies).
+onnx-asr[hub]==0.12.0
+onnxruntime-gpu==1.31.1
+tokenizers==0.23.3
+openvino==2026.4.1
+openvino-genai==2026.4.1.0
+openvino-tokenizers==2026.4.1.0
+huggingface-hub==2.4.0
+numpy==2.5.4
+soundfile==0.14.0
+jiwer==4.0.0

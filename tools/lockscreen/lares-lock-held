@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# tools/lockscreen/lares-lock-held [<lock file>]: exit 0 while a lock supervisor (tools/lockscreen/lares-lock) holds its lock
+# file -- the Lares lock, its relaunch or its last-resort hyprlock is up --, 1 when none does.
+#
+# It reads the kernel's table of locks and NEVER takes the lock: a `flock -n` probe holds it for an instant, and a lock
+# that starts in that instant (hypridle's, before sleep) finds it held, exits 0 and never locks. /proc/locks names a
+# lock by device and inode: `11: FLOCK  ADVISORY  WRITE 2671587 00:24:20492065 0 EOF` (major:minor in hex, the inode in
+# decimal; a waiting request is a `->` line, not a holder). Default file: $XDG_RUNTIME_DIR/lares-lock.lock.
+#
+# THE OLD NAME. Until `lares cleanup-old-name` a lock of the OLD name -- an old snapshot's lock outlives a deploy, the user's own old lines
+# still ask for qs-lock.lock -- is a lock too: a file named lares-lock.lock or qs-lock.lock is asked as the PAIR (so an old line that
+# passes qs-lock.lock sees a new lock, and the other way round). `--old` asks the old file alone (the lock's own start: its own file is
+# the flock it is about to take).
+rt=${XDG_RUNTIME_DIR:?lares-lock-held: XDG_RUNTIME_DIR is not set}
+case ${1:-} in
+    --old) files=("$rt/qs-lock.lock") ;;
+    "") files=("$rt/lares-lock.lock" "$rt/qs-lock.lock") ;;
+    *) files=("$1")
+       case ${1##*/} in lares-lock.lock|qs-lock.lock) files=("${1%/*}/lares-lock.lock" "${1%/*}/qs-lock.lock") ;; esac ;;
+esac
+for f in "${files[@]}"; do
+    [ -e "$f" ] || continue
+    read -r ino maj min < <(stat -c '%i %Hd %Ld' -- "$f" 2> /dev/null) || continue
+    id=$(printf '%02x:%02x:%s' "$maj" "$min" "$ino")
+    awk -v id="$id" '$2 == "FLOCK" && $6 == id { held = 1 } END { exit !held }' /proc/locks && exit 0
+done
+exit 1

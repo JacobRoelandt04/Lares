@@ -1,0 +1,5 @@
+ :02\:AE\:00\:00\:00\:02:HomeNet-AP:Infra:6:2437 MHz:130 Mbit/s:20 MHz:94:WPA2 WPA3:(none):pair_ccmp group_ccmp psk sae:wlp47s0:no:/org/freedesktop/NetworkManager/AccessPoint/169
+*:02\:AE\:00\:00\:00\:01:HomeNet-AP:Infra:44:5220 MHz:1170 Mbit/s:40 MHz:62:WPA2 WPA3:(none):pair_ccmp group_ccmp psk sae:wlp47s0:yes:/org/freedesktop/NetworkManager/AccessPoint/166
+ :02\:AE\:00\:00\:00\:03:DIRECT-99-Printer:Infra:11:2462 MHz:65 Mbit/s:20 MHz:55:WPA2:(none):pair_ccmp group_ccmp psk:wlp47s0:no:/org/freedesktop/NetworkManager/AccessPoint/170
+ :02\:AE\:00\:00\:00\:04:Neighbour-B:Infra:11:2462 MHz:54 Mbit/s:20 MHz:47:WPA2:(none):pair_ccmp group_ccmp psk:wlp47s0:no:/org/freedesktop/NetworkManager/AccessPoint/171
+ :02\:AE\:00\:00\:00\:05:Neighbour-A:Infra:100:5500 MHz:1170 Mbit/s:80 MHz:34:WPA2:(none):pair_ccmp group_ccmp psk:wlp47s0:no:/org/freedesktop/NetworkManager/AccessPoint/172

@@ -1,0 +1,444 @@
+#!/usr/bin/env python3
+"""lares-snapshot: your side of the system snapshots (docs/snapshots.md, docs/contracts/snapshots.md).
+
+    lares-snapshot status [--json]            how the snapshots stand
+    lares-snapshot list [--json]              the snapshots, newest first
+    lares-snapshot show <short> [--json]      one snapshot
+    lares-snapshot create [--note <text>]     make one now (no password)
+    lares-snapshot keep <short> on|off        keep one past the automatic cleanup (no password)
+    lares-snapshot delete <short>             delete one (asks for a password; a kept one must be released first)
+    lares-snapshot undo-plan <short> [--json] the package files that would take the system back to a snapshot
+    lares-snapshot files <short>              those files, one per line: the arguments `undo` hands to pacman -U
+    lares-snapshot undo <short> [--print]     pacman -U of those files, in this terminal (--print: show the command only)
+    lares-snapshot offsite ...                the copy on Proton Drive (lares-offsite)
+    lares-snapshot rescue status [--json]     the rescue image's state
+
+Reading needs no privilege. Making, keeping and deleting go through pkexec to the installed root tool; for make and keep polkit is
+asked first with pkcheck, so a missing rule says so instead of opening a password dialog.
+Exit status: 0 done, 1 failed, 2 usage, 3 nothing to do, 4 refused.
+Test seams (they change where your own process looks, never what root runs): LARES_SNAPSHOT_ROOT (a fake root for every fixed path),
+LARES_SNAPSHOT_PKEXEC, LARES_SNAPSHOT_PKCHECK, LARES_SNAPSHOT_ARCHIVE (the archive's base URL).
+"""
+import argparse
+import datetime
+import glob
+import gzip
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tarfile
+import urllib.parse
+import urllib.request
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "root"))
+import snaprules  # noqa: E402
+
+FAKE_ROOT = os.environ.get("LARES_SNAPSHOT_ROOT", "")
+TOOL = FAKE_ROOT + "/usr/local/lib/lares/snapshot/lares-snapshot-root"
+STATE = FAKE_ROOT + "/.lares-snapshots"
+PKEXEC = os.environ.get("LARES_SNAPSHOT_PKEXEC", "/usr/bin/pkexec")
+PKCHECK = os.environ.get("LARES_SNAPSHOT_PKCHECK", "/usr/bin/pkcheck")
+ARCHIVE = os.environ.get("LARES_SNAPSHOT_ARCHIVE", "https://archive.archlinux.org/packages")
+ARCHES = ("x86_64", "any")
+EXTENSIONS = ("zst", "xz", "gz")
+HEAD_TIMEOUT = 6
+CACHE_DIR = FAKE_ROOT + "/var/cache/pacman/pkg"
+SYNC_DIR = FAKE_ROOT + "/var/lib/pacman/sync"
+
+
+def say(text=""):
+    print(text)
+
+
+# ---- the root tool ----------------------------------------------------------------------------------------------------------------
+
+def tool_json(*args):
+    """A verb anyone may run: the root tool's one JSON answer."""
+    r = subprocess.run([sys.executable, "-I", TOOL] + list(args), capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit("the snapshot tool answered %d: %s" % (r.returncode, (r.stderr or r.stdout).strip()[:200]))
+    return json.loads(r.stdout)
+
+
+def not_installed():
+    raise SystemExit("the snapshot tool is not installed (sudo tools/snapshot/root/install.sh)")
+
+
+def privileged(verb, args, action=None):
+    """pkexec of the installed tool. `action` (create, keep) is asked of polkit first: no rule means no dialog, only a sentence."""
+    if not os.path.exists(TOOL):
+        not_installed()
+    if action and os.access(PKCHECK, os.X_OK):
+        r = subprocess.run([PKCHECK, "--action-id", "org.lares.snapshot." + action, "--process", str(os.getpid())], capture_output=True)
+        if r.returncode != 0:
+            print("polkit would ask for a password here, so nothing was started. The snapshot installer puts the rule in place: "
+                  "sudo tools/snapshot/root/install.sh", file=sys.stderr)
+            return 4
+    sys.stdout.flush()
+    return subprocess.run([PKEXEC, TOOL, verb] + args).returncode
+
+
+# ---- records ----------------------------------------------------------------------------------------------------------------------
+
+def read_record(short):
+    """The full record (with `before`), by the short id or any prefix of it of four characters or more."""
+    base = STATE + "/records"
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        raise SystemExit("no snapshot records (the snapshot tool is not installed or has made none yet)")
+    for n in names:
+        if n.endswith(".json") and n.startswith(short) and len(short) >= 4:
+            with open(os.path.join(base, n), encoding="utf-8") as f:
+                return json.load(f)
+    raise SystemExit("no snapshot %s" % short)
+
+
+def stamp(t):
+    return datetime.datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
+
+
+def size(n):
+    for unit, k in (("GB", 1e9), ("MB", 1e6), ("KB", 1e3)):
+        if n >= k:
+            return "%.1f %s" % (n / k, unit)
+    return "%d bytes" % n
+
+
+# ---- the undo plan (section 10) ---------------------------------------------------------------------------------------------------
+
+def file_names(name, version):
+    """`name-version-arch.pkg.tar.ext`, exactly: no other package's file can match (`foo-1` is not `foo-1-extra`)."""
+    return ["%s-%s-%s.pkg.tar.%s" % (name, version, a, e) for a in ARCHES for e in EXTENSIONS]
+
+
+def official_names():
+    """The names the sync databases list: only those packages exist in the Arch Linux Archive."""
+    out = set()
+    for db in glob.glob(SYNC_DIR + "/*.db"):
+        try:
+            with tarfile.open(db) as tf:
+                for n in tf.getnames():
+                    if n.endswith("/") or n.count("/") == 0:
+                        parts = n.rstrip("/").rsplit("-", 2)
+                        if len(parts) == 3:
+                            out.add(parts[0])
+        except (OSError, tarfile.TarError):
+            pass
+    return out
+
+
+def archive_has(url):
+    req = urllib.request.Request(url, method="HEAD")
+    try:
+        with urllib.request.urlopen(req, timeout=HEAD_TIMEOUT) as r:
+            return r.status == 200
+    except OSError:
+        return False
+
+
+def archive_url(name, filename):
+    return "%s/%s/%s/%s" % (ARCHIVE, name[0], name, urllib.parse.quote(filename))     # the epoch's colon goes as %3A
+
+
+def find_package(name, version, home, official, head=archive_has):
+    """(source, path) of the file for `name` at `version`: the pacman cache, then yay's build folders, then the archive; or None."""
+    for fn in file_names(name, version):
+        p = os.path.join(CACHE_DIR, fn)
+        if os.path.isfile(p):
+            return "pacman", p
+    for fn in file_names(name, version):
+        hits = sorted(glob.glob(os.path.join(home, ".cache", "yay", "*", fn)))
+        if hits:
+            return "yay", hits[0]
+    if name in official:
+        for fn in file_names(name, version):
+            if fn.endswith(".gz"):
+                continue                      # the archive has no .gz
+            url = archive_url(name, fn)
+            if head(url):
+                return "archive", url
+    return None
+
+
+def critical_globs():
+    """The rule's critical list as the root tool would read it from your config/snapshots.jsonc."""
+    cands = snaprules.jsonc.candidates(os.path.expanduser("~/.config/quickshell/config/snapshots.jsonc"))
+    raw, _ = snaprules.read_config(cands, os.getuid())
+    return snaprules.critical_globs(snaprules.settings_from(raw, snaprules.load_defaults())[0])
+
+
+def package_paths(path):
+    """The files a package brings, from its .MTREE (one of the first members, so a big package is not unpacked); empty when it cannot be read."""
+    mode = "r|zst" if path.endswith(".zst") else "r|xz" if path.endswith(".xz") else "r|gz"
+    try:
+        with tarfile.open(path, mode) as tf:
+            for m in tf:
+                if not m.name.startswith("."):
+                    return set()
+                if m.name == ".MTREE":
+                    text = gzip.decompress(tf.extractfile(m).read()).decode("utf-8", "surrogateescape")
+                    names = (line.split(" ", 1)[0][2:] for line in text.splitlines() if line.startswith("./") and "type=dir" not in line)
+                    # .MTREE writes a space and the like as \\ooo
+                    return {re.sub(r"\\([0-7]{3})", lambda o: chr(int(o.group(1), 8)), n) for n in names}
+    except (OSError, tarfile.TarError, EOFError, ValueError):
+        pass
+    return set()
+
+
+def owned_by(names, now, root=""):
+    """path -> package, for the files of these installed packages (pacman's local database)."""
+    out = {}
+    for name in names:
+        try:
+            with open("%s/var/lib/pacman/local/%s-%s/files" % (root, name, now[name]), encoding="utf-8", errors="surrogateescape") as f:
+                section = f.read().split("%FILES%\n", 1)[-1].split("\n\n", 1)[0]
+        except OSError:
+            continue
+        for p in section.splitlines():
+            if p and not p.endswith("/"):
+                out[p] = name
+    return out
+
+
+def conflicts_of(name, now, root=""):
+    """The names an installed package says it conflicts with (pacman then offers to take it out by itself)."""
+    try:
+        with open("%s/var/lib/pacman/local/%s-%s/desc" % (root, name, now[name]), encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return set()
+    part = text.split("%CONFLICTS%\n", 1)[1].split("\n\n", 1)[0] if "%CONFLICTS%\n" in text else ""
+    return {re.split(r"[<>=]", line, maxsplit=1)[0] for line in part.splitlines() if line}
+
+
+def taken_over(files, new, now, root=""):
+    """Files an old package brings that a package installed SINCE now owns (a split: openssl-3 took libcrypto.so.3 from openssl). pacman refuses
+    such an undo ("conflicting files") with nothing changed, and taking the new package out first would leave the files' users without them
+    for a moment: so the plan says no, and the rescue is the way back. One entry per pair of packages."""
+    owner = owned_by(new, now, root)
+    out, seen = [], set()
+    for f in files:
+        if not owner or f["source"] == "archive":
+            continue                      # an archive URL is not here to be read: pacman itself refuses, before it changes anything
+        for p in sorted(package_paths(f["path"]) & owner.keys()):
+            if (f["name"], owner[p]) not in seen:
+                seen.add((f["name"], owner[p]))
+                if f["name"] in conflicts_of(owner[p], now, root):
+                    continue              # a rename: pacman asks to remove the new one, and does both in one transaction
+                out.append({"name": f["name"], "owner": owner[p], "path": "/" + p})
+    return out
+
+
+def plan_undo(record, now, home, official, head=archive_has, critical=(), root=""):
+    """What `pacman -U` needs to take the installed packages back to the record's `before`. Everything is resolved here, before anything runs.
+    A package whose file cannot be found is listed and left as it is, unless the rule calls it critical (a kernel without its modules is
+    worse than no undo): that blocks the undo (`blockedBy`)."""
+    files, missing, removed = [], [], []
+    before = record.get("before", {})
+    for name in sorted(before):
+        to, cur = before[name], now.get(name)
+        if cur == to:
+            continue
+        entry = {"name": name, "now": cur, "to": to}
+        if cur is None:
+            removed.append({"name": name, "to": to})
+        found = find_package(name, to, home, official, head)
+        if found:
+            files.append(dict(entry, source=found[0], path=found[1]))
+        else:
+            missing.append(entry)
+    blocked = [m["name"] for m in missing if any(snaprules.glob_match(g, m["name"]) for g in critical)]
+    new = sorted(n for n in now if n not in before)
+    taken = taken_over(files, new, now, root)
+    return {"ok": bool(files) and not blocked and not taken, "short": record["short"], "files": files, "missing": missing, "blockedBy": blocked,
+            "takenOver": taken, "newSince": new, "removedSince": removed}
+
+
+def current_plan(short):
+    return plan_undo(read_record(short), snaprules.installed(FAKE_ROOT), os.path.expanduser("~"), official_names(), critical=critical_globs(),
+                     root=FAKE_ROOT)
+
+
+def undo_command(plan):
+    cmd = ["sudo"] + (["-A"] if os.environ.get("SUDO_ASKPASS") else []) + ["pacman", "-U", "--"]
+    return cmd + [f["path"] for f in plan["files"]]
+
+
+# ---- the verbs --------------------------------------------------------------------------------------------------------------------
+
+def cmd_status(a):
+    if not os.path.exists(TOOL):
+        not_installed()
+    s = tool_json("status")
+    if a.json:
+        say(json.dumps(s))
+        return 0
+    say("restic %s, %d snapshots%s" % (s["restic"] or "missing", s["count"], ", newest " + s["newest"] if s["newest"] else ""))
+    say("repository %s, disk free %s%s" % (size(s["repoBytes"]), size(s["freeBytes"]), ", " + s["busy"] + " running" if s["busy"] else ""))
+    say("snapshots are %s%s" % ("on" if s["enabled"] and not s["off"] else "off", " (/etc/lares/snapshot.off exists)" if s["off"] else ""))
+    if s["check"]:
+        say("last check %s: %s" % (stamp(s["check"]["time"]), s["check"]["text"]))
+    r = s["rescue"]
+    say("rescue image: %s" % ("built %s, kernel %s" % (stamp(r["built"]), r["kernel"] or "unknown") if r else "not built"))
+    for p in s["problems"]:
+        say("problem: " + p)
+    return 0
+
+
+def cmd_list(a):
+    recs = tool_json("list")["records"]
+    if a.json:
+        say(json.dumps({"records": recs}))
+        return 0
+    for r in recs:
+        say("%s  %s  %-6s %s%s%s" % (r["short"], stamp(r["time"]), r["reason"], snaprules.title(r), "  [kept]" if r["keep"] else "",
+                                     "  [unfinished]" if r["state"] == "open" else ""))
+    return 0
+
+
+def cmd_show(a):
+    r = read_record(a.short)
+    if a.json:
+        say(json.dumps(r))
+        return 0
+    say("%s  %s  %s" % (r["short"], stamp(r["time"]), snaprules.title(r)))
+    say("reason %s, %d files, %s, added %s in %d s, kernel %s" % (r["reason"], r["files"], size(r["bytes"]), size(r["added"]), r["seconds"], r["kernel"]))
+    say("kept: %s%s" % ("yes" if r["keep"] else "no", ", note: " + r["note"] if r["note"] else ""))
+    if r["changed"] is None:
+        say("what changed: not known" + (" (the update has not finished)" if r["state"] == "open" else ""))
+    for c in r["changed"] or []:
+        say("  %s: %s -> %s" % (c["name"], c["from"] or "not installed", c["to"] or "removed"))
+    return 0
+
+
+def cmd_create(a):
+    return privileged("create", ["--note", a.note] if a.note else [], "create")
+
+
+def cmd_keep(a):
+    return privileged("keep", [a.short, a.state], "keep")
+
+
+def cmd_delete(a):
+    return privileged("delete", [a.short])
+
+
+def cmd_undo_plan(a):
+    plan = current_plan(a.short)
+    if a.json:
+        say(json.dumps(plan))
+        return 0
+    for f in plan["files"]:
+        say("%s %s -> %s  (%s)" % (f["name"], f["now"] or "not installed", f["to"], f["source"]))
+    for m in plan["missing"]:
+        say("%s %s: no package file in the pacman cache, yay's folders or the archive (%s)" % (
+            m["name"], m["to"], "this blocks the undo" if m["name"] in plan["blockedBy"] else "it stays as it is"))
+    for n in plan["newSince"]:
+        say("installed since, stays: %s" % n)
+    for t in plan["takenOver"]:
+        say("%s now owns %s, which the old %s brings (this blocks the undo)" % (t["owner"], t["path"], t["name"]))
+    if not plan["files"] and not plan["missing"]:
+        say("nothing to undo: the packages are as they were")
+    return 0
+
+
+def run_child(cmd):
+    """pacman runs under this process, not in its place: the run needs this one to see the snapshot hook's ancestry. Ctrl-C reaches pacman
+    through the terminal's process group (this process ignores it and waits); TERM and HUP are passed on."""
+    child = subprocess.Popen(cmd)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda n, f: child.send_signal(n))
+    return child.wait()
+
+
+def cmd_files(a):
+    for f in current_plan(a.short)["files"]:
+        say(f["path"])
+    return 0
+
+
+def cmd_undo(a):
+    plan = current_plan(a.short)
+    if plan["takenOver"]:
+        for t in plan["takenOver"]:
+            print("%s, installed since, now owns %s, which the old %s brings." % (t["owner"], t["path"], t["name"]), file=sys.stderr)
+        print("Nothing was run: pacman would refuse this undo. The rescue entry in the boot menu can put everything back.", file=sys.stderr)
+        return 4
+    if plan["blockedBy"]:
+        print("Nothing was run: no package file was found for %s, and the undo would leave them broken." % ", ".join(plan["blockedBy"]), file=sys.stderr)
+        return 4
+    if not plan["files"]:
+        say("nothing to undo: the packages are as they were")
+        return 3
+    for m in plan["missing"]:
+        say("stays as it is (no package file found): %s %s" % (m["name"], m["now"] or "not installed"))
+    cmd = undo_command(plan)
+    if a.print:
+        say(" ".join(cmd))
+        return 0
+    sys.stdout.flush()
+    return run_child(cmd)                       # never --noconfirm: pacman asks, as it does for you
+
+
+def cmd_offsite(a):
+    exe = os.path.join(HERE, "lares-offsite")
+    if not os.access(exe, os.X_OK):
+        print("lares-offsite is not installed", file=sys.stderr)
+        return 1
+    os.execv(exe, [exe] + a.rest)
+
+
+def cmd_rescue(a):
+    r = tool_json("status")["rescue"]
+    if a.json:
+        say(json.dumps(r))
+    elif r:
+        say("built %s, kernel %s, restic %s, boot menu entry %s" % (stamp(r["built"]), r["kernel"] or "unknown", r["restic"] or "unknown",
+                                                                  "present" if r["entry"] else "missing"))
+    else:
+        say("the rescue image is not built")
+    return 0
+
+
+def parser():
+    ap = argparse.ArgumentParser(prog="lares-snapshot", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="verb", required=True)
+
+    def verb(name, fn, *args, json_flag=False):
+        p = sub.add_parser(name)
+        for arg in args:
+            p.add_argument(arg)
+        if json_flag:
+            p.add_argument("--json", action="store_true")
+        p.set_defaults(fn=fn)
+        return p
+
+    verb("status", cmd_status, json_flag=True)
+    verb("list", cmd_list, json_flag=True)
+    verb("show", cmd_show, "short", json_flag=True)
+    verb("create", cmd_create).add_argument("--note")
+    k = verb("keep", cmd_keep, "short")
+    k.add_argument("state", choices=("on", "off"))
+    verb("delete", cmd_delete, "short")
+    verb("undo-plan", cmd_undo_plan, "short", json_flag=True)
+    verb("files", cmd_files, "short")
+    verb("undo", cmd_undo, "short").add_argument("--print", action="store_true")
+    o = sub.add_parser("offsite")
+    o.add_argument("rest", nargs=argparse.REMAINDER)
+    o.set_defaults(fn=cmd_offsite)
+    r = sub.add_parser("rescue")
+    r.add_argument("what", choices=("status",))
+    r.add_argument("--json", action="store_true")
+    r.set_defaults(fn=cmd_rescue)
+    return ap
+
+
+if __name__ == "__main__":
+    args = parser().parse_args()
+    sys.exit(args.fn(args))

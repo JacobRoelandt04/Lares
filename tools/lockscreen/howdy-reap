@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""howdy-reap -- end howdy's compare.py when the lock gives up a face scan.
+
+The lock aborts its face PAM context by killing the PAM child (SIGKILL). pam_howdy
+has spawned /usr/lib/howdy/compare.py from it, and compare.py outlives the dead
+child until its own timeout, holding the camera and the IR emitter. The lock runs
+this just BEFORE the abort, while compare.py is still a descendant.
+
+It touches ONLY the descendants of its parent (the lock process that started it,
+$PPID): a compare.py of another user, of sudo, of a terminal's howdy is not ours
+and is never looked at. SIGTERM first, SIGKILL after 120 ms for whatever is left.
+Takes no arguments; prints the pids it ended; exits 0 always.
+"""
+import os
+import signal
+import sys
+import time
+
+
+def stat_ppids():
+    out = {}
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open("/proc/%s/stat" % d) as f:
+                s = f.read()
+            # pid (comm) state ppid ...: comm may hold spaces and parens
+            out[int(d)] = int(s[s.rindex(")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            pass
+    return out
+
+
+def descendants(root, ppids):
+    kids = {}
+    for pid, pp in ppids.items():
+        kids.setdefault(pp, []).append(pid)
+    seen, todo = set(), [root]
+    while todo:
+        for k in kids.get(todo.pop(), []):
+            if k not in seen:
+                seen.add(k)
+                todo.append(k)
+    return seen
+
+
+def is_compare(pid):
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            argv = f.read().split(b"\0")
+    except OSError:
+        return False
+    # `python3 /usr/lib/howdy/compare.py user` or the script run directly
+    return any(os.path.basename(a) == b"compare.py" for a in argv[:2])
+
+
+def main():
+    mine = os.getppid()
+    victims = [p for p in descendants(mine, stat_ppids()) if p != os.getpid() and is_compare(p)]
+    for p in victims:
+        try:
+            os.kill(p, signal.SIGTERM)
+        except OSError:
+            pass
+    end = time.time() + 0.12
+    while victims and time.time() < end:
+        victims = [p for p in victims if os.path.exists("/proc/%d" % p) and is_compare(p)]
+        time.sleep(0.01)
+    for p in victims:
+        try:
+            os.kill(p, signal.SIGKILL)
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

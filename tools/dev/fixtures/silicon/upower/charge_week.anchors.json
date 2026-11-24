@@ -1,0 +1,18 @@
+{
+  "allCount": 617,
+  "allOldestMs": 1790151665000,
+  "count": 439,
+  "fullBeforePluginMs": 1790699331000,
+  "newestFullMs": 1791000000000,
+  "oldestMs": 1790395293000,
+  "plugin77Ms": 1790782993000,
+  "prevFullMs": 1790986456000,
+  "prevLeftMs": 1790988232000,
+  "states": [
+    0,
+    1,
+    2,
+    4,
+    5
+  ]
+}

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# pkexec STAND-IN for the silicon probes (tools/dev/silicon_service_probe.sh).
+#
+# Logs the call, then runs the helper UNPRIVILEGED -- but only the one binary the runner allows
+# (SILICON_STUB_HELPER: the python stand-in, or stage 2's binary) and only in test mode (a
+# --sysfs-root in its arguments): there is no way through this file to the real /sys, to root, or to
+# any other program. A refused call is logged as `REFUSED` and answers 126 like a pkexec that was
+# not authorised; the runner fails on any such line.
+#
+# Switches the probe flips by writing files in $SILICON_STUB_LOG_DIR:
+#   faults   its text becomes SILICON_TEST_FAULTS for the helper (knob:eio, knob:ignore, knob:clamp:V)
+#   hang     the call sleeps SILICON_STUB_HANG_S (30) s and ends without running anything (an
+#            authorisation nobody answers: the watchdog's case)
+#   delay    its text is a number of seconds: the NEXT call (the file is removed as it is read) waits
+#            that long before it reaches the helper -- a slow authorisation, the write on the wire
+#   delay_each  the same, for EVERY call while the file is there (R5 X1: a user who steps faster than the helper answers)
+LOG="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}/pkexec.log"
+now() { date +%s%3N; }
+printf '%s %s\n' "$(now)" "$*" >> "$LOG"
+refuse() { printf '%s REFUSED (%s)\n' "$(now)" "$1" >> "$LOG"; echo "pkexec stand-in: refused ($1)" >&2; exit 126; }
+[ "$(id -u)" != 0 ] || refuse "running as root"
+[ "${1:-}" = "${SILICON_STUB_HELPER:-/nonexistent}" ] || refuse "not the helper the runner allows"
+case " $* " in *" --sysfs-root "*) ;; *) refuse "no --sysfs-root: not test mode" ;; esac
+if [ -s "$SILICON_STUB_LOG_DIR/faults" ]; then
+    SILICON_TEST_FAULTS="$(cat "$SILICON_STUB_LOG_DIR/faults")"
+    export SILICON_TEST_FAULTS
+fi
+if [ -e "$SILICON_STUB_LOG_DIR/hang" ]; then
+    # an authorisation that is never answered: it ends without ever reaching the helper
+    printf '%s HANG\n' "$(now)" >> "$LOG"
+    sleep "${SILICON_STUB_HANG_S:-30}"
+    exit 1
+fi
+if [ -s "$SILICON_STUB_LOG_DIR/delay" ]; then
+    d="$(cat "$SILICON_STUB_LOG_DIR/delay")"
+    rm -f "$SILICON_STUB_LOG_DIR/delay"
+    printf '%s DELAY %s\n' "$(now)" "$d" >> "$LOG"
+    sleep "$d"
+elif [ -s "$SILICON_STUB_LOG_DIR/delay_each" ]; then
+    d="$(cat "$SILICON_STUB_LOG_DIR/delay_each")"
+    printf '%s DELAY %s\n' "$(now)" "$d" >> "$LOG"
+    sleep "$d"
+fi
+PKEXEC_UID="$(id -u)"
+export PKEXEC_UID
+exec "$@"

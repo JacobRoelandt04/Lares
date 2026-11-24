@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=yazi (Lares)
+Comment=Open a folder in yazi, in a kitty window (the Super+E window)
+Exec=kitty -o background_opacity=0.75 --title yazi yazi %f
+MimeType=inode/directory;
+NoDisplay=true

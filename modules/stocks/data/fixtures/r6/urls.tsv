@@ -1,0 +1,11 @@
+spark_prepost.json	200	https://query1.finance.yahoo.com/v7/finance/spark?symbols=AAPL,NVDA,MSFT,ASML.AS,BPOST.BR&range=1d&interval=5m&includePrePost=true
+chart_AAPL_1D_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=5m&includePrePost=true&events=div%2Csplit
+chart_AAPL_1D_yesterday_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/AAPL?period1=1790668800&period2=1790730000&interval=5m&includePrePost=true&events=div%2Csplit
+chart_AAPL_5D_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=5d&interval=15m&includePrePost=true&events=div%2Csplit
+chart_BPOST.BR_1D.json	200	https://query1.finance.yahoo.com/v8/finance/chart/BPOST.BR?range=1d&interval=5m&events=div%2Csplit
+chart_BPOST.BR_1D_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/BPOST.BR?range=1d&interval=5m&includePrePost=true&events=div%2Csplit
+chart_BPOST.BR_5D.json	200	https://query1.finance.yahoo.com/v8/finance/chart/BPOST.BR?range=5d&interval=15m&events=div%2Csplit
+chart_NVDA_1D_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=5m&includePrePost=true&events=div%2Csplit
+chart_NVDA_1D_yesterday_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/NVDA?period1=1790668800&period2=1790730000&interval=5m&includePrePost=true&events=div%2Csplit
+chart_MSFT_1D_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/MSFT?range=1d&interval=5m&includePrePost=true&events=div%2Csplit
+chart_MSFT_1D_yesterday_prepost.json	200	https://query1.finance.yahoo.com/v8/finance/chart/MSFT?period1=1790668800&period2=1790730000&interval=5m&includePrePost=true&events=div%2Csplit

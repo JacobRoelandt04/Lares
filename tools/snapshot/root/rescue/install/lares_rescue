@@ -1,0 +1,39 @@
+#!/bin/bash
+# mkinitcpio install hook of the Lares rescue image: everything the offline restore needs. The rescue never uses the root's /usr, so
+# every program comes from here (the root may be missing glibc).
+build() {
+    local here=${LARES_RESCUE_DIR:-/usr/local/lib/lares/snapshot/rescue} b
+
+    # restic (dynamically linked to glibc only), the file system tools, a real stty, find, cmp for the checks
+    add_binary restic
+    for b in e2fsck mkswap stty find cmp date setsid tr; do
+        add_binary "$b"
+    done
+    for b in fsck.vfat; do
+        add_binary "$b" || true
+    done
+    # a font readable from a 2880x1620 panel: the kernel's TER16x32 is asked for on the command line; this one is for setfont
+    if [[ -f /usr/share/kbd/consolefonts/ter-v32n.psf.gz ]]; then
+        b=$(mktemp)
+        zcat /usr/share/kbd/consolefonts/ter-v32n.psf.gz > "$b" && add_file "$b" /lares/font.psf 644
+        rm -f "$b"
+    fi
+
+    # A hardware watchdog (the chipset's TCO timer, which firmware may leave running and allowed to reset) is stopped by its driver at
+    # probe; with no driver in the image nothing stops it and the machine reboots by itself ~40-100 s into the menu (seen on QEMU q35). udev
+    # loads whichever matches the hardware (the platform's own driver stops its timer).
+    add_module lpc_ich
+    add_all_modules '/watchdog/'
+    # the runtime hook (hooks/lares_rescue) runs after udev has made the device nodes
+    add_runscript
+    add_file "$here/rescue.sh" /lares/rescue.sh 755
+    add_file "$here/protect.list" /lares/protect.list 644
+    # the root tool's defaults (paths, excludes): the rescue covers and spares exactly what the tool does
+    add_file "$here/../defaults.json" /lares/defaults.json 644
+}
+
+help() {
+    cat <<HELPEOF
+The Lares rescue: a menu that restores a snapshot of the system offline.
+HELPEOF
+}

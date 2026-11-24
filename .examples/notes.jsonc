@@ -1,0 +1,16 @@
+// notes.jsonc -- the notes (modules/notes). The template of ~/.config/quickshell/config/notes.jsonc. Every key is optional and every value below
+// IS the default. Read hot unless a key says otherwise. Comments are allowed. (Where the popup comes out: shell.jsonc "outlets".)
+{
+    // The folder the notes are in. ~ is your home. Read as the shell starts. (The wiki's "Save to note" is wiki.jsonc "notesRoot".)
+    "root": "~/Documents/Notes",
+    // What the popup opens on: "last" (where you left it, within a session) | "root" (the tiles) | "new" (a new note, the cursor in it).
+    "openAt": "last",
+    // Escape in an open note: "close" (the popup closes) | "back" (back to the tiles; Escape there closes).
+    "escape": "close",
+    // Deleting a note or a folder asks first (it goes to the trash either way). true | false.
+    "confirmDelete": true,
+    // The name of a note that has none.
+    "newName": "Untitled",
+    // A link is opened by "ctrl" (Ctrl+click; a plain click puts the cursor there) | "click".
+    "linkClick": "ctrl"
+}

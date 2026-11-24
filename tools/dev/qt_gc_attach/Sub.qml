@@ -1,0 +1,64 @@
+import QtQuick
+import Probe
+
+// The nested component still being built when the collector's cycle starts (GcProbe): 50 finished groups before it, 5 after.
+Item {
+    Anchor {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Helper { objectName: "direct" }
+    GcProbe {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+    Group {}
+}

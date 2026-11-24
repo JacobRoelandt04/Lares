@@ -1,0 +1,44 @@
+[package]
+name = "system_update_helper"
+version = "0.1.0"
+edition = "2021"
+description = "JSON-event driver for pacman + AUR updates, fed from libalpm callbacks rather than stdout regex"
+license = "MIT"
+
+[[bin]]
+name = "system_update_helper"
+path = "src/main.rs"
+
+[dependencies]
+# Safe Rust bindings to libalpm. Pinned to a known-working release; the API
+# moves with pacman releases so we don't want a `^5` floating compatibility
+# range bringing in surprises mid-update.
+alpm = "5"
+alpm-utils = "5"
+pacmanconf = "3"
+
+# Argument parsing.
+clap = { version = "4", features = ["derive"] }
+
+# JSON event serialization. `serde_json::ser::Serializer` + a `to_writer`
+# call per event line — no buffering.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling.
+anyhow = "1"
+
+# Async fetch for AUR RPC + git clone of PKGBUILDs (sync over reqwest blocking
+# is fine — the helper does one HTTP burst then drives makepkg sync).
+ureq = { version = "2", features = ["json"] }
+
+# Inotify for makepkg log-file phase tracking.
+notify = "6"
+
+# Time stamps on every event.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

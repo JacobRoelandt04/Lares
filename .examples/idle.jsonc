@@ -1,0 +1,94 @@
+// idle.jsonc -- soft idle, the lid and the sleep fade (modules/idle). The template of ~/.config/quickshell/config/idle.jsonc.
+// Every key is optional and every value below IS the default: a missing key (or one of the wrong kind) takes it, a number out
+// of its range is clamped to the range. The file is read hot. `//` and `/* */` comments are allowed. Keep only what you change.
+{
+    // SOFT IDLE (the idle reel's "soft"): dim the laptop panel after a while without input, then dim it deeper. Soft never blanks,
+    // locks or suspends and never goes dark: both steps stay at raw 1 or above, and a panel you set to 0 yourself stays at 0.
+
+    // Seconds without input until the panel dims. 1 .. 86400; 0 = never.
+    "dimAfter": 120,
+    // Seconds without input until the deeper step. 1 .. 86400; 0 = never.
+    "deepAfter": 180,
+    // How bright the dimmed panel LOOKS, as a share of how bright it looked: on the brightness keys' own curve (osd.jsonc
+    // "brightness" "gamma"; 0.7 is about half the raw value). 0.01 .. 1 (1 = no dimming).
+    "dimLevel": 0.7,
+    // The same for the deeper step (0.5: about a quarter of the raw value); never brighter than dimLevel. 0.01 .. 1.
+    "deepLevel": 0.5,
+    // EXTERNAL DISPLAYS, over DDC/CI (the monitor's own brightness): dimmed at the same two times. true | false; null (or no key) = only on a
+    // machine with no laptop panel (a desktop).
+    "ddcDim": null,
+    // The dimmed monitor's brightness figure as a share of what it was (100 -> 35). 0 .. 1 (1 = no dimming).
+    "ddcDimLevel": 0.35,
+    // The same for the deeper step; never brighter than ddcDimLevel. 0 .. 1 (an LCD at 0 is still lit; a monitor whose 0 is black: raise it).
+    "ddcDeepLevel": 0,
+    // With an external output connected: seconds with the focus on another output until the laptop panel dims (to dimLevel).
+    // 1 .. 86400; 0 = never.
+    "awayAfter": 300,
+    // The laptop panel: the output whose name starts with this.
+    "panel": "eDP",
+    // Your own brightness script: soft gives the brightness back through its --resume. ~ is your home.
+    "script": "~/.config/hypr/scripts/brightness.sh",
+    // Where that script keeps the brightness it saved: soft writes the full raw value there before it dims, so --resume
+    // restores it exactly.
+    "stateFile": "/tmp/idle_backlight_value",
+    // The program soft reads and sets the brightness with.
+    "brightnessctl": "brightnessctl",
+    // The panel's backlight is found by the shell (the GPU that drives the eDP: intel_backlight in Hybrid, nvidia_0 in dGPU-only).
+    // Does raw 0 turn that panel BLACK? The shell's table says yes for the raw intel one and no for nvidia_0; where it is no, the lid
+    // closed and the sleep fade write the lowest value and also draw black over the panel. Name a device to override the table.
+    "zeroIsBlack": {},
+
+    // HARD IDLE, LID CLOSED: the panel goes to 0 with the lid. Seconds it takes to climb back to its old brightness when the lid
+    // opens, evenly in how bright it looks; a brightness key pressed during the climb wins at once. 0 .. 30 (0 = at once).
+    "lidRestore": 2.5,
+
+    // THE SLEEP FADE (every mode): when the machine is about to sleep, once the lock's veil is up, the laptop panel dims to 0 along
+    // the brightness curve while the sleep veil closes over every screen, and only then may the machine sleep; it wakes at the same
+    // pace (type at once; an unlock skips the rest). true | false: false turns all of it off, and the shell then holds no sleep
+    // inhibitor.
+    "sleepFade": true,
+    // Seconds of the fall and of the climb back. 0.3 .. 3 (the fall is cut to fit logind's 5 s wait).
+    "sleepFadeTime": 1.5,
+    // The fall alone (the screen going dark) and the climb alone (the screen coming back), same range. Absent: sleepFadeTime.
+    //   "sleepFallTime": 1.5,
+    //   "sleepClimbTime": 1.5,
+    // The sleep veil's effect (defocus, colour split, the picture sinking). 0 .. 1 (0 = no veil, the light alone).
+    "sleepFadeStrength": 1,
+
+    // THE AUTO LAYER: what raises the idle mode by itself, and to what: "off" (never) | "soft" | "normal" | "hard". The highest cause that holds wins, and your
+    // own mode is never lowered by one.
+    "auto": {
+        "content": "normal",    // something is being watched (a program asks for the screen to stay on)
+        "share": "normal",      // the screen is shared or recorded
+        "update": "soft",       // a system update runs from the popup
+        "llm": "soft",          // the chat is answering
+        "timer": "soft",        // a timer or a pomodoro runs
+        "wiki": "soft",         // a wiki batch runs
+        "bridge": "soft",       // the phone is mirrored, or files go over
+        "download": "soft",     // a download grows (below)
+        "pkg": "soft",          // a package is built or installed outside the popup (below)
+        "music": "soft"         // the player plays
+    },
+    // The modes the idle reel offers, of "off" | "soft" | "normal" | "hard"; they stand in that order whatever the order here, and "off" is
+    // always there. A mode left out is never in force: a start (or "last") on one goes to the nearest offered mode below it, and a cause
+    // above that asks for one gets the nearest offered mode above it (with none above, the highest). Read as the shell starts.
+    "items": ["off", "soft", "normal", "hard"],
+    // The mode the shell starts in: "off" | "soft" | "normal" | "hard", or "last" (the one you left in this session of Hyprland: a restart of the
+    // shell keeps it, a new login starts at "off").
+    "start": "off",
+    // A download counts once it has grown this many minutes without a break; the folder that is watched ("" = your Downloads folder, as
+    // `xdg-user-dir DOWNLOAD` says). 0 .. 120.
+    "download": { "minMinutes": 2, "folder": "" },
+    // A package build or installation counts once it has run this many minutes without a break. 0 .. 120.
+    "packages": { "minMinutes": 2 },
+    // How a change the auto layer made is shown: "cinematic" (the reel's strip comes out, turns and says why) | "quiet" (the cell turns;
+    // hovering the reel says why).
+    "autoTell": "cinematic",
+
+    // CONTENT THAT IS NOT CONTENT: programs whose request to keep the screen on does not count as something being watched (the auto layer
+    // would raise the mode, soft would not dim). SDL programs call ScreenSaver.Inhibit for their whole life whatever they show, FreeRDP's
+    // SDL client (the Windows VM's window) included. Exact names, any case, never a substring; matched against a D-Bus holder's application
+    // name (the shell's log says `LARES idle content holds: <name>` / `ignored: <name>`), a window's class and logind's `who`. Your list
+    // REPLACES this one: keep the entries you still want. [] ignores nothing.
+    "contentIgnore": ["sdl-freerdp3", "sdl-freerdp", "com.freerdp.client.sdl3", "com.freerdp.client.sdl", "org.kdeconnect.daemon"]
+}

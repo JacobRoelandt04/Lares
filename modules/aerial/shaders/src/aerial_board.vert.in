@@ -1,0 +1,23 @@
+#version 440
+
+// =============================================================================
+// aerial_board.vert -- Qt Quick's own ShaderEffect vertex shader, written out (the same two lines: the texture coordinate through, the corner through
+// qt_Matrix), for ONE reason: a ShaderEffect with no vertex shader of its own takes Qt's built-in one, which exists in GLSL 100 es / 120 / 150 only, and Qt 6.12
+// links a pipeline at the highest GLSL ES version EVERY stage has -- so on NVIDIA's OpenGL ES 3.2 context (dGPU-only mode, where Qt takes ES on purpose) the board
+// would be linked at GLSL ES 1.00 and draw nothing (CLAUDE.md, "THE CURE FOR A HEAVY FRAGMENT-ONLY EFFECT"). With a vertex shader that has a 300 es variant the
+// pair links at GLSL ES 3.00. The uniform block is the fragment stage's, copied whole by tools/dev/board_gen (the fragment stage's template is the one place).
+// =============================================================================
+
+layout(location = 0) in vec4 qt_Vertex;
+layout(location = 1) in vec2 qt_MultiTexCoord0;
+
+layout(location = 0) out vec2 qt_TexCoord0;
+
+// @@BOARD_UBO
+
+out gl_PerVertex { vec4 gl_Position; };
+
+void main() {
+    qt_TexCoord0 = qt_MultiTexCoord0;
+    gl_Position = qt_Matrix * qt_Vertex;
+}

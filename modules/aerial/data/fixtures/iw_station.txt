@@ -1,0 +1,34 @@
+Station 02:ae:00:00:00:01 (on wlp47s0)
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	long
+	WMM/WME:	yes
+	MFP:		yes
+	TDLS peer:	no
+	inactive time:	16 ms
+	rx bytes:	8173016
+	rx packets:	20816
+	tx bytes:	6490841
+	tx packets:	15619
+	tx retries:	7110
+	tx failed:	0
+	beacon loss:	0
+		beacon rx:	3312
+	rx drop misc:	44
+	signal:  	-58 [-60, -58] dBm
+	signal avg:	-58 dBm
+	beacon signal avg:	-59 dBm
+	tx bitrate:	344.1 MBit/s 40MHz HE-MCS 7 HE-NSS 2 HE-GI 0 HE-DCM 0
+	tx duration:	0 us
+	rx bitrate:	103.2 MBit/s 40MHz HE-MCS 2 HE-NSS 2 HE-GI 0 HE-DCM 0
+	rx duration:	0 us
+	expected throughput:	292.703Mbps
+	DTIM period:	3
+	beacon interval:100
+	short slot time:yes
+	connected time:	467 seconds
+	associated at [boottime]:	16933.202s
+	associated at:	1795122967459 ms
+	current time:	1795123435129 ms
+

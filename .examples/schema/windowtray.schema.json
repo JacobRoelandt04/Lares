@@ -1,0 +1,172 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "windowtray.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "follow": {
+   "enum": [
+    "screen",
+    "focus"
+   ],
+   "default": "screen",
+   "x-wants": "\"screen\" or \"focus\"",
+   "description": "Which window a bar shows: \"screen\" = the last window of THIS bar's monitor's active\nworkspace (each screen shows its own) | \"focus\" = the focused window, whatever screen.\n\nTakes \"screen\" or \"focus\". Default: \"screen\"."
+  },
+  "stripSuffix": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Drop what the app's mark already says: a title ending in \" - Zen Browser\" or\n\" — Visual Studio Code\" (the window's initial title or the app's name, after one of\n- — – | ·) is shown without it. A title is never stripped to nothing. true | false.\n\nTakes true or false. Default: true."
+  },
+  "rewrites": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "re": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "to": {
+      "type": "string",
+      "x-wants": "a text"
+     }
+    },
+    "required": [
+     "re",
+     "to"
+    ]
+   },
+   "default": [],
+   "x-wants": "a list of objects",
+   "description": "Regex rewrites of the shown title, in order: \"re\" is a JavaScript regex (written\nwithout the slashes), \"to\" the replacement ($1 is the first group). A rule whose\nregex is invalid is skipped and reported. For example (waybar's, ported; with\n\"stripSuffix\" on they change nothing):\n  [ { \"re\": \"(.*) - Visual Studio Code\", \"to\": \"$1\" }, { \"re\": \"(.*) — Zen Browser\", \"to\": \"$1\" } ]\n\nTakes a list of objects. Default: []."
+  },
+  "terminalClasses": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [
+    "kitty",
+    "Alacritty",
+    "foot",
+    "footclient",
+    "org.wezfurlong.wezterm",
+    "com.mitchellh.ghostty",
+    "org.kde.konsole",
+    "konsole",
+    "XTerm",
+    "URxvt",
+    "st-256color",
+    "terminator",
+    "com.gexperts.Tilix",
+    "gnome-terminal-server",
+    "org.gnome.Terminal",
+    "org.gnome.Ptyxis",
+    "xfce4-terminal",
+    "rio",
+    "cool-retro-term"
+   ],
+   "x-wants": "a list of texts",
+   "description": "A TERMINAL'S TITLE WAITS. A shell sets the window's title to the command it is about to run and back to\nthe directory when it ends, so `ls` would flash \"~ -> ls -> ~\" across the bar. For a window of one of these\nclasses (whole, any case; `hyprctl clients` shows them) a title change is held \"terminalTitleMs\" before the\nbar shows it, and a title that comes back to the one shown within it never shows. [] switches it off.\n\nTakes a list of texts. Default: [\"kitty\",\"Alacritty\",\"foot\",\"footclient\",\"org.wezfurlong.wezterm\",\"com.mitchellh.ghostty\",\"org.kde.konsole\",\"konsole\",\"XTerm\",\"URxvt\",\"st-256color\",\"terminator\",\"com.gexperts.Tilix\",\"gnome-terminal-server\",\"org.gnome.Terminal\",\"org.gnome.Ptyxis\",\"xfce4-terminal\",\"rio\",\"cool-retro-term\"]."
+  },
+  "terminalTitleMs": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 2000,
+   "default": 150,
+   "x-wants": "a whole number 0 .. 2000",
+   "description": "How long that wait is, in ms (0 to 2000; 0 = no wait): longer than a prompt takes to come back after a\nquick command, short enough that a command that runs on is named at once.\n\nTakes a whole number 0 .. 2000. Default: 150."
+  },
+  "trayOrder": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "The tray: an item's id (what `busctl` shows as Id: \"nm-applet\", \"blueman\").\nThe order of the icons: these first, in this order, then the rest as they registered.\nFor example [\"nm-applet\", \"blueman\"].\n\nTakes a list of texts. Default: []."
+  },
+  "trayHide": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "Items that are not shown at all (ids).\n\nTakes a list of texts. Default: []."
+  },
+  "trayRename": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "A name for an item that does not name itself well (shown beside its icon and in its\nmenu), by id. For example { \"nm-applet\": \"Network\" }.\n\nDefault: {}."
+  },
+  "openOn": {
+   "enum": [
+    "hover",
+    "click"
+   ],
+   "default": "hover",
+   "x-wants": "\"hover\" or \"click\"",
+   "description": "The tray comes out when the pointer rests on the title (\"hover\"), or on a click (\"click\": a second click puts it back).\n\nTakes \"hover\" or \"click\". Default: \"hover\"."
+  },
+  "closeOnLeave": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Leaving it with the pointer puts it back; activating an item puts it back. true | false.\n\nTakes true or false. Default: true."
+  },
+  "closeOnActivate": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Takes true or false. Default: true."
+  },
+  "trayPassive": {
+   "enum": [
+    "faint",
+    "hide"
+   ],
+   "default": "faint",
+   "x-wants": "\"faint\" or \"hide\"",
+   "description": "An item that calls itself passive is \"faint\" | \"hide\" (not shown until it is active).\n\nTakes \"faint\" or \"hide\". Default: \"faint\"."
+  },
+  "attention": {
+   "enum": [
+    "peek",
+    "off"
+   ],
+   "default": "peek",
+   "x-wants": "\"peek\" or \"off\"",
+   "description": "An item that wants attention shows itself beside the title: \"peek\" | \"off\".\n\nTakes \"peek\" or \"off\". Default: \"peek\"."
+  },
+  "desktopText": {
+   "type": "string",
+   "default": "Desktop",
+   "x-wants": "a text",
+   "description": "What the title says when no window has the focus.\n\nTakes a text. Default: \"Desktop\"."
+  },
+  "trayIconMode": {
+   "enum": [
+    "ink",
+    "colour"
+   ],
+   "default": "ink",
+   "x-wants": "\"ink\" or \"colour\"",
+   "description": "\"ink\" draws every tray icon in the shell's own ink (legible in light and dark whatever\nthe icon theme ships) | \"colour\" draws the icons as they are.\n\nTakes \"ink\" or \"colour\". Default: \"ink\"."
+  }
+ }
+}

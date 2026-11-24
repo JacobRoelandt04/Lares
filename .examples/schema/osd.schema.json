@@ -1,0 +1,918 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "osd.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "spot": {
+   "anyOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "bar": {
+       "enum": [
+        "right",
+        "left",
+        "bottom",
+        "top"
+       ],
+       "default": "right",
+       "x-wants": "\"right\", \"left\", \"bottom\" or \"top\""
+      },
+      "along": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "default": 0.5,
+       "x-wants": "a number 0 .. 1"
+      }
+     },
+     "x-wants": "an object"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "corner": {
+       "type": "string",
+       "x-wants": "a text"
+      }
+     },
+     "required": [
+      "corner"
+     ],
+     "x-wants": "an object"
+    }
+   ],
+   "default": {
+    "bar": "right",
+    "along": 0.5
+   },
+   "x-wants": "an object, or an object",
+   "description": "Where the OSD comes out: { \"bar\": \"right\", \"along\": 0.5 } (a bar edge and the\nfraction of its length) or { \"corner\": \"right-bottom\" }.\n\nTakes an object, or an object. Default: {\"bar\":\"right\",\"along\":0.5}."
+  },
+  "screen": {
+   "type": "string",
+   "default": "focused",
+   "x-wants": "a text",
+   "description": "Which display it comes on: \"focused\" (the one you are on), or a connector's name (\"DP-1\"); while that one is not there, the focused one.\n\nTakes a text. Default: \"focused\"."
+  },
+  "fullscreen": {
+   "enum": [
+    "pill",
+    "keys",
+    "suppress"
+   ],
+   "default": "pill",
+   "x-wants": "\"pill\", \"keys\" or \"suppress\"",
+   "description": "Over a fullscreen window: \"pill\" (a click-through capsule at the top centre), \"keys\" (the capsule only for what a key or an action of\nyours did: no track, network or battery news over a film) or \"suppress\" (nothing).\n\nTakes \"pill\", \"keys\" or \"suppress\". Default: \"pill\"."
+  },
+  "dismissMs": {
+   "type": "integer",
+   "minimum": 200,
+   "maximum": 600000,
+   "default": 2000,
+   "x-wants": "a whole number 200 .. 600000",
+   "description": "How long the card of a key stays (ms); a kind's own \"ms\" below wins.\n\nTakes a whole number 200 .. 600000. Default: 2000."
+  },
+  "resumeMinMs": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 600000,
+   "default": 800,
+   "x-wants": "a whole number 0 .. 600000",
+   "description": "After the pointer leaves a hovered card it stays at least this long.\n\nTakes a whole number 0 .. 600000. Default: 800."
+  },
+  "queueCap": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 20,
+   "default": 3,
+   "x-wants": "a whole number 1 .. 20",
+   "description": "How many event cards (track, bluetooth, network, vpn, autoTunnel, btLow, capture, battery, power, caption,\ngeneric) wait their turn behind the one shown (one per kind+key; the oldest goes). 1 .. 20.\n\nTakes a whole number 1 .. 20. Default: 3."
+  },
+  "repeat": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "delayMs": {
+     "anyOf": [
+      {
+       "enum": [
+        "auto"
+       ],
+       "x-wants": "\"auto\""
+      },
+      {
+       "type": "integer",
+       "minimum": 50,
+       "maximum": 5000,
+       "x-wants": "a whole number 50 .. 5000"
+      }
+     ],
+     "default": "auto",
+     "x-wants": "\"auto\", or a whole number 50 .. 5000",
+     "description": "Takes \"auto\", or a whole number 50 .. 5000. Default: \"auto\"."
+    },
+    "rateHz": {
+     "anyOf": [
+      {
+       "enum": [
+        "auto"
+       ],
+       "x-wants": "\"auto\""
+      },
+      {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 200,
+       "x-wants": "a whole number 1 .. 200"
+      }
+     ],
+     "default": "auto",
+     "x-wants": "\"auto\", or a whole number 1 .. 200",
+     "description": "Takes \"auto\", or a whole number 1 .. 200. Default: \"auto\"."
+    }
+   },
+   "description": "A held volume / brightness key: \"auto\" reads the compositor's own\ninput:repeat_delay / input:repeat_rate (hyprctl getoption); or numbers\n(delayMs 50..5000, rateHz 1..200)."
+  },
+  "volume": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "step": {
+     "type": "number",
+     "minimum": 0.001,
+     "maximum": 0.5,
+     "default": 0.02,
+     "x-wants": "a number 0.001 .. 0.5",
+     "description": "Takes a number 0.001 .. 0.5. Default: 0.02."
+    },
+    "boostMax": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 3,
+     "default": 1.5,
+     "x-wants": "a number 1 .. 3",
+     "description": "Takes a number 1 .. 3. Default: 1.5."
+    }
+   },
+   "description": "Volume keys step 2 %. A held key stops at 100 %; a fresh press at 100 % crosses\ninto boost, up to boostMax."
+  },
+  "mic": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "step": {
+     "type": "number",
+     "minimum": 0.001,
+     "maximum": 0.5,
+     "default": 0.05,
+     "x-wants": "a number 0.001 .. 0.5",
+     "description": "Takes a number 0.001 .. 0.5. Default: 0.05."
+    }
+   }
+  },
+  "brightness": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "device": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"\"."
+    },
+    "step": {
+     "type": "number",
+     "minimum": 0.001,
+     "maximum": 0.5,
+     "default": 0.05,
+     "x-wants": "a number 0.001 .. 0.5",
+     "description": "Takes a number 0.001 .. 0.5. Default: 0.05."
+    },
+    "fineStep": {
+     "type": "number",
+     "minimum": 0.001,
+     "maximum": 0.5,
+     "default": 0.01,
+     "x-wants": "a number 0.001 .. 0.5",
+     "description": "Takes a number 0.001 .. 0.5. Default: 0.01."
+    },
+    "gamma": {
+     "type": "number",
+     "minimum": 0.5,
+     "maximum": 4,
+     "default": 2,
+     "x-wants": "a number 0.5 .. 4",
+     "description": "Takes a number 0.5 .. 4. Default: 2."
+    },
+    "floorRaw": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 1000,
+     "default": 1,
+     "x-wants": "a whole number 0 .. 1000",
+     "description": "Takes a whole number 0 .. 1000. Default: 1."
+    },
+    "target": {
+     "enum": [
+      "pointer",
+      "focused",
+      "panel"
+     ],
+     "default": "pointer",
+     "x-wants": "\"pointer\", \"focused\" or \"panel\"",
+     "description": "Takes \"pointer\", \"focused\" or \"panel\". Default: \"pointer\"."
+    }
+   },
+   "description": "Brightness steps are PERCEIVED: a key climbs a ladder of 1 / step rungs (twenty at\n0.05) laid along the curve raw = max * (rung / rungs) ^ gamma, so the dim end gets\nfine steps and every press changes what you SEE by the same amount. The card shows\nthe rung (5 %, 10 % ... 100 %), not the raw percentage. step is the key, fineStep\nthe Shift key (a fraction of a rung). floorRaw is the bottom rung, the true minimum\nlevel (1): a held key stops there, and a FRESH press down at the bottom goes to true\n0 (the screen off) -- like volume's boost gate, downwards; one press up leaves it.\n0 asks for no stop (a plain press reaches 0). Written with `brightnessctl -d <device>`. \"device\": \"\" (or no key) is the PANEL's\nbacklight, found by the shell: the one of the GPU that drives the eDP (intel_backlight in Hybrid, nvidia_0 in dGPU-only, where raw 0\nis not black and a key never writes it); a name here forces that device.\n\"target\" is the display the keys set: \"pointer\" (the one the pointer is on) | \"focused\" | \"panel\" (always the laptop's own)."
+  },
+  "media": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "keys": {
+     "enum": [
+      "mpd",
+      "auto"
+     ],
+     "default": "mpd",
+     "x-wants": "\"mpd\" or \"auto\"",
+     "description": "Takes \"mpd\" or \"auto\". Default: \"mpd\"."
+    }
+   },
+   "description": "The media keys (play / pause, next, previous): \"mpd\" (the player) | \"auto\" (the player while it plays or is paused with a song; else\nwhatever else plays -- a browser, a video -- through playerctl)."
+  },
+  "capture": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "dir": {
+     "type": "string",
+     "default": "~/Pictures/Screenshots",
+     "x-wants": "a path",
+     "description": "The folder they go to, and their name (date's % codes).\n\nTakes a path. Default: \"~/Pictures/Screenshots\"."
+    },
+    "name": {
+     "type": "string",
+     "pattern": "^[^/]+\\.png$",
+     "default": "shot-%Y%m%d-%H%M%S.png",
+     "x-wants": "a text like shot-%Y%m%d-%H%M%S.png",
+     "description": "Takes a text like shot-%Y%m%d-%H%M%S.png. Default: \"shot-%Y%m%d-%H%M%S.png\"."
+    },
+    "copy": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The picture is put on the clipboard.\n\nTakes true or false. Default: true."
+    },
+    "openCommand": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "default": [
+      "xdg-open",
+      "{path}"
+     ],
+     "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+     "description": "What Open runs, and what Edit runs ({path} is the picture). An empty editCommand is the shell's own: swappy with a trash button.\n\nTakes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]. Default: [\"xdg-open\",\"{path}\"]."
+    },
+    "editCommand": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Takes a list of texts. Default: []."
+    },
+    "click": {
+     "enum": [
+      "edit",
+      "open",
+      "none"
+     ],
+     "default": "edit",
+     "x-wants": "\"edit\", \"open\" or \"none\"",
+     "description": "A click on the card: \"edit\" | \"open\" | \"none\".\n\nTakes \"edit\", \"open\" or \"none\". Default: \"edit\"."
+    }
+   },
+   "description": "SCREENSHOTS (tools/osd/shot.sh and their card)."
+  },
+  "kbd": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "device": {
+     "type": "string",
+     "default": "asus::kbd_backlight",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"asus::kbd_backlight\"."
+    }
+   },
+   "description": "The keyboard backlight (4 stops on this laptop); the Fn key is watched too. \"device\": \"\" on a machine that has none (a desktop):\nnothing watches for one then."
+  },
+  "lockkeys": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "keys": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "caps",
+       "num"
+      ],
+      "x-wants": "\"caps\" or \"num\""
+     },
+     "minItems": 1,
+     "maxItems": 2,
+     "default": [
+      "caps",
+      "num"
+     ],
+     "x-wants": "a list of words (\"caps\" or \"num\")",
+     "description": "Takes a list of words (\"caps\" or \"num\"). Default: [\"caps\",\"num\"]."
+    }
+   },
+   "description": "The lock keys card: the keys it shows, in that order. [\"caps\"] on a keyboard with no number pad: no Num key on the card, and a Num Lock\nchange (another keyboard's) shows nothing."
+  },
+  "layout": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "keyboard": {
+     "type": "string",
+     "default": "main",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"main\"."
+    },
+    "codes": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": {
+      "English (US)": "US",
+      "Belgian": "BE"
+     },
+     "x-wants": "an object",
+     "description": "Default: {\"English (US)\":\"US\",\"Belgian\":\"BE\"}."
+    }
+   },
+   "description": "The layout card. \"keyboard\": \"main\" (the one hyprctl devices marks main) or a\nkeyboard's name. \"codes\" names the short code per layout name Hyprland reports\n(added to the built-in table; an unlisted \"English (US)\" shows \"US\", an unlisted\n\"Belgian\" shows \"BE\")."
+  },
+  "kinds": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "volume": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "key",
+         "external",
+         "device"
+        ],
+        "x-wants": "\"key\", \"external\" or \"device\""
+       },
+       "x-wants": "a list of words (\"key\", \"external\" or \"device\")",
+       "description": "Takes a list of words (\"key\", \"external\" or \"device\")."
+      }
+     }
+    },
+    "mic": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "key",
+         "external",
+         "device"
+        ],
+        "x-wants": "\"key\", \"external\" or \"device\""
+       },
+       "x-wants": "a list of words (\"key\", \"external\" or \"device\")",
+       "description": "Takes a list of words (\"key\", \"external\" or \"device\")."
+      }
+     }
+    },
+    "brightness": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "kbd": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "lockkeys": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "layout": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "theme": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "track": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "key",
+         "change"
+        ],
+        "x-wants": "\"key\" or \"change\""
+       },
+       "x-wants": "a list of words (\"key\" or \"change\")",
+       "description": "Takes a list of words (\"key\" or \"change\")."
+      }
+     }
+    },
+    "bluetooth": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "connected",
+         "disconnected"
+        ],
+        "x-wants": "\"connected\" or \"disconnected\""
+       },
+       "x-wants": "a list of words (\"connected\" or \"disconnected\")",
+       "description": "Takes a list of words (\"connected\" or \"disconnected\")."
+      }
+     }
+    },
+    "network": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "connected",
+         "lost",
+         "failed",
+         "wired"
+        ],
+        "x-wants": "\"connected\", \"lost\", \"failed\" or \"wired\""
+       },
+       "x-wants": "a list of words (\"connected\", \"lost\", \"failed\" or \"wired\")",
+       "description": "Takes a list of words (\"connected\", \"lost\", \"failed\" or \"wired\")."
+      }
+     }
+    },
+    "vpn": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "up",
+         "down"
+        ],
+        "x-wants": "\"up\" or \"down\""
+       },
+       "x-wants": "a list of words (\"up\" or \"down\")",
+       "description": "Takes a list of words (\"up\" or \"down\")."
+      }
+     }
+    },
+    "autoTunnel": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     },
+     "description": "aerial's two cards: the tunnel it raised by itself on a Public network (auto-tunnel), and a Bluetooth device's battery at 20 % / 10 % (a card only: nothing is posted)"
+    },
+    "btLow": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "capture": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "shot",
+         "rec-start",
+         "rec-stop",
+         "copied"
+        ],
+        "x-wants": "\"shot\", \"rec-start\", \"rec-stop\" or \"copied\""
+       },
+       "x-wants": "a list of words (\"shot\", \"rec-start\", \"rec-stop\" or \"copied\")",
+       "description": "Takes a list of words (\"shot\", \"rec-start\", \"rec-stop\" or \"copied\")."
+      }
+     }
+    },
+    "battery": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      },
+      "events": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "low",
+         "full"
+        ],
+        "x-wants": "\"low\" or \"full\""
+       },
+       "x-wants": "a list of words (\"low\" or \"full\")",
+       "description": "Takes a list of words (\"low\" or \"full\")."
+      }
+     }
+    },
+    "power": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    },
+    "caption": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "osd",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"osd\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     },
+     "description": "the dictation's live words (Ctrl+fn+F10: the focused window's sound; Alt+fn+F10: a question for the local model); \"off\" hides\nthe card (the transcript still goes to the clipboard, the question still to the model)"
+    },
+    "generic": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "route": {
+       "enum": [
+        "osd",
+        "notification",
+        "off"
+       ],
+       "default": "off",
+       "x-wants": "\"osd\", \"notification\" or \"off\"",
+       "description": "Takes \"osd\", \"notification\" or \"off\". Default: \"off\"."
+      },
+      "ms": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 600000,
+       "default": 0,
+       "x-wants": "a whole number 0 .. 600000",
+       "description": "Takes a whole number 0 .. 600000. Default: 0."
+      }
+     }
+    }
+   },
+   "description": "Per kind: where it is shown and for how long.\n  route \"osd\"           the on-screen display\n  route \"notification\"  a desktop notification instead\n  route \"off\"           nowhere (the value still changes; nothing is shown)\n  ms                    its own time; 0 is dismissMs for what a key shows (the first seven) and 3 to 4 s for the others\nKinds: volume mic brightness kbd lockkeys layout theme track bluetooth network\nvpn autoTunnel btLow capture battery power caption generic. Every kind is \"osd\" except generic (\"off\": other\nprograms' toasts stay where they are until you decide). \"network\" says Wi-Fi, VPN, wired\n(cable in / out) and a connection that FAILED; the network and bluetooth applets' own\ntoasts are dropped (notifications.jsonc \"apps\"), so the OSD is the one place they are told.\n\"battery\" is the OSD's at 15 % of the pack (12 with the 80 % limit on) and when the pack reaches its charge limit; the toasts\n(notifications.jsonc \"battery\") speak at 8 % and 3 % and for a runaway drain -- route it\n\"off\" here and put 15 % / limitReached back there to move it. \"power\" is silicon's: the CPU\nprofile, the GPU mode and the charge limit changed outside its popup, and what the MUX\nflow has to tell you; \"off\" or \"notification\" here sends them to a desktop notification.\n\n\"events\" (some kinds) says which of its events are shown; left out, all of them:\n  volume, mic   \"key\" (a key of yours)  \"external\" (something else changed it)  \"device\" (another device became the default)\n  track         \"key\" (a media key)     \"change\" (the next song came by itself)\n  network       \"connected\" \"lost\" \"failed\" \"wired\"        vpn        \"up\" \"down\"\n  bluetooth     \"connected\" \"disconnected\"                 battery    \"low\" \"full\"\n  capture       \"shot\" \"rec-start\" \"rec-stop\" \"copied\"\ne.g. \"track\": { \"events\": [\"key\"] }: no card when a song ends and the next begins."
+  }
+ }
+}

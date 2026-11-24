@@ -1,0 +1,350 @@
+#version 440
+
+// =============================================================================
+// silicon_board.frag -- silicon's board, ray-cast analytically under the true isometric camera.
+//
+// Two instances draw it (SiliconScene.qml):
+//   the board  the whole scene except the CPU patch's rect (`hole`, transparent): it never holds the package, whatever its pose. Held as a layer: it renders
+//              again only when one of its uniforms changes (a theme, a family, a card lift, a plug) -- a profile step changes none of them.
+//   the card's patch (frame.z = 2): the same, over the card's footprint, live while the card lifts out and dissolves (a GPU mode change to
+//              or from Integrated): the board holds the card where it stood and this draws it moving; "the package" below reads "the card"
+//   the patch  the same scene, WHOLE (ground included), over the CPU zone's sub-rect (frame.z = 1): the rect the board leaves as its hole. It is a layer too
+//              at rest and renders again as the package lifts and turns (a profile change), so that is all a profile change renders.
+// Everything that glows (cores, cells, trace light) is NOT here: silicon_glow.frag draws it live
+// on top, so this one can stay a still picture.
+//
+// Per pixel: four rotated-grid samples, each a primary ray through the scene's boxes (each move
+// group in its own frame), a shadow ray toward the light, contact darkening on the board, the
+// nearest trace, the silkscreen mask; then the family's materials (board_materials.glsl) shade it.
+// Edge widths need no derivatives: in true isometric one millimetre along ANY box edge is
+// 0.8165 px-per-mm on screen, and a distance across a face to its edge 0.7071.
+// =============================================================================
+
+// QSB-NO-100ES: no GLSL ES 1.00 variant (tools/dev/bake_shaders.sh reads this line). The board has a vertex shader of its own (silicon_board.vert), so on an
+// OpenGL ES context the pair links at GLSL ES 3.00; a 100 es variant could only ever be reached by dropping that vertex shader, and then it would draw
+// NOTHING: its uniform struct is named by a SPIR-V id (`_12094`) that differs from the reflection's (`_11906`) as soon as the source differs between targets,
+// Qt finds no uniform by that name and every one reads 0 (tools/dev/shader_glslang_gate.sh checks the names). Without the variant that mistake is an error
+// ("No shader found"), not a transparent board.
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec4 view;      // x, y: this item's size px; z: px per mm; w: family 0 Material, 1 Blueprint
+    vec4 frame;     // x, y: SCENE px of the board origin; z: 1 = the CPU patch, 2 = the card's patch; w: 1 = dark mode
+    vec4 motion;    // x: the package's turn rad; y: the HDMI cable in the card's port 0 (out) .. 1 (seated); z: the package's lift mm; w: unused
+    vec4 parts;     // x: card lift mm; y: card dissolve 0..1; z: plug in 0..1; w: DIP lever 0 (80) .. 1 (100)
+    vec4 light;     // xyz: toward the light, board space, unit; w: shadow strength 0..1
+    vec4 quad;      // x, y: this item's offset inside the scene px; z: samples per axis (1 or 2); w: render scale
+    vec4 palA;      // the family's palette and tunables: board_materials.glsl says what each one is
+    vec4 palB;
+    vec4 palC;
+    vec4 palD;
+    vec4 palE;
+    vec4 palF;
+    vec4 palG;
+    vec4 palH;
+    vec4 tuneA;
+    vec4 tuneB;
+    vec4 palI;      // the second palette (board_materials.glsl names each slot): the displays' window, their unlit segments, the lock's amber,
+    vec4 palJ;      //   gold, the memory's hue, the ribbon's film and its conductors, the displays' bezel
+    vec4 palK;
+    vec4 palL;
+    vec4 palM;
+    vec4 palN;
+    vec4 palO;
+    vec4 palP;
+    vec4 lockP;     // the charge limit's lock, the pieces of its ONE fraction (MotionScripts.lockPose): x the bar's slide 0 (out) .. 1 (home);
+                    //   y the shackle's lift mm (0 shut); z how far the 4th cell is dimmed 0..1; w the lock's presence 0..1 (it fades in as it slides)
+    vec4 figT;      // x: the time display's printed label: 0 none, 1 TIME LEFT, 2 TO FULL, 3 TO 80; yzw free
+    vec4 txtA;      // the condition's printed figure: its four cell codes, left to right (seg7.glsl: 0-9, 10 minus, 11 blank)
+    vec4 txtB;      //   the cycles'
+    vec4 r3s1Latch; // the display connector's flip-lock bar (dark plastic in Material, deep ink in Blueprint)
+    vec4 r3s2A;     // the smoked glass over the displays' window: rgb what it lets through (the family's tint, SiliconStyle's slot 8)
+    vec4 hole;      // x0 y0 x1 y1 in SCENE px, a rect the cached board leaves transparent (the CPU patch draws it): x1 <= x0 = none.
+                    //   On the CPU patch itself (frame.z = 1) the same rect is its CORE: past it, in its margin, only opaque pixels are drawn
+};
+layout(binding = 1) uniform sampler2D silk;   // board-space silkscreen field: r Material, g Blueprint
+layout(binding = 2) uniform sampler2D glyphs; // the glyph atlas (tools/silicon/make_glyphs.py): the figures' digits and the time label's three texts, r / g as silk
+
+// the true isometric camera (yaw 45, pitch 35.264): screen right, screen up, toward the camera
+const vec3 CAM_R = vec3(0.70710678, 0.0, -0.70710678);
+const vec3 CAM_U = vec3(-0.40824829, 0.81649658, -0.40824829);
+const vec3 CAM_C = vec3(0.57735027, 0.57735027, 0.57735027);
+const float EDGE_ALONG = 0.81649658;     // screen px per mm along any axis, per px-per-mm
+const float EDGE_ACROSS = 0.70710678;    // screen px per mm across a face to its edge, per px-per-mm
+
+// @@GEOM
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 u = fract(p);
+    u = u * u * (3.0 - 2.0 * u);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+struct Surf {
+    vec3 p;          // world point, board space
+    vec3 pl;         // the point in its part's own frame (turns and lifts with the package, lifts with the card)
+    vec3 n;          // world normal
+    vec3 nl;         // the normal in the part's own frame: which face of the box
+    int mat;
+    int part;
+    int group;
+    vec3 bmin;       // the hit box, part frame
+    vec3 bmax;
+    float edgePx;    // screen px from this face's nearest edge
+    float lit;       // 1 in light, 0 in a part's shadow (the material applies light.w)
+    float ao;        // contact darkening on the board's top face (1 = none)
+    float ao2;       //   ... and the same 2.2 mm toward the light (Material's contact shadow reads both)
+    float traceD;    // nearest trace: signed distance in mm (< 0 inside)
+    int traceKind;   // -1 none (nothing within a few mm), 0 zone stub, 1 power, 2 signal
+    float traceHalf; // that trace's half width at this point, mm (a trace may narrow along itself)
+    float traceDq;   // the nearest trace's signed distance at the point shifted by the groove's depth (the groove's floor) ...
+    float traceDl;   //   ... and 0.45 mm toward the light (the wall's slope): Material's groove reads all three
+    float pxPerMm;   // view.z
+    vec2 scenePx;    // the sample's scene pixel (screen-space patterns: the same in both instances)
+    float cutD;      // a part cut to an outline (cutouts.glsl): mm inside it (< 0), for the bevel / the ink along its edge; -1 for a part that is not
+};
+vec2 gScenePx;
+float gCutD = -1.0;      // cutSd of the hit the loop is shading (computed ONCE there: the function is a big one and a shader compiles every copy)
+
+// @@INCLUDE seg7.glsl
+// @@INCLUDE cutouts.glsl
+// @@INCLUDE board_materials.glsl
+
+// The ground the board stands on, at y = BOARD_Y.x: transparent but for the board's own shadow.
+vec4 ground(vec3 ro) {
+    vec3 rd = -CAM_C;
+    float t = (ro.y - BOARD_Y.x) / CAM_C.y;
+    vec3 g = ro + rd * t;
+    // the board's shadow on the ground: soft, offset away from the light by the board's height
+    vec3 l = normalize(light.xyz);
+    float hgt = BOARD_Y.y - BOARD_Y.x;
+    vec2 off = -l.xz / max(l.y, 0.2) * hgt;
+    vec2 q = g.xz - off * 0.5;
+    vec2 c = (BOARD_RECT.xy + BOARD_RECT.zw) * 0.5;
+    vec2 h = (BOARD_RECT.zw - BOARD_RECT.xy) * 0.5;
+    vec2 dd = abs(q - c) - h;
+    float sd = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0);
+    return shadeGround(g.xz, sd);
+}
+
+// Shade whatever scenePrimary found last (hT ... hMax are its result).
+vec4 shadeHit(vec3 ro, vec3 rd) {
+    float s = view.z;
+    vec3 o; vec3 d;
+    groupRay(hGroup, ro, rd, o, d);
+    Surf sf;
+    sf.p = ro + rd * hT;
+    sf.pl = o + d * hT;
+    sf.nl = hN;
+    sf.n = groupNormal(hGroup, hN);
+    sf.mat = hMat;
+    sf.part = hPart;
+    sf.group = hGroup;
+    sf.bmin = hMin;
+    sf.bmax = hMax;
+    // distance across this face to its nearest edge (the face's own axis does not count)
+    vec3 a = abs(hN);
+    vec3 m = min(sf.pl - hMin, hMax - sf.pl) + a * 1e6;
+    sf.edgePx = min(min(m.x, m.y), m.z) * EDGE_ACROSS * s;
+    vec3 l = normalize(light.xyz);
+    sf.lit = 0.0;           // only Blueprint's hatching of the board's top reads it (board_materials.glsl): it is asked there, below -- a cast for every other surface of both families is wasted
+    sf.ao = 1.0;
+    sf.ao2 = 1.0;
+    sf.traceD = 1e9;
+    sf.traceKind = -1;
+    sf.traceHalf = 0.0;
+    sf.pxPerMm = s;
+    sf.scenePx = gScenePx;
+    sf.cutD = gCutD;
+    sf.traceDq = 1e9;
+    sf.traceDl = 1e9;
+    // the surface under the point: 0 the board's top, 1 the card PCB's, 2 a RAM stick's, 3 the battery tray's (the generator's contact-darkening levels: the parts that
+    // stand ON a surface darken it); -1 anything else, which has no contact darkening
+    int lvl = -1;
+    if (hN.y > 0.5)
+        lvl = hPart == PART_BOARD ? 0 : (hPart == PART_CARDPCB ? 1 : ((hPart == PART_RAMPCBA || hPart == PART_RAMPCBB) ? 2 : (hPart == PART_PACKTRAY ? 3 : -1)));
+    if (lvl >= 0) {
+        if (view.w > 0.5 && lvl == 0)
+            sf.lit = dot(sf.n, l) > 0.0 ? 1.0 - sceneShadow(sf.p + sf.n * 0.03, l) : 0.0;
+        // the contact darkening here and 2.2 mm toward the light (one loop, see sceneAo). Blueprint reads none on the board (it hatches the cast shadow instead): the board's
+        // own level is asked of Material alone, the other surfaces' of both
+        int two = quad.z > 0.5 ? 2 : 1;
+        vec2 a = sceneAo(sf.p.xz, normalize(l.xz) * 2.2, lvl, lvl > 0 || view.w < 0.5 ? two : 0);
+        sf.ao = a.x;
+        sf.ao2 = two > 1 ? a.y : a.x;
+    }
+    if (lvl == 0) {
+        // The nearest trace's field at three points -- here, the groove's floor (shifted by its depth) and toward the light -- through ONE call site
+        // of the field in a loop whose bound comes from a uniform (so it is not unrolled): sceneTraces is the biggest function of the shader, and
+        // three copies of it are two thirds of its compile time. The two shifted points matter only within 1.4 mm of a groove.
+        vec2 Ld = normalize(l.xz);
+        int kn = quad.z > 0.5 ? 3 : 1;
+        for (int k = 0; k < kn; k++) {
+            vec2 pk = k == 0 ? sf.p.xz : (k == 1 ? sf.p.xz - vec2(GROOVE_DEPTH) : sf.p.xz + Ld * 0.45);
+            sceneTraces(pk);
+            if (k == 0) {
+                sf.traceD = tD;
+                sf.traceKind = tKind;
+                sf.traceHalf = tHalf;
+                sf.traceDq = tD;
+                sf.traceDl = tD;
+            } else if (k == 1) {
+                sf.traceDq = tD;
+            } else {
+                sf.traceDl = tD;
+            }
+            if (sf.traceD >= 1.4)
+                break;
+        }
+    }
+    return shadeSurface(sf);
+}
+
+// what the last shadeSample saw (main() decides the patch's pixel from them): the share of the
+// sample that is ground, that ground's colour, and whether its first hit was the moving group (the package; in the card's patch, the card)
+float gGround;
+vec4 gGroundCol;
+float gPkgSeen;
+
+vec4 shadeSample(vec2 px) {
+    float s = view.z;
+    gGround = 0.0;
+    gGroundCol = vec4(0.0);
+    gPkgSeen = 0.0;
+    gScenePx = px;
+    float sx = (px.x - frame.x) / s;
+    float sy = (frame.y - px.y) / s;
+    vec3 ro = sx * CAM_R + sy * CAM_U + CAM_C * 600.0;
+    vec3 rd = -CAM_C;
+
+    if (!slabHit(ro, 1.0 / rd, SCENE_MIN - vec3(1.0), SCENE_MAX + vec3(1.0))) {
+        gGround = 1.0;
+        gGroundCol = ground(ro);
+        return gGroundCol;
+    }
+
+    gFlags = lockP.w < 0.003 ? FLAG_LOCK : 0.0;
+    // Up to four layers: a dissolved card pixel (looked through), a part cut to its outline (cast again without
+    // it), a fading plug / lock (laid over what is behind it), the surface behind. ONE cast site and
+    // ONE shade site, in a loop whose bound comes from a uniform so the compiler cannot unroll it: Mesa inlines
+    // every call, and the unrolled form (4 samples x 3 casts x 2 shades, the materials inside each) took 176 s to
+    // compile cold.
+    vec4 col = vec4(0.0);
+    float carry = 1.0;
+    int layers = quad.z > 0.5 ? 4 : 1;
+    for (int layer = 0; layer < layers; layer++) {
+        scenePrimary(ro, rd);
+        if (hPart < 0) {
+            gGround = carry;
+            gGroundCol = carry * ground(ro);
+            col += gGroundCol;
+            break;
+        }
+        if (layer == 0)
+            gPkgSeen = float(hGroup == int(frame.z));
+        vec3 o; vec3 d;
+        groupRay(hGroup, ro, rd, o, d);
+        vec3 pl = o + d * hT;
+        if (hGroup == GRP_CARD && parts.y > 0.0) {
+            float n = vnoise(pl.xz * 0.35) * 0.65 + vnoise(pl.xz * 1.3) * 0.35;
+            if (n < parts.y * 1.05) {
+                raise(FLAG_CARD);            // dissolved here: cast again without the card
+                continue;
+            }
+        }
+        // a part found outside its outline (the bracket's rounded corners, the ribbon's folds) is not there: cast again without it. The ribbon is a FILM with no side:
+        // the box's own side face is the only edge the strip has, on the one stretch of its outline that lies in the box's far plane (the last leg's
+        // right edge) -- a thin grey line that would begin at the second bend and go on after the film has faded away. The strip's outline is lit on its top face all round.
+        gCutD = cutSd(hPart, pl);
+        if (gCutD > 0.01 || (hPart == PART_RIBBON && hN.y < 0.5)) {
+            cutPart(hPart);
+            continue;
+        }
+        // a plug fades as it is pulled out, and its cable fades out along its length: the charger's within ~34 mm of its plug and the display ribbon along its own
+        // length by one curve (cutouts.glsl cableFade), the HDMI cable over what room the popup's edge leaves it (HDMI_FADE); the lock fades in as it slides
+        float a = 1.0;
+        if (hGroup == GRP_PLUG || hGroup == GRP_HDMI) {
+            bool dc = hGroup == GRP_PLUG;
+            a = smoothstep(0.0, 0.45, dc ? parts.z : motion.y) * (dc ? cableFade(pl.x - CABLE_FADE_X) : 1.0 - smoothstep(HDMI_FADE.x, HDMI_FADE.y, pl.x));
+        } else if (hPart == PART_RIBBON)
+            a = cableFade(gRibS - RIB_FADE);
+        if (hGroup == GRP_LOCK || hGroup == GRP_SHACKLE)
+            a = lockP.w;
+        col += carry * a * shadeHit(ro, rd);
+        carry *= 1.0 - a;
+        if (carry < 0.002)
+            break;
+        if (hGroup == GRP_PLUG || hGroup == GRP_HDMI)
+            raise(FLAG_PLUG);                // what is behind the fading plug
+        else if (hPart == PART_RIBBON)
+            cutPart(hPart);                  //   ... or behind the fading ribbon
+        else
+            raise(FLAG_LOCK);                //   ... or behind the fading lock
+    }
+    return col;
+}
+
+void main() {
+    // the move groups' frames, from the uniforms (the generated groupRay reads these)
+    gPkgTurn = motion.x;
+    gPkgLift = motion.z;
+    gCardLift = parts.x;
+    gPlugOut = (1.0 - parts.z) * PLUG_TRAVEL;
+    gHdmiOut = (1.0 - motion.y) * HDMI_TRAVEL;
+    gLeverX = parts.w * LEVER_TRAVEL;
+    gLockX = (1.0 - lockP.x) * LOCK_TRAVEL;
+    gShackleY = lockP.y;
+    gLockA = lockP.w;
+    gCardA = 1.0 - smoothstep(0.1, 0.8, parts.y);       // the share of the card the dissolve has left (the noise threshold's own curve, about): the shadow follows it
+    vec2 px = quad.xy + qt_TexCoord0 * view.xy;
+    bool inHole = px.x >= hole.x && px.x < hole.z && px.y >= hole.y && px.y < hole.w;
+    if (inHole && (frame.z < 0.5 || frame.z > 1.5)) {
+        fragColor = vec4(0.0);          // the CPU patch's rect: drawn there, whole, by the patch
+        return;
+    }
+    // rotated-grid supersampling: four samples, none on a shared row or column, spread over ONE
+    // device pixel (an item px is quad.w device px under a zoom or in a scaled layer). A real loop
+    // (its count from a uniform): unrolled, the whole sample is compiled four times over.
+    // What the loop carries is held in registers through the whole shading of every sample, so it carries as little as it can: the sample's offset is made from the
+    // counter (the grid's next quarter turn: (a, b) -> (b, -a)), and the two counts the patch needs -- the samples that showed ground and those whose first hit was
+    // the package -- are one number (the first below 8, the second in eights).
+    vec4 acc = vec4(0.0);
+    vec4 accGround = vec4(0.0);
+    float nSeen = 0.0;
+    int n = quad.z > 1.5 ? 4 : 1;
+    float k = 1.0 / max(quad.w, 1.0);
+    for (int i = 0; i < n; i++) {
+        vec2 o = n == 1 ? vec2(0.0) : (i == 0 ? vec2(0.125, 0.375) : (i == 1 ? vec2(0.375, -0.125) : (i == 2 ? vec2(-0.125, -0.375) : vec2(-0.375, 0.125))));
+        acc += shadeSample(px + o * k);
+        accGround += gGroundCol;
+        nSeen += step(0.001, gGround) + 8.0 * gPkgSeen;
+    }
+    float nGround = mod(nSeen, 8.0);
+    float nPkg = floor(nSeen * 0.125);
+    if (frame.z > 1.5 && nGround > 0.0) {
+        // the card's patch over a pixel that shows ground: the board below has the same ground (and, at
+        // the board's edge, the same edge), so it is the board's -- except where the card is held out
+        // over the edge: there only the card's share is drawn, over the board's ground, which is the
+        // same as the card over its own
+        acc = nPkg > 0.0 ? acc - accGround : vec4(0.0);
+    }
+    vec4 pic = acc / float(n);
+    fragColor = pic * qt_Opacity;
+    // The CPU patch is drawn a few device pixels BEYOND the hole it fills (SiliconScene.patchMargin; `hole` is the patch's own core, here, not a rect to leave
+    // blank), so that a quad a pixel short, a texture read at a fraction of a pixel or a hole's edge blended into its neighbour cannot leave a row or a column
+    // of the surface open between the two layers (a layer drawn inside another, the engine's clip layer all through an open, loses the last row of a quad). Out
+    // there it draws only what is OPAQUE: the board has the same ground in the same place and draws the rest (the soft edge of the plate's shadow), which
+    // drawn by both would be drawn twice.
+    if (frame.z > 0.5 && frame.z < 1.5 && hole.z > hole.x && !inHole && pic.a < 0.998)
+        fragColor = vec4(0.0);
+}

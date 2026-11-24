@@ -1,0 +1,13 @@
+#!/bin/sh
+# /usr/local/bin/qs-boot-lock -- the boot lock: Hyprland's --locked-cmd in the session file hyprland-qslock.desktop (SDDM's
+# autologin starts that session). Installed by the user as a ROOT STEP (`qs-shell setup` prints the commands and their undo);
+# never run by qs-shell.
+#
+# Hyprland --locked-cmd holds the session locked from its first frame until a locker takes the lock, so this command must
+# ALWAYS start one: the Quickshell lock from its snapshot (`qs-shell deploy` keeps $XDG_STATE_HOME/quickshell/lock/current), and
+# hyprlock when that snapshot is not there (a fresh machine, a state dir wiped) -- a missing command here would be a black,
+# locked screen with a TTY as the only way out. One word, no argument: SDDM's wayland-session ends in an unquoted `exec $@`, so
+# the session file cannot pass `--boot` to the lock's own launcher.
+s="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/lock/current/tools/lockscreen/qs-lock-session"
+[ -x "$s" ] && exec "$s" --boot
+exec /usr/bin/hyprlock

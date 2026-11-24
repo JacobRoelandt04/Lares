@@ -1,0 +1,11 @@
+wlp47s0:wifi:connected:HomeNet-AP 1
+ipv6leakintrf0:dummy:connected:pvpn-killswitch-ipv6
+proton0:wireguard:connected:ProtonVPN NL#799
+lo:loopback:connected (externally):lo
+br-12d09e81b6d0:bridge:connected (externally):br-12d09e81b6d0
+br-44b0d84f209b:bridge:connected (externally):br-44b0d84f209b
+br-4cd59f5988bb:bridge:connected (externally):br-4cd59f5988bb
+br-96a749755545:bridge:connected (externally):br-96a749755545
+docker0:bridge:connected (externally):docker0
+p2p-dev-wlp47s0:wifi-p2p:disconnected:
+enp46s0:ethernet:unavailable:

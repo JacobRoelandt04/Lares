@@ -1,0 +1,35 @@
+// screentime.jsonc -- the screentime daemon (helpers/screentimed). The template of ~/.config/quickshell/config/screentime.jsonc.
+// Every key is optional: the value written here IS the default, and a missing key (or one out of range) takes it.
+// Keep only what you change; comments are allowed (`//` and `/* */`). SIGHUP or a restart of the daemon re-reads it (dayStartHour: a
+// restart alone).
+{
+    // A logical day starts at this local hour: a 01:00 session counts to the evening it started in.
+    // Default 4; a whole number, 0 .. 23.
+    "dayStartHour": 4,
+    // The first day of the week: 1 = Monday ... 7 = Sunday. Default 1.
+    "weekStart": 1,
+    // Away at least this long ends the session (a lock or a suspend always does).
+    // Minutes. Default 5; a whole number, 0 .. 1440.
+    "sessionBreakMin": 5,
+    // An idle feed never removes more than this many seconds.
+    // Seconds. Default 900; a whole number, 0 .. 86400.
+    "maxBackdateS": 900,
+    // While active, the day's totals are written to disk every this many seconds (when they changed).
+    // Default 300; a whole number, 1 .. 86400.
+    "flushS": 300,
+    // While active: how often a suspend nobody announced is looked for (and the flush clock's tick).
+    // Seconds. Default 60; a whole number, 1 .. 86400.
+    "checkS": 60,
+    // Monday's toast with last week's total. Default true.
+    "digest": true,
+    // Classes that are not recorded as an app (their time counts as the desktop's). A list of window classes. Default [].
+    "ignore": [],
+    // class -> class, applied before recording: two classes that are one app. { "<class>": "<class>", ... }. Default {}.
+    "aliases": {},
+    // class -> display name, for the digest only (the shell names apps from their desktop entries). { "<class>": "<name>", ... }.
+    // Default {}.
+    "names": {},
+    // Classes whose foreground program is recorded (its process name only, read from /proc): the faint names beside a terminal's
+    // row. A list of window classes. Default the six below.
+    "terminals": ["kitty", "foot", "Alacritty", "com.mitchellh.ghostty", "org.wezfurlong.wezterm", "org.kde.konsole"]
+}

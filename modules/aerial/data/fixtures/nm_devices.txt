@@ -1,0 +1,9 @@
+wlp47s0:wifi:connected:HomeNet-AP 1:/org/freedesktop/NetworkManager/Devices/3
+lo:loopback:connected (externally):lo:/org/freedesktop/NetworkManager/Devices/1
+br-12d09e81b6d0:bridge:connected (externally):br-12d09e81b6d0:/org/freedesktop/NetworkManager/Devices/9
+br-44b0d84f209b:bridge:connected (externally):br-44b0d84f209b:/org/freedesktop/NetworkManager/Devices/5
+br-4cd59f5988bb:bridge:connected (externally):br-4cd59f5988bb:/org/freedesktop/NetworkManager/Devices/6
+br-96a749755545:bridge:connected (externally):br-96a749755545:/org/freedesktop/NetworkManager/Devices/8
+docker0:bridge:connected (externally):docker0:/org/freedesktop/NetworkManager/Devices/7
+p2p-dev-wlp47s0:wifi-p2p:disconnect2001:db8::1/org/freedesktop/NetworkManager/Devices/4
+enp46s0:ethernet:unavailabl2001:db8::2/org/freedesktop/NetworkManager/Devices/2

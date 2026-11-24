@@ -1,0 +1,151 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "panorama.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "keepSeconds": {
+   "type": "integer",
+   "minimum": 5,
+   "maximum": 60,
+   "default": 15,
+   "x-wants": "a whole number 5 .. 60",
+   "description": "the \"Keep these display settings?\" toast's countdown, seconds (5..60)\n\nTakes a whole number 5 .. 60. Default: 15."
+  },
+  "identifyDelayMs": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 2000,
+   "default": 250,
+   "x-wants": "a whole number 0 .. 2000",
+   "description": "a pointer resting this long on a tile shows that screen's name on the screen itself, ms (0..2000)\n\nTakes a whole number 0 .. 2000. Default: 250."
+  },
+  "toasts": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "newDisplay": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "a display never seen before says so, with Mirror / Only external / Arrange...\n\nTakes true or false. Default: true."
+    },
+    "unplug": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "\"<display> disconnected\"\n\nTakes true or false. Default: true."
+    }
+   }
+  },
+  "openTab": {
+   "enum": [
+    "situation",
+    "displays",
+    "presets",
+    "last"
+   ],
+   "default": "situation",
+   "x-wants": "\"situation\", \"displays\", \"presets\" or \"last\"",
+   "description": "the tab the popup opens on: \"situation\" (the displays when there is more than one or something to settle, else the presets) |\n\"displays\" | \"presets\" | \"last\"\n\nTakes \"situation\", \"displays\", \"presets\" or \"last\". Default: \"situation\"."
+  },
+  "cast": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "casting to a TV (Miracast) from the Displays view: a found TV appears as a chip beside the canvas. OFF until you try it\n(the Wi-Fi card may drop for ~8 s while pairing; docs/agent_added_files_and_folders/panorama/CAST.md)\n\nTakes true or false. Default: false."
+  },
+  "castQuality": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "res": {
+     "type": "string",
+     "pattern": "^\\d{3,5}x\\d{3,5}$",
+     "default": "1920x1080",
+     "x-wants": "a text like 1920x1080",
+     "description": "Takes a text like 1920x1080. Default: \"1920x1080\"."
+    },
+    "fps": {
+     "type": "integer",
+     "minimum": 10,
+     "maximum": 60,
+     "default": 30,
+     "x-wants": "a whole number 10 .. 60",
+     "description": "Takes a whole number 10 .. 60. Default: 30."
+    },
+    "bitrate": {
+     "type": "string",
+     "pattern": "^\\d+[MK]$",
+     "default": "8M",
+     "x-wants": "a text like 8M",
+     "description": "Takes a text like 8M. Default: \"8M\"."
+    },
+    "audio": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "a TV you have not set up yet: the picture's size, its frames a second (10..60), its bit rate, and whether the sound goes along"
+  },
+  "portLabels": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "laptop": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "hdmi": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "usbc": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "displaylink": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "dvi": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "vga": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "virtual": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "cast": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    },
+    "other": {
+     "type": "string",
+     "x-wants": "a text",
+     "description": "Takes a text."
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "the port words in a display's name (\"HDMI · Sony TV\"): laptop, hdmi, usbc, displaylink, dvi, vga, virtual, cast, other\n\nDefault: {}."
+  }
+ }
+}

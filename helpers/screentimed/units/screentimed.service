@@ -1,0 +1,23 @@
+[Unit]
+Description=screentimed: per-app focused-window time for the quickshell screentime module
+Documentation=file://%h/.config/quickshell/docs/contracts/screentime.md
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/screentimed run
+Restart=on-failure
+RestartSec=2
+# The socket lives in $XDG_RUNTIME_DIR/screentime; 0700 is the contract's mode (systemd's default is 0755).
+RuntimeDirectory=screentime
+RuntimeDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# install.sh creates the directory (a missing path is skipped by the leading "-", and nothing could create
+# it under a read-only home). Only the Lares name: install.sh refuses while the data is still under the old one, so this unit
+# never runs before `lares migrate-name`, and an old path here would be a line naming the old name (`lares cleanup-old-name` refuses).
+ReadWritePaths=-%h/.local/share/lares/screentime
+MemoryMax=32M
+
+[Install]
+WantedBy=default.target

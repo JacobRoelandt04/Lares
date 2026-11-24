@@ -1,0 +1,7 @@
+#%PAM-1.0
+# The Lares lock's PASSWORD service, installed as /etc/pam.d/lares-lock (root step R2 of `lares setup`; never written by lares itself).
+# The password alone: no lockout, pam_unix's own ~2 s delay after a failure is the cooldown. The password typed at the lock also opens
+# the login keyring (an autologin has none to give it); where gnome-keyring is not installed that line does nothing.
+auth       required   pam_unix.so
+auth       optional   pam_gnome_keyring.so
+account    include    system-auth

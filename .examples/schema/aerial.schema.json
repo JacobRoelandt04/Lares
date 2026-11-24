@@ -1,0 +1,153 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "aerial.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "autoTunnel": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Raise the ProtonVPN tunnel by itself when you join a Public (not marked Trusted) network. It waits for a login page\n(the NET pad) and rises once the network passes. Every new network is Public until you mark it Trusted.\n\nTakes true or false. Default: true."
+  },
+  "autoTunnelTo": {
+   "type": "string",
+   "pattern": "^(fastest|[A-Z]{2})$",
+   "default": "fastest",
+   "x-wants": "a text like fastest or BE",
+   "description": "Where that tunnel goes: \"fastest\", or a country by its two-letter code (\"BE\").\n\nTakes a text like fastest or BE. Default: \"fastest\"."
+  },
+  "autoTunnelOn": {
+   "enum": [
+    "any",
+    "wifi"
+   ],
+   "default": "any",
+   "x-wants": "\"any\" or \"wifi\"",
+   "description": "Which networks count for it: \"any\" | \"wifi\" (a cable never raises it).\n\nTakes \"any\" or \"wifi\". Default: \"any\"."
+  },
+  "newNetworks": {
+   "enum": [
+    "public",
+    "trusted"
+   ],
+   "default": "public",
+   "x-wants": "\"public\" or \"trusted\"",
+   "description": "What a network is the first time you join it: \"public\" | \"trusted\". (Mark one the other way in the popup.)\n\nTakes \"public\" or \"trusted\". Default: \"public\"."
+  },
+  "searchSeconds": {
+   "type": "integer",
+   "minimum": 5,
+   "maximum": 600,
+   "default": 30,
+   "x-wants": "a whole number 5 .. 600",
+   "description": "How long a Bluetooth search runs (the BT SCAN button), seconds, 5..600.\n\nTakes a whole number 5 .. 600. Default: 30."
+  },
+  "visibleSeconds": {
+   "type": "integer",
+   "minimum": 10,
+   "maximum": 3600,
+   "default": 180,
+   "x-wants": "a whole number 10 .. 3600",
+   "description": "How long the laptop is visible to other Bluetooth devices (the beacon LED), seconds, 10..3600.\n\nTakes a whole number 10 .. 3600. Default: 180."
+  },
+  "speedTest": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "capMB": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 5000,
+     "default": 200,
+     "x-wants": "a number 1 .. 5000",
+     "description": "Takes a number 1 .. 5000. Default: 200."
+    }
+   },
+   "description": "The speed test (Cloudflare): the most it may transfer, in MB, 1..5000."
+  },
+  "portalCheckUrl": {
+   "type": "string",
+   "pattern": "^https?://",
+   "default": "http://ping.archlinux.org/nm-check.txt",
+   "x-wants": "a text like http://...",
+   "description": "The page the NET pad fetches to tell a login page from the internet (the body must be \"NetworkManager is online\").\n\nTakes a text like http://.... Default: \"http://ping.archlinux.org/nm-check.txt\"."
+  },
+  "usage": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "Count the data used per network (today / month), in ~/.local/state/lares/aerial/usage.json. Off keeps the file as it is."
+  },
+  "bar": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "traffic": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "trafficFromMbps": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 999,
+     "default": 10,
+     "x-wants": "a number 1 .. 999",
+     "description": "Takes a number 1 .. 999. Default: 10."
+    }
+   },
+   "description": "The figures on the bar's network half: whether they come at all, and from how many megabits a second (they stay until half of it).\nWith \"traffic\": false the traffic is not read at all while the popup is shut. 1 .. 999."
+  },
+  "btLow": {
+   "type": "array",
+   "items": {
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 50,
+    "x-wants": "a whole number 1 .. 50"
+   },
+   "maxItems": 4,
+   "default": [
+    20,
+    10
+   ],
+   "x-wants": "a list of whole numbers",
+   "description": "A Bluetooth device's battery is told at these percentages (at most four, 1 .. 50 each; [] = never), once each on the way down.\n\nTakes a list of whole numbers. Default: [20,10]."
+  },
+  "sounds": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "The popup's sounds (the globe, the drawers). How loud they are is the mockup's.\n\nTakes true or false. Default: true."
+  },
+  "look": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "secondarySide": {
+     "enum": [
+      "start",
+      "end",
+      "far"
+     ],
+     "default": "start",
+     "x-wants": "\"start\", \"end\" or \"far\"",
+     "description": "Takes \"start\", \"end\" or \"far\". Default: \"start\"."
+    }
+   },
+   "description": "Which side of the popup the detail panels open on: \"start\" (the LEFT of a top bar's popup, joined along the panel's long edge, as the\nstocks' detail is), \"end\" (the right) or \"far\" (below it). A panel never goes off screen."
+  }
+ }
+}

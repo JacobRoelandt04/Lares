@@ -1,0 +1,74 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Globular_cluster",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Globular cluster",
+  "url": "https://en.wikipedia.org/wiki/Globular_cluster",
+  "revid": 1370000000,
+  "license": "CC BY-SA 4.0",
+  "quality": null
+ },
+ "title": "Globular cluster",
+ "category": {
+  "family": "physical-sciences",
+  "topic": "space",
+  "via": "follow",
+  "why": {
+   "p": 0,
+   "oneIn": 0,
+   "openRate": null
+  }
+ },
+ "intro": {
+  "text": "A globular cluster is a spheroidal conglomeration of stars that is bound together by gravity, with a higher concentration of stars towards their centers. They can contain anywhere from tens of thousands to many millions of member stars, all orbiting in a stable, compact formation. Globular clusters are similar in form to dwarf spheroidal galaxies, and the distinction between the two is not always clear. Their name is derived from Latin globulus, a small sphere. Globular clusters are occasionally known simply as globulars, and they are among the oldest objects in the galaxies that host them.",
+  "words": 96,
+  "provenance": "cleaned",
+  "stripped": [
+   "pronunciation",
+   "citations"
+  ],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 85,
+    "e": 92,
+    "target": "Gravity",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Gravity"
+   },
+   {
+    "s": 323,
+    "e": 348,
+    "target": "Dwarf spheroidal galaxy",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Dwarf_spheroidal_galaxy"
+   }
+  ]
+ },
+ "images": [],
+ "installed": null,
+ "popularity": {
+  "views60d": 20000,
+  "band": 0.5
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

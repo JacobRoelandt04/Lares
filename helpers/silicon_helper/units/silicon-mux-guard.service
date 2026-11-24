@@ -1,0 +1,17 @@
+# silicon: after a reboot that applied a GPU MUX change, check that the panel's wiring really
+# changed. For dGPU-only wiring, wait for the user to confirm; if they do not within the hard
+# window (boot + 5 min, or 120 s after the prompt was shown), write hybrid wiring back and
+# reboot ONCE (the record says "reverted" before the reboot is asked for). Does nothing, and
+# exits at once, when no change is waiting. Installed by install.sh.
+[Unit]
+Description=silicon: check a GPU MUX change after the reboot and revert an unconfirmed dGPU-only wiring
+After=local-fs.target systemd-udev-trigger.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/silicon-helper mux-guard
+Restart=no
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

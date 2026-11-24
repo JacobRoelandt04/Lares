@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# A stand-in for systemd-inhibit in tools/dev/sleep_lockenv_film.sh. It holds NO inhibitor (nothing here talks to logind; the probe's bus is a
+# private one besides): it logs "<ms> take <args>" to $SLEEP_FADE_DIR/inhibit.log, refuses (exit 1) while $SLEEP_FADE_DIR/inhibit_fail
+# exists, runs the command after its options as a child, and logs "<ms> release" when it is killed -- the moment a real one would let
+# logind go on with the sleep.
+log="${SLEEP_FADE_DIR:?}/inhibit.log"
+all="$*"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --*) shift ;;
+        *) break ;;
+    esac
+done
+if [ -e "$SLEEP_FADE_DIR/inhibit_fail" ]; then
+    echo "$(date +%s%3N) refused" >> "$log"
+    echo "systemd-inhibit (stub): refused" >&2
+    exit 1
+fi
+echo "$(date +%s%3N) take $all" >> "$log"
+"$@" &
+child=$!
+trap 'echo "$(date +%s%3N) release" >> "$log"; kill "$child" 2> /dev/null; exit 0' TERM INT HUP
+wait "$child"
+echo "$(date +%s%3N) child-exit" >> "$log"

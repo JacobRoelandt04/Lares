@@ -1,0 +1,198 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "session.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "enabled": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "The switch. Off: no picture is kept, the power reel's items run as they always did, nothing is decided at login.\n`lares session save | show | restore` work by hand either way.\n\nTakes true or false. Default: false."
+  },
+  "afterLogout": {
+   "enum": [
+    "ask",
+    "ask-critical",
+    "auto",
+    "off"
+   ],
+   "default": "ask",
+   "x-wants": "\"ask\", \"ask-critical\", \"auto\" or \"off\"",
+   "description": "After a LOG-OUT (the reel's item), at the next login of the same boot:\n  \"ask\"           a toast with Restore / Discard, normal urgency, that stays until you answer it\n  \"ask-critical\"  the same toast, critical\n  \"auto\"          restored by itself (under the boot lock: the windows stand ready at the unlock)\n  \"off\"           nothing\n\nTakes \"ask\", \"ask-critical\", \"auto\" or \"off\". Default: \"ask\"."
+  },
+  "afterReboot": {
+   "enum": [
+    "ask",
+    "ask-critical",
+    "auto",
+    "off"
+   ],
+   "default": "ask",
+   "x-wants": "\"ask\", \"ask-critical\", \"auto\" or \"off\"",
+   "description": "After a REBOOT or POWER-OFF (the reel's items, or a shutdown from a terminal), and after a log-out followed by a\nnew boot: the same four words.\n\nTakes \"ask\", \"ask-critical\", \"auto\" or \"off\". Default: \"ask\"."
+  },
+  "afterCrash": {
+   "enum": [
+    "ask",
+    "off"
+   ],
+   "default": "ask",
+   "x-wants": "\"ask\" or \"off\"",
+   "description": "After a session that did NOT end (a Hyprland crash, a kill, a power loss): \"ask\" (a critical, sticky toast; a restore\nthen runs no command by itself) or \"off\". Never restored by itself: what was open may be why it crashed.\n\nTakes \"ask\" or \"off\". Default: \"ask\"."
+  },
+  "maxAgeHours": {
+   "type": "number",
+   "minimum": 0,
+   "default": 168,
+   "x-wants": "a number, 0 and up",
+   "description": "A saved session older than this is not offered.\n\nTakes a number, 0 and up. Default: 168."
+  },
+  "run": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "A terminal's running program is RUN again by itself only when it is on the run list (tools/session/rules.json:\nlazygit, nvim, btop, yazi, less, man, tail -f, journalctl -f, git log, claude --resume ... ) -- everything else is only\nTYPED at the prompt and waits for Enter. Add programs you trust (any arguments), or force one to be typed:\ne.g. [\"k9s\", \"lazydocker\", \"cava\"]\n\nTakes a list of texts. Default: []."
+  },
+  "type": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "e.g. [\"nvim\"]\n\nTakes a list of texts. Default: []."
+  },
+  "apps": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "launch": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]"
+     },
+     "selfRestore": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "slow": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "skip": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "why": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "folders": {
+      "x-wants": "anything"
+     }
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "Per window class (as `hyprctl clients` names it):\n  \"launch\"       the command that starts the app, instead of the one found (its .desktop entry, else its command line)\n  \"selfRestore\"  true: the app reopens its own windows (a browser, an editor) -- it is started ONCE and its windows\n                 are put back by their titles\n  \"slow\"         true: its window may come minutes later (the Windows VM's viewer, built in: its launcher connects at\n                 once to a VM that runs and boots one that does not). Never held back: it opens on its own\n                 workspace whenever it comes\n  \"skip\"         true: never started by a restore\n  (\"launch\" is a list: [\"code\", \"--new-window\"]. \"why\" and \"folders\" are notes the tool itself reads.)\n\nDefault: {}."
+  },
+  "skipClasses": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "x-wants": "a text"
+   },
+   "default": [],
+   "x-wants": "a list of texts",
+   "description": "Classes never saved (added to the built-in ones: the shell's own windows, portal dialogs).\n\nTakes a list of texts. Default: []."
+  },
+  "terminals": {
+   "deprecated": true
+  },
+  "claude": {
+   "enum": [
+    "resume",
+    "fresh",
+    "type"
+   ],
+   "default": "resume",
+   "x-wants": "\"resume\", \"fresh\" or \"type\"",
+   "description": "A Claude Code terminal in a restored session: \"resume\" (its conversation goes on) | \"fresh\" (a new one in the same folder) | \"type\" (the command is\ntyped and waits for Enter).\n\nTakes \"resume\", \"fresh\" or \"type\". Default: \"resume\"."
+  },
+  "presets": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "claude": {
+     "enum": [
+      "fresh",
+      "resume"
+     ],
+     "default": "fresh",
+     "x-wants": "\"fresh\" or \"resume\"",
+     "description": "Takes \"fresh\" or \"resume\". Default: \"fresh\"."
+    },
+    "confirmReplace": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "Desktop presets: the same for the terminals of a preset (\"fresh\" | \"resume\"), and whether a load that closes other windows asks first."
+  },
+  "keep": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 100,
+   "default": 5,
+   "x-wants": "a whole number 1 .. 100",
+   "description": "How many saved sessions are kept. 1 to 100.\n\nTakes a whole number 1 .. 100. Default: 5."
+  },
+  "resultToast": {
+   "enum": [
+    "always",
+    "needs",
+    "off"
+   ],
+   "default": "always",
+   "x-wants": "\"always\", \"needs\" or \"off\"",
+   "description": "The toast that closes a restore: \"always\" | \"needs\" (only when something needs you) | \"off\".\n\nTakes \"always\", \"needs\" or \"off\". Default: \"always\"."
+  },
+  "windowTimeoutMs": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 10000,
+   "x-wants": "a whole number, 0 and up",
+   "description": "How long a restore waits for a terminal's window, and for an app's windows, before it reports them missing.\n\nTakes a whole number, 0 and up. Default: 10000."
+  },
+  "appTimeoutMs": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 30000,
+   "x-wants": "a whole number, 0 and up",
+   "description": "Takes a whole number, 0 and up. Default: 30000."
+  },
+  "closeTimeoutMs": {
+   "type": "integer",
+   "minimum": 0,
+   "default": 8000,
+   "x-wants": "a whole number, 0 and up",
+   "description": "Presets (`lares session preset ...`, work whether \"enabled\" is true or not): loading one with --replace first closes the\nwindows the preset has no place for and waits this long for each to go. A window that asks first (unsaved changes)\nstays open and is reported.\n\nTakes a whole number, 0 and up. Default: 8000."
+  }
+ }
+}

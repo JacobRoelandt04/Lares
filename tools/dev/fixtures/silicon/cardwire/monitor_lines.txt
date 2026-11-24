@@ -1,0 +1,12 @@
+Monitoring signals from all objects owned by org.opengamingcollective.cardwire
+The name org.opengamingcollective.cardwire is owned by :1.13
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D0',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D0',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D0',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D0',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D0',)
+/org/opengamingcollective/cardwire/Gpu/1: org.opengamingcollective.cardwire.Gpu.PowerStateChanged ('D3Cold',)

@@ -1,0 +1,62 @@
+// windowtray.jsonc -- the window title and the system tray (modules/windowtray). The template of
+// ~/.config/quickshell/config/windowtray.jsonc. Every key is optional and every value below IS the default:
+// a missing key (or one with a bad value) takes it. The file is re-read when it is saved; one that does
+// not parse keeps the previous settings and the shell says where the typo is. Comments are allowed.
+// Keep only what you change.
+{
+    // Which window a bar shows: "screen" = the last window of THIS bar's monitor's active
+    // workspace (each screen shows its own) | "focus" = the focused window, whatever screen.
+    "follow": "screen",
+
+    // Drop what the app's mark already says: a title ending in " - Zen Browser" or
+    // " — Visual Studio Code" (the window's initial title or the app's name, after one of
+    // - — – | ·) is shown without it. A title is never stripped to nothing. true | false.
+    "stripSuffix": true,
+
+    // Regex rewrites of the shown title, in order: "re" is a JavaScript regex (written
+    // without the slashes), "to" the replacement ($1 is the first group). A rule whose
+    // regex is invalid is skipped and reported. For example (waybar's, ported; with
+    // "stripSuffix" on they change nothing):
+    //   [ { "re": "(.*) - Visual Studio Code", "to": "$1" }, { "re": "(.*) — Zen Browser", "to": "$1" } ]
+    "rewrites": [],
+
+    // A custom icon for one app is shell.jsonc's "icons": { "overrides": { "kitty": "~/path.png" } } (the class, the desktop
+    // id or the icon name -> a path or a theme name): it holds for the launcher, the title and screentime alike.
+    // (This file's "classIcons" is gone: a leftover key is ignored.)
+
+    // A TERMINAL'S TITLE WAITS. A shell sets the window's title to the command it is about to run and back to
+    // the directory when it ends, so `ls` would flash "~ -> ls -> ~" across the bar. For a window of one of these
+    // classes (whole, any case; `hyprctl clients` shows them) a title change is held "terminalTitleMs" before the
+    // bar shows it, and a title that comes back to the one shown within it never shows. [] switches it off.
+    "terminalClasses": ["kitty", "Alacritty", "foot", "footclient", "org.wezfurlong.wezterm", "com.mitchellh.ghostty",
+                        "org.kde.konsole", "konsole", "XTerm", "URxvt", "st-256color", "terminator", "com.gexperts.Tilix",
+                        "gnome-terminal-server", "org.gnome.Terminal", "org.gnome.Ptyxis", "xfce4-terminal", "rio",
+                        "cool-retro-term"],
+    // How long that wait is, in ms (0 to 2000; 0 = no wait): longer than a prompt takes to come back after a
+    // quick command, short enough that a command that runs on is named at once.
+    "terminalTitleMs": 150,
+
+    // The tray: an item's id (what `busctl` shows as Id: "nm-applet", "blueman").
+    // The order of the icons: these first, in this order, then the rest as they registered.
+    // For example ["nm-applet", "blueman"].
+    "trayOrder": [],
+    // Items that are not shown at all (ids).
+    "trayHide": [],
+    // A name for an item that does not name itself well (shown beside its icon and in its
+    // menu), by id. For example { "nm-applet": "Network" }.
+    "trayRename": {},
+    // The tray comes out when the pointer rests on the title ("hover"), or on a click ("click": a second click puts it back).
+    "openOn": "hover",
+    // Leaving it with the pointer puts it back; activating an item puts it back. true | false.
+    "closeOnLeave": true,
+    "closeOnActivate": true,
+    // An item that calls itself passive is "faint" | "hide" (not shown until it is active).
+    "trayPassive": "faint",
+    // An item that wants attention shows itself beside the title: "peek" | "off".
+    "attention": "peek",
+    // What the title says when no window has the focus.
+    "desktopText": "Desktop",
+    // "ink" draws every tray icon in the shell's own ink (legible in light and dark whatever
+    // the icon theme ships) | "colour" draws the icons as they are.
+    "trayIconMode": "ink"
+}

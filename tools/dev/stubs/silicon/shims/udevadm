@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# udevadm STAND-IN (silicon R4 D1, round 3). Answers the TWO calls silicon makes --
+#
+#   udevadm monitor --udev --subsystem-match=drm --subsystem-match=usb   the long-lived watcher of display hotplug events (DrmWatch)
+#   udevadm monitor --udev --subsystem-match=power_supply   the one of the mains and the pack (PowerEventWatcher)
+#
+# It never touches udev: it prints the real monitor's header and then whatever the probe appends to $SILICON_STUB_LOG_DIR/udev_feed (drm) or
+# power_feed (power_supply), one event line at a time, in the real one's shape:
+#   UDEV  [1234.567890] change   /devices/pci0000:00/0000:00:01.0/0000:01:00.0/drm/card0 (drm)
+#   UDEV  [1234.567890] change   /devices/LNXSYSTM:00/LNXSYBUS:00/ACPI0003:00/power_supply/AC0 (power_supply)
+# Any other argv is REFUSED (exit 99 and a `REFUSED` line the runner fails on). Every call is logged: "<ms> <argv>" in udevadm.log.
+D="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}"
+LOG="$D/udevadm.log"
+now() { date +%s%3N; }
+ARGS="$*"
+SUB=""
+if [ "$#" -eq 4 ] && [ "$1" = monitor ] && [ "$2" = --udev ] && [ "$3" = --subsystem-match=drm ] && [ "$4" = --subsystem-match=usb ]; then
+    SUB=drm; FEED=udev_feed
+elif [ "$#" -eq 3 ] && [ "$1" = monitor ] && [ "$2" = --udev ] && [ "$3" = --subsystem-match=power_supply ]; then
+    SUB=power_supply; FEED=power_feed
+fi
+if [ -z "$SUB" ]; then
+    printf '%s REFUSED %s\n' "$(now)" "$ARGS" >> "$LOG"
+    echo "udevadm stand-in: refused" >&2
+    exit 99
+fi
+printf '%s %s\n' "$(now)" "$ARGS" >> "$LOG"
+: >> "$D/$FEED"
+printf 'monitor will print the received events for:\nUDEV - the event which udev sends out after rule processing\n\nSUBSYSTEM=%s\n\n' "$SUB"
+exec tail -n 0 -F "$D/$FEED" 2> /dev/null

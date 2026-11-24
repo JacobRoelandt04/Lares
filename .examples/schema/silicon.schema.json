@@ -1,0 +1,423 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "silicon.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "defaultProfile": {
+   "enum": [
+    "quiet",
+    "balanced",
+    "performance",
+    null
+   ],
+   "default": null,
+   "x-wants": "\"quiet\", \"balanced\" or \"performance\" or null",
+   "description": "THE PROFILE THE LAPTOP COMES UP IN: \"quiet\" | \"balanced\" | \"performance\", or null (the default: nothing stored, the\nprofile is whatever the firmware comes up in). Named here, it holds FROM EARLY BOOT, before the login screen: the shell\nstores that profile's row of \"profiles\" below as the root helper's boot set (`set-boot`, /var/lib/silicon/boot.json),\nand silicon-boot.service applies the set at every boot. The shell never changes the profile when it starts: an edit here\nis stored within a second and takes effect at the NEXT boot (the profile in use now stays until you switch). Editing the\nnamed profile's row stores its new values too. Taking the key out stores nothing and clears nothing -- the last stored\nset stays in force; to clear it (the charge limit is kept):\n    pkexec /usr/local/libexec/silicon-helper set-boot\n\nTakes \"quiet\", \"balanced\" or \"performance\" or null. Default: null."
+  },
+  "profiles": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "quiet": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "epp": {
+       "enum": [
+        "power",
+        "balance_power",
+        "balance_performance",
+        "performance",
+        "default",
+        null
+       ],
+       "default": "power",
+       "x-wants": "\"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null",
+       "description": "Takes \"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null. Default: \"power\"."
+      },
+      "turbo": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": false,
+       "x-wants": "true or false or null",
+       "description": "Takes true or false or null. Default: false."
+      },
+      "governor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "default": "powersave",
+       "x-wants": "a text or null",
+       "description": "Takes a text or null. Default: \"powersave\"."
+      },
+      "maxPerfPct": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 100,
+       "default": null,
+       "x-wants": "a whole number 1 .. 100 or null",
+       "description": "Takes a whole number 1 .. 100 or null. Default: null."
+      },
+      "pl1W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      },
+      "pl2W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      }
+     }
+    },
+    "balanced": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "epp": {
+       "enum": [
+        "power",
+        "balance_power",
+        "balance_performance",
+        "performance",
+        "default",
+        null
+       ],
+       "default": "balance_power",
+       "x-wants": "\"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null",
+       "description": "Takes \"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null. Default: \"balance_power\"."
+      },
+      "turbo": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": true,
+       "x-wants": "true or false or null",
+       "description": "Takes true or false or null. Default: true."
+      },
+      "governor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "default": "powersave",
+       "x-wants": "a text or null",
+       "description": "Takes a text or null. Default: \"powersave\"."
+      },
+      "maxPerfPct": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 100,
+       "default": null,
+       "x-wants": "a whole number 1 .. 100 or null",
+       "description": "Takes a whole number 1 .. 100 or null. Default: null."
+      },
+      "pl1W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      },
+      "pl2W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      }
+     }
+    },
+    "performance": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "epp": {
+       "enum": [
+        "power",
+        "balance_power",
+        "balance_performance",
+        "performance",
+        "default",
+        null
+       ],
+       "default": "performance",
+       "x-wants": "\"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null",
+       "description": "Takes \"power\", \"balance_power\", \"balance_performance\", \"performance\" or \"default\" or null. Default: \"performance\"."
+      },
+      "turbo": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "default": true,
+       "x-wants": "true or false or null",
+       "description": "Takes true or false or null. Default: true."
+      },
+      "governor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "default": "powersave",
+       "x-wants": "a text or null",
+       "description": "Takes a text or null. Default: \"powersave\"."
+      },
+      "maxPerfPct": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 100,
+       "default": null,
+       "x-wants": "a whole number 1 .. 100 or null",
+       "description": "Takes a whole number 1 .. 100 or null. Default: null."
+      },
+      "pl1W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      },
+      "pl2W": {
+       "type": [
+        "number",
+        "null"
+       ],
+       "minimum": 1,
+       "maximum": 400,
+       "default": null,
+       "x-wants": "a number 1 .. 400 or null",
+       "description": "Takes a number 1 .. 400 or null. Default: null."
+      }
+     }
+    }
+   },
+   "description": "WHAT A PROFILE APPLIES. Switching profile (the popup's arrows, a swipe, or a change made\noutside it) sets the platform profile -- the embedded controller's thermal policy: fans,\nand whatever the firmware enforces -- and then these values, which the firmware never moves\nby itself. A value left `null` means \"keep the firmware's value\":\n  maxPerfPct, pl1W, pl2W   the kernel's maximum / the ceiling the firmware set at boot, written\n                           on every switch, so a switch ends a tweak of them;\n  epp, turbo, governor     not written at all (a tweak of those survives a switch).\nEnergy preference `epp`: power | balance_power | balance_performance | performance.\n`turbo`: true | false. `governor`: powersave | performance (| schedutil ... where the kernel\noffers them). `maxPerfPct`: 1..100, a whole percent of the maximum performance.\n`pl1W`, `pl2W`: the sustained and the burst package power limit in watts, 1..400; the helper\nonly ever LOWERS them (floor 8 W, ceiling the firmware's own values: 45 W / 115 W here), on\nboth RAPL interfaces, with PL1 <= PL2."
+  },
+  "onPower": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "ac": {
+     "enum": [
+      "quiet",
+      "balanced",
+      "performance",
+      null
+     ],
+     "default": null,
+     "x-wants": "\"quiet\", \"balanced\" or \"performance\" or null",
+     "description": "Takes \"quiet\", \"balanced\" or \"performance\" or null. Default: null."
+    },
+    "battery": {
+     "enum": [
+      "quiet",
+      "balanced",
+      "performance",
+      null
+     ],
+     "default": null,
+     "x-wants": "\"quiet\", \"balanced\" or \"performance\" or null",
+     "description": "Takes \"quiet\", \"balanced\" or \"performance\" or null. Default: null."
+    }
+   },
+   "description": "THE PROFILE BY POWER: the profile to switch to when the charger goes in (\"ac\") and when it comes out (\"battery\"); null = none. Only the\nplug switches: a profile you pick stays until the next plug, nothing is switched at the shell's start, and a system update's hold\ngoes first (the profile is what comes back after it)."
+  },
+  "holds": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "systemUpdate": {
+     "enum": [
+      "performance",
+      "balanced",
+      null
+     ],
+     "default": "performance",
+     "x-wants": "\"performance\" or \"balanced\" or null",
+     "description": "Takes \"performance\" or \"balanced\" or null. Default: \"performance\"."
+    }
+   },
+   "description": "While a system update runs the CPU is held at: \"performance\" | \"balanced\" | null (not at all)."
+  },
+  "battery": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "lowAt": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 50,
+     "default": 15,
+     "x-wants": "a whole number 5 .. 50",
+     "description": "Takes a whole number 5 .. 50. Default: 15."
+    }
+   },
+   "description": "The battery is low from this percentage down (of the pack the charge limit leaves): the bar's figure turns red and the OSD's card\ncomes. 5 .. 50. (The toasts' levels are notifications.jsonc sources.battery.)"
+  },
+  "fans": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "guard": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "resumeKick": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "The fan guard (a CPU hotter than its load explains: a card, and Performance held), and the fans' wake-up after a resume. Both answer a fault of this\nlaptop's firmware. true | false."
+  },
+  "sounds": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "The popup's sounds. How loud they are is the mockup's. true | false.\n\nTakes true or false. Default: true."
+  },
+  "interactionBoost": {
+   "type": "boolean",
+   "default": false,
+   "x-wants": "true or false",
+   "description": "THE INTERACTION BOOST: while a motion of the shell runs (a popup opening, the island moving: a few hundred ms) the shell asks\nlares-boost.service to hold the Intel GPU's and the CPU's frequency floor up, and the service puts both back by itself. A motion\notherwise ends before the hardware has woken from its rest (800 MHz GPU, 400 MHz cores on quiet). Needs the root service (`lares\nsetup`, step R6); without it this does nothing. Off by default: measure it first (docs/silicon.md \"The interaction boost\").\nThe floors themselves are the service's (its unit's gpuMhz / cpuPct). true | false.\n\nTakes true or false. Default: false."
+  },
+  "overhead": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "wPerCpuSec": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 50,
+     "default": 2,
+     "x-wants": "a number 0 .. 50",
+     "description": "Takes a number 0 .. 50. Default: 2."
+    },
+    "wPerGpuSec": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 50,
+     "default": 5,
+     "x-wants": "a number 0 .. 50",
+     "description": "Takes a number 0 .. 50. Default: 5."
+    }
+   },
+   "description": "WHAT THE POPUP COSTS. Watts per second of the shell's CPU time and of its GPU render time,\nused to show the battery's draw WITHOUT the popup's own (hover shows the real figure). These\nare uncalibrated seeds (tools/silicon/calibrate_overhead.sh measures this machine's); 0 .. 50, 0 turns the correction off."
+  },
+  "gpu": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "askWhenBusy": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Switching to Integrated or Smart asks first while an app is on the card. false: it switches (the apps keep running).\n\nTakes true or false. Default: true."
+    },
+    "blockedNotice": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "A card when an app was kept off the card.\n\nTakes true or false. Default: true."
+    },
+    "ignoredHolders": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "maxItems": 64,
+     "default": [
+      "cardwired",
+      "nvidia-persiste",
+      "nvidia-persistenced",
+      "hyprland",
+      "xwayland",
+      "xorg",
+      "systemd",
+      "systemd-logind",
+      "btop",
+      "nvidia-smi",
+      "quickshell"
+     ],
+     "x-wants": "a list of texts",
+     "description": "Takes a list of texts. Default: [\"cardwired\",\"nvidia-persiste\",\"nvidia-persistenced\",\"hyprland\",\"xwayland\",\"xorg\",\"systemd\",\"systemd-logind\",\"btop\",\"nvidia-smi\",\"quickshell\"]."
+    }
+   },
+   "description": "THE dGPU's USERS THE POPUP DOES NOT ASK ABOUT. Switching to Integrated or Smart with an app on the NVIDIA card asks first (the apps keep\nrunning; cardwire only blocks NEW opens). A process listed here never counts as an app on the card: not for that question, not for the\n\"in use by\" line, not for the nvidia-smi gate. Names are the process's own (the kernel's `comm`, 15 characters at most), matched whole\nand without regard to case. The list is the whole truth: take Hyprland out and it is a user again. The default is the plumbing that\nholds the card's nodes while it sleeps -- cardwired and nvidia-persistenced, the session (Hyprland, Xwayland, Xorg, systemd,\nsystemd-logind), the shell itself (quickshell), and the programs that only WATCH the card -- btop and nvidia-smi (they keep it out of\nD3cold while they run, which is fine; the shell's own nvidia-smi queries count here too, and counting them made the shell its own user)."
+  },
+  "look": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "family": {
+     "enum": [
+      "material",
+      "blueprint",
+      "eva"
+     ],
+     "default": "material",
+     "x-wants": "\"material\", \"blueprint\" or \"eva\"",
+     "description": "Takes \"material\", \"blueprint\" or \"eva\". Default: \"material\"."
+    },
+    "secondarySide": {
+     "enum": [
+      "far",
+      "start",
+      "end"
+     ],
+     "default": "far",
+     "x-wants": "\"far\", \"start\" or \"end\"",
+     "description": "Takes \"far\", \"start\" or \"end\". Default: \"far\"."
+    }
+   },
+   "description": "THE LOOK of the board: \"family\" is \"material\" (carved; the old \"eva\" still works) or \"blueprint\"; \"secondarySide\" is WHERE THE POPUP'S SECONDARIES OPEN --\nthe CPU tuning and GPU panels and the three dialogs (the restart card, the keep prompt, the question about apps on the dGPU):\n\"far\" (away from the bar), or \"start\" / \"end\" (along it). The mockup's panel tries them live. How LARGE the popup is drawn is\nshell.jsonc's \"scale\": { \"popups\": { \"silicon\": 1.35 } }."
+  }
+ }
+}

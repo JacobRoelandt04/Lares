@@ -1,0 +1,320 @@
+#version 440
+
+// =============================================================================
+// aerial_board.frag -- aerial's board (the Intel AX210 in its M.2 slot and what stands round it), ray-cast analytically under the true isometric camera.
+//
+// Two kinds of instance draw it (AerialScene.qml): the board (the whole scene, a layer that renders again only when a uniform changes) and the live patches over a
+// moving part's rect (frame.z = 2: the card tilting out, the screw, a DIP lever, the button, the plug): the same scene, whole, uncached, so the part moves on its own
+// small rect and the cached board never redraws for it. Everything that glows (the LEDs, the displays' lit segments) is NOT here: aerial_glow.frag draws it live on
+// top. The label on the card's shield is NOT here either: a hole is left where its top face is (parts.w) and the live label (QML, crisp text) is laid in it.
+//
+// Per pixel: four rotated-grid samples, each a primary ray through the scene's boxes (each move group in its own frame), a shadow ray toward the light, contact
+// darkening on the board, the nearest trace; then the family's materials (aerial_materials.glsl) shade it. Edge widths need no derivatives: in true isometric one
+// millimetre along ANY box edge is 0.8165 px-per-mm on screen, and a distance across a face to its edge 0.7071.
+// =============================================================================
+
+// QSB-NO-100ES: no GLSL ES 1.00 variant (tools/dev/bake_shaders.sh reads this line). The board has a vertex shader of its own (aerial_board.vert), so on an OpenGL ES
+// context the pair links at GLSL ES 3.00; a 100 es variant could only ever be reached by dropping that vertex shader, and then it would draw NOTHING (its uniform
+// struct is named by a SPIR-V id that differs from the reflection's: every uniform reads 0). Without the variant that mistake is an error ("No shader found").
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec4 view;      // x, y: this item's size px; z: px per mm; w: family 0 Material, 1 Blueprint
+    vec4 frame;     // x, y: SCENE px of the board origin; z: 2 = a live patch (the scene whole over a part's rect); w: 1 = dark mode
+    vec4 motion;    // x: the card's tilt rad; y: the screw's lift mm; z: the button's press mm; w: the plug in 0 (out) .. 1 (seated)
+    vec4 parts;     // x: Wi-Fi DIP lever 0 (off) .. 1 (on); y: Bluetooth lever; z: 1 = the card is not drawn (a live patch draws it); w: 1 = a hole for the live label
+    vec4 light;     // xyz: toward the light, board space, unit; w: shadow strength 0..1
+    vec4 quad;      // x, y: this item's offset inside the scene px; z: samples per axis (1 or 2); w: render scale
+    vec4 palA;      // the family's palette and tunables: aerial_materials.glsl says what each one is
+    vec4 palB;
+    vec4 palC;
+    vec4 palD;
+    vec4 palE;
+    vec4 palF;
+    vec4 palG;
+    vec4 palH;
+    vec4 tuneA;
+    vec4 tuneB;
+    vec4 palI;      // the second palette (aerial_materials.glsl names each slot): the displays' window, unlit segments, the PCB's green, gold, the label's paper, the shield's tin,
+    vec4 palJ;      //   the solder rim, the displays' bezel
+    vec4 palK;
+    vec4 palL;
+    vec4 palM;
+    vec4 palN;
+    vec4 palO;
+    vec4 palP;
+    vec4 palQ;      // the MAIN coax's jacket
+    vec4 palR;      // the AUX coax's jacket
+    vec4 r3s2A;     // the smoked glass over the displays' window: rgb what it lets through (the family's tint)
+    vec4 hole;      // x0 y0 x1 y1 in SCENE px, a rect the cached board leaves transparent: x1 <= x0 = none
+    vec4 silkVar;   // the engraved variants of the two unit labels (AerialGeometry SILK_VARIANTS): x the rates label's index, y the usage label's
+    vec4 hueWifi;   // the radios' own hues (the bar pill's ON colours): the latches' emblems wear them while the radio is on
+    vec4 hueBt;
+};
+layout(binding = 1) uniform sampler2D silk;   // the silkscreen (tools/aerial/make_silk.py): a signed-distance texture, r Material, g Blueprint
+
+// the true isometric camera: screen right, screen up, toward the camera
+const vec3 CAM_R = vec3(0.70710678, 0.0, -0.70710678);
+const vec3 CAM_U = vec3(-0.40824829, 0.81649658, -0.40824829);
+const vec3 CAM_C = vec3(0.57735027, 0.57735027, 0.57735027);
+const float EDGE_ALONG = 0.81649658;
+const float EDGE_ACROSS = 0.70710678;
+
+// @@GEOM
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 u = fract(p);
+    u = u * u * (3.0 - 2.0 * u);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+struct Surf {
+    vec3 p;          // world point, board space
+    vec3 pl;         // the point in its part's own frame (tilts with the card, lifts with the screw ...)
+    vec3 n;          // world normal
+    vec3 nl;         // the normal in the part's own frame: which face of the box
+    int mat;
+    int part;
+    int group;
+    vec3 bmin;       // the hit box, part frame
+    vec3 bmax;
+    float edgePx;    // screen px from this face's nearest edge
+    float lit;       // 1 in light, 0 in a part's shadow (Blueprint's hatching of the board reads it)
+    float ao;        // contact darkening on the board's top face (1 = none)
+    float ao2;       //   ... and the same 2.2 mm toward the light (Material's contact shadow reads both)
+    float traceD;    // nearest trace: signed distance in mm (< 0 inside)
+    int traceKind;   // -1 none, 0 stub, 1 power, 2 signal
+    float traceHalf; // that trace's half width at this point, mm
+    float traceDq;   // the nearest trace's signed distance at the point shifted by the groove's depth ...
+    float traceDl;   //   ... and 0.45 mm toward the light: Material's groove reads all three
+    float pxPerMm;   // view.z
+    vec2 scenePx;
+    float cutD;      // the PCB's outline: mm outside it (> 0), for the edge ink along it; -1 for any other part
+    float holeD;     // the board's cut-outs: mm outside the nearest one (> 0), for the bevel round it; 1e3 for any other part
+};
+vec2 gScenePx;
+float gCutD = -1.0;
+float gHoleD = 1e3;
+
+// @@INCLUDE seg7.glsl
+// @@INCLUDE aerial_materials.glsl
+
+// The ground the board stands on, at y = BOARD_Y.x: transparent but for the board's own shadow.
+vec4 ground(vec3 ro) {
+    vec3 rd = -CAM_C;
+    float t = (ro.y - BOARD_Y.x) / CAM_C.y;
+    vec3 g = ro + rd * t;
+    vec3 l = normalize(light.xyz);
+    float hgt = BOARD_Y.y - BOARD_Y.x;
+    vec2 off = -l.xz / max(l.y, 0.2) * hgt;
+    vec2 q = g.xz - off * 0.5;
+    vec2 c = (BOARD_RECT.xy + BOARD_RECT.zw) * 0.5;
+    vec2 h = (BOARD_RECT.zw - BOARD_RECT.xy) * 0.5;
+    vec2 dd = abs(q - c) - h;
+    float sd = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0);
+    return shadeGround(g.xz, sd);
+}
+
+// Shade whatever scenePrimary found last (hT ... hMax are its result).
+vec4 shadeHit(vec3 ro, vec3 rd) {
+    float s = view.z;
+    vec3 o; vec3 d;
+    groupRay(hGroup, ro, rd, o, d);
+    Surf sf;
+    sf.p = ro + rd * hT;
+    sf.pl = o + d * hT;
+    sf.nl = hN;
+    sf.n = groupNormal(hGroup, hN);
+    sf.mat = hMat;
+    sf.part = hPart;
+    sf.group = hGroup;
+    sf.bmin = hMin;
+    sf.bmax = hMax;
+    vec3 a = abs(hN);
+    vec3 m = min(sf.pl - hMin, hMax - sf.pl) + a * 1e6;
+    sf.edgePx = min(min(m.x, m.y), m.z) * EDGE_ACROSS * s;
+    vec3 l = normalize(light.xyz);
+    sf.lit = 0.0;
+    sf.ao = 1.0;
+    sf.ao2 = 1.0;
+    sf.traceD = 1e9;
+    sf.traceKind = -1;
+    sf.traceHalf = 0.0;
+    sf.pxPerMm = s;
+    sf.scenePx = gScenePx;
+    sf.cutD = gCutD;
+    sf.holeD = gHoleD;
+    sf.traceDq = 1e9;
+    sf.traceDl = 1e9;
+    int lvl = -1;
+    if (hN.y > 0.5 && hPart == PART_BOARD)
+        lvl = 0;
+    if (lvl >= 0) {
+        if (view.w > 0.5)
+            sf.lit = dot(sf.n, l) > 0.0 ? 1.0 - sceneShadow(sf.p + sf.n * 0.03, l) : 0.0;
+        int two = quad.z > 0.5 ? 2 : 1;
+        vec2 ao = sceneAo(sf.p.xz, normalize(l.xz) * 2.2, lvl, view.w < 0.5 ? two : 0);
+        sf.ao = ao.x;
+        sf.ao2 = two > 1 ? ao.y : ao.x;
+        // The nearest trace's field at three points -- here, the groove's floor and toward the light -- through ONE call site in a loop whose bound comes from a
+        // uniform (so it is not unrolled): sceneTraces is the biggest function of the shader.
+        vec2 Ld = normalize(l.xz);
+        int kn = quad.z > 0.5 ? 3 : 1;
+        for (int k = 0; k < kn; k++) {
+            vec2 pk = k == 0 ? sf.p.xz : (k == 1 ? sf.p.xz - vec2(GROOVE_DEPTH) : sf.p.xz + Ld * 0.45);
+            sceneTraces(pk);
+            if (k == 0) {
+                sf.traceD = tD;
+                sf.traceKind = tKind;
+                sf.traceHalf = tHalf;
+                sf.traceDq = tD;
+                sf.traceDl = tD;
+            } else if (k == 1) {
+                sf.traceDq = tD;
+            } else {
+                sf.traceDl = tD;
+            }
+            if (sf.traceD >= 1.4)
+                break;
+        }
+    }
+    return shadeSurface(sf);
+}
+
+float gGround;
+vec4 gGroundCol;
+
+vec4 shadeSample(vec2 px) {
+    float s = view.z;
+    gGround = 0.0;
+    gGroundCol = vec4(0.0);
+    gScenePx = px;
+    float sx = (px.x - frame.x) / s;
+    float sy = (frame.y - px.y) / s;
+    vec3 ro = sx * CAM_R + sy * CAM_U + CAM_C * 600.0;
+    vec3 rd = -CAM_C;
+
+    if (!slabHit(ro, 1.0 / rd, SCENE_MIN - vec3(1.0), SCENE_MAX + vec3(1.0))) {
+        gGround = 1.0;
+        gGroundCol = ground(ro);
+        return gGroundCol;
+    }
+
+    gFlags = parts.z > 0.5 ? FLAG_CARD : 0.0;
+    // Up to four layers: a PCB pixel found outside its outline (cast again without it), a fading plug (laid over what is behind it), the surface behind. ONE cast
+    // site and ONE shade site, in a loop whose bound comes from a uniform so the compiler cannot unroll it (Mesa inlines every call).
+    vec4 col = vec4(0.0);
+    float carry = 1.0;
+    int layers = quad.z > 0.5 ? 4 : 1;
+    for (int layer = 0; layer < layers; layer++) {
+        scenePrimary(ro, rd);
+        if (hPart < 0) {
+            gGround = carry;
+            gGroundCol = carry * ground(ro);
+            col += gGroundCol;
+            break;
+        }
+        vec3 o; vec3 d;
+        groupRay(hGroup, ro, rd, o, d);
+        vec3 pl = o + d * hT;
+        gCutD = -1.0;
+        gHoleD = 1e3;
+        if (hPart == PART_BOARD && hN.y > 0.5) {
+            // the board's cut-outs: inside one the surface is not there. Look down the ray through the hole: the first wall it meets (the material on the -x / -z side, the only
+            // walls the camera sees) is shaded as a wall; a ray that leaves the bottom sees through, to the popup behind.
+            vec3 bp = ro + rd * hT;
+            float cd = boardCutSd(bp.xz);
+            gHoleD = cd;
+            if (cd < 0.0) {
+                float dep = -1.0;
+                float prev = 0.0;
+                for (int k = 1; k <= 8; k++) {
+                    float dk = float(k) * (BOARD_Y.y - BOARD_Y.x) / 8.0;
+                    vec2 q = bp.xz - vec2(dk);
+                    if (boardCutSd(q) >= 0.0 && onBoardRect(q)) {
+                        float lo = prev, hi = dk;
+                        for (int j = 0; j < 4; j++) {
+                            float mid = 0.5 * (lo + hi);
+                            vec2 qm = bp.xz - vec2(mid);
+                            if (boardCutSd(qm) >= 0.0 && onBoardRect(qm))
+                                hi = mid;
+                            else
+                                lo = mid;
+                        }
+                        dep = hi;
+                        break;
+                    }
+                    prev = dk;
+                }
+                if (dep < 0.0)
+                    break;                                       // through the board: nothing here
+                vec2 qh = bp.xz - vec2(dep);
+                vec2 g = vec2(boardCutSd(qh + vec2(0.05, 0.0)) - boardCutSd(qh - vec2(0.05, 0.0)), boardCutSd(qh + vec2(0.0, 0.05)) - boardCutSd(qh - vec2(0.0, 0.05)));
+                vec2 wn = -normalize(g + vec2(1e-5));
+                col += carry * holeWall(wn, dep);
+                break;
+            }
+        }
+        if (hGroup == GRP_PCB) {
+            // the PCB is one box for the ray; a pixel outside its outline is not there: cast again without it (the key slots, the notch, the shoulders)
+            gCutD = pcbSd(pl.xz - CARD_ORG);
+            if (gCutD > 0.01) {
+                raise(FLAG_PCB);
+                continue;
+            }
+        }
+        // the label's top face is a hole where the live label (QML) is laid
+        if (hPart == PART_LABEL && hN.y > 0.5 && parts.w > 0.5)
+            break;
+        float a = 1.0;
+        if (hGroup == GRP_PLUG)
+            a = smoothstep(0.0, 0.45, motion.w) * cableFade(pl.x - CABLE_FADE.x);
+        col += carry * a * shadeHit(ro, rd);
+        carry *= 1.0 - a;
+        if (carry < 0.002)
+            break;
+        raise(FLAG_PLUG);                    // what is behind the fading plug
+    }
+    return col;
+}
+
+void main() {
+    gCardTilt = motion.x;
+    gScrewLift = motion.y;
+    gBtnDown = motion.z;
+    gPlugOut = (1.0 - motion.w) * PLUG_TRAVEL;
+    gDipW = parts.x * DIP_TRAVEL;
+    gDipB = parts.y * DIP_TRAVEL;
+    vec2 px = quad.xy + qt_TexCoord0 * view.xy;
+    bool inHole = px.x >= hole.x && px.x < hole.z && px.y >= hole.y && px.y < hole.w;
+    if (inHole && frame.z < 1.5) {
+        fragColor = vec4(0.0);          // the live patch's rect: drawn there, whole, by the patch
+        return;
+    }
+    // rotated-grid supersampling: four samples, none on a shared row or column, spread over ONE device pixel. A real loop (its count from a uniform): unrolled,
+    // the whole sample is compiled four times over.
+    vec4 acc = vec4(0.0);
+    int n = quad.z > 1.5 ? 4 : 1;
+    float k = 1.0 / max(quad.w, 1.0);
+    for (int i = 0; i < n; i++) {
+        vec2 o = n == 1 ? vec2(0.0) : (i == 0 ? vec2(0.125, 0.375) : (i == 1 ? vec2(0.375, -0.125) : (i == 2 ? vec2(-0.125, -0.375) : vec2(-0.375, 0.125))));
+        acc += shadeSample(px + o * k);
+    }
+    vec4 pic = acc / float(n);
+    fragColor = pic * qt_Opacity;
+    // A live patch is drawn a few device pixels BEYOND the hole it fills (AerialScene.patchMargin), so that a quad a pixel short or a hole's edge blended into its neighbour cannot
+    // leave a row or a column of the surface open between the two layers. Out there it draws only what is OPAQUE: the board has the same ground in the same place and draws the
+    // rest (the soft edge of the board's shadow), which drawn by both would be drawn twice.
+    if (frame.z > 1.5 && hole.z > hole.x && !inHole && pic.a < 0.998)
+        fragColor = vec4(0.0);
+}

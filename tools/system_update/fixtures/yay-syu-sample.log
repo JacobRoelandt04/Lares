@@ -1,0 +1,113 @@
+[1;34m::[0m[1;37m Synchronizing package databases...[0m
+ core                 128.0 KiB   1024 KiB/s 00:01 [##############################] 100%
+ extra                128.0 KiB   1024 KiB/s 00:01 [##############################] 100%
+ multilib             128.0 KiB   1024 KiB/s 00:01 [##############################] 100%
+[1;34m::[0m[1;37m Searching AUR for updates...[0m
+[1;34m::[0m[1;37m Searching databases for updates...[0m
+[1;34m::[0m[1;37m 6 packages to upgrade/install.[0m
+  6 [1;35mextra[0m/[1;37mqt6-base[0m  6.11.1-1 -> 6.11.2-1
+  5 [1;35mcore[0m/[1;37mlinux[0m  6.18.9.arch1-1 -> 6.18.10.arch1-1
+  4 [1;35mcore[0m/[1;37mlinux-headers[0m  6.18.9.arch1-1 -> 6.18.10.arch1-1
+  3 [1;35mmultilib[0m/[1;37mlib32-mesa[0m  25.2.4-1 -> 25.2.5-1
+  2 [1;35maur[0m/[1;37mvesktop-bin[0m  1.6.5-1 -> 1.6.7-1
+  1 [1;35maur[0m/[1;37mzen-browser-bin[0m  1.21.14b-1 -> 1.21.15b-1
+
+[1;34m==>[0m[1;37m Packages to exclude: (eg: "1 2 3", "1-3", "^4" or repo name)[0m
+[1;34m==>[0m 
+[1;34m::[0m[1;37m Checking for conflicts...[0m
+[1;34m::[0m[1;37m Checking for inner conflicts...[0m
+[1;34m[Aur:2][0m[1;37m vesktop-bin-1.6.7-1  zen-browser-bin-1.21.15b-1[0m
+[1;34m[Repo:4][0m[1;37m linux-6.18.10.arch1-1  linux-headers-6.18.10.arch1-1  lib32-mesa-25.2.5-1  qt6-base-6.11.2-1[0m
+
+[1;34m==>[0m[1;37m Packages to cleanBuild?[0m
+[1;34m==>[0m [N]one [A]ll [Ab]ort [I]nstalled [No]tInstalled or (1 2 3, 1-3, ^4)
+[1;34m==>[0m 
+[1;34m==>[0m[1;37m Diffs to show?[0m
+[1;34m==>[0m [N]one [A]ll [Ab]ort [I]nstalled [No]tInstalled or (1 2 3, 1-3, ^4)
+[1;34m==>[0m 
+[1;34m::[0m[1;37m (1/2) Parsing SRCINFO: vesktop-bin[0m
+[1;34m::[0m[1;37m (2/2) Parsing SRCINFO: zen-browser-bin[0m
+[sudo] password for user: 
+
+[1;34m::[0m[1;37m Starting full system upgrade...[0m
+resolving dependencies...
+looking for conflicting packages...
+
+Package (4)         Old Version       New Version       Net Change
+
+core/linux          6.18.9.arch1-1    6.18.10.arch1-1     0.42 MiB
+core/linux-headers  6.18.9.arch1-1    6.18.10.arch1-1     0.00 MiB
+multilib/lib32-mesa 25.2.4-1          25.2.5-1            0.10 MiB
+extra/qt6-base      6.11.1-1          6.11.2-1            0.05 MiB
+
+Total Installed Size:  512.00 MiB
+Net Upgrade Size:        0.57 MiB
+
+[1;34m::[0m[1;37m Proceed with installation? [Y/n] [0m
+[1;34m::[0m[1;37m Retrieving packages...[0m
+ linux-6.18.10.arch1-1-x86_64.pkg.tar.zst   54 KiB   1024 KiB/s 00:01 [#####-------------------------] 18%
+ linux-6.18.10.arch1-1-x86_64.pkg.tar.zst   141 KiB   1024 KiB/s 00:01 [##############----------------] 47%
+ linux-6.18.10.arch1-1-x86_64.pkg.tar.zst   228 KiB   1024 KiB/s 00:01 [######################--------] 76%
+ linux-6.18.10.arch1-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ linux-6.18.10.arch1-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ linux-headers-6.18.10.arch1-1-x86_64.pkg.tar.zst   54 KiB   1024 KiB/s 00:01 [#####-------------------------] 18%
+ linux-headers-6.18.10.arch1-1-x86_64.pkg.tar.zst   141 KiB   1024 KiB/s 00:01 [##############----------------] 47%
+ linux-headers-6.18.10.arch1-1-x86_64.pkg.tar.zst   228 KiB   1024 KiB/s 00:01 [######################--------] 76%
+ linux-headers-6.18.10.arch1-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ linux-headers-6.18.10.arch1-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ lib32-mesa-25.2.5-1-x86_64.pkg.tar.zst   54 KiB   1024 KiB/s 00:01 [#####-------------------------] 18%
+ lib32-mesa-25.2.5-1-x86_64.pkg.tar.zst   141 KiB   1024 KiB/s 00:01 [##############----------------] 47%
+ lib32-mesa-25.2.5-1-x86_64.pkg.tar.zst   228 KiB   1024 KiB/s 00:01 [######################--------] 76%
+ lib32-mesa-25.2.5-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ lib32-mesa-25.2.5-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ qt6-base-6.11.2-1-x86_64.pkg.tar.zst   54 KiB   1024 KiB/s 00:01 [#####-------------------------] 18%
+ qt6-base-6.11.2-1-x86_64.pkg.tar.zst   141 KiB   1024 KiB/s 00:01 [##############----------------] 47%
+ qt6-base-6.11.2-1-x86_64.pkg.tar.zst   228 KiB   1024 KiB/s 00:01 [######################--------] 76%
+ qt6-base-6.11.2-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+ qt6-base-6.11.2-1-x86_64.pkg.tar.zst   300 KiB   1024 KiB/s 00:01 [##############################] 100%
+(4/4) checking keys in keyring                      [##############################] 100%
+(4/4) checking package integrity                    [##############################] 100%
+(4/4) loading package files                         [##############################] 100%
+(4/4) checking for file conflicts                   [##############################] 100%
+(4/4) checking available disk space                 [##############################] 100%
+[1;34m:: Running pre-transaction hooks...[0m
+(1/1) Remove upgraded DKMS modules                  [##############################] 100%
+[1;34m:: Processing package changes...[0m
+(1/4) upgrading linux                               [##############################] 100%
+(2/4) upgrading linux-headers                       [##############################] 100%
+(3/4) upgrading lib32-mesa                          [##############################] 100%
+(4/4) upgrading qt6-base                            [##############################] 100%
+[1;34m:: Running post-transaction hooks...[0m
+(1/5) Arming ConditionNeedsUpdate...
+(2/5) Updating module dependencies...
+(3/5) Install DKMS modules
+(4/5) Updating linux initcpios...
+(5/5) Updating GRUB config...
+==> Building image from preset: /etc/mkinitcpio.d/linux.preset: 'default'
+  -> -k /boot/vmlinuz-linux -c /etc/mkinitcpio.conf -g /boot/initramfs-linux.img
+==> Starting build: '6.18.10-arch1-1'
+  -> Running build hook: [base]
+  -> Running build hook: [udev]
+  -> Running build hook: [modconf]
+==> Image generation successful
+[1;34m::[0m[1;37m (1/2) Parsing SRCINFO: vesktop-bin[0m
+[1;34m==>[0m[1;37m Making package: vesktop-bin 1.6.7-1 (Mon 25 Aug 2026 18:40:00)[0m
+[1;34m==>[0m[1;37m Retrieving sources...[0m
+  -> Downloading vesktop-1.6.7.tar.gz...
+[1;34m==>[0m[1;37m Validating source files with sha256sums...[0m
+    vesktop-1.6.7.tar.gz ... Passed
+[1;34m==>[0m[1;37m Starting prepare()...[0m
+[1;34m==>[0m[1;37m Starting build()...[0m
+  compiling target: vesktop
+[1;34m==>[0m[1;37m Starting package()...[0m
+[1;34m==>[0m[1;37m Finished making: vesktop-bin 1.6.7-1 (Mon 25 Aug 2026 18:41:12)[0m
+[1;34m==>[0m[1;37m Making package: zen-browser-bin 1.21.15b-1 (Mon 25 Aug 2026 18:41:13)[0m
+[1;34m==>[0m[1;37m Retrieving sources...[0m
+[1;34m==>[0m[1;37m Starting package()...[0m
+[1;34m==>[0m[1;37m Finished making: zen-browser-bin 1.21.15b-1 (Mon 25 Aug 2026 18:42:01)[0m
+[1;34m::[0m[1;37m Processing package changes...[0m
+(1/2) upgrading vesktop-bin                         [##############################] 100%
+(2/2) upgrading zen-browser-bin                     [##############################] 100%
+[1;34m:: Running post-transaction hooks...[0m
+(1/2) Arming ConditionNeedsUpdate...
+(2/2) Updating the desktop file MIME type cache...

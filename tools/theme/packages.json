@@ -1,0 +1,25 @@
+{
+  "doc": "What installs a theme name that a pair's asset list prefers (themes/*.json, assets.<mode>.gtkTheme / iconTheme / vscodeTheme as a list). themectl doctor and `themectl packages` read it; nothing here is ever installed by themectl. repo: extra = the official repositories (pacman), aur = the AUR (yay). A name with `build` has no package: the command builds it. A VS Code theme's name has `vscode`: the extension that brings it (`code --install-extension <id>`). The names are the directories the upstream install scripts make, checked 2026-11-08 against Colloid's and Tokyonight's install.sh at HEAD and the Catppuccin 1.0.3 release zips (their sha256 match the PKGBUILDs); not built here. Chosen for age and maintainer: every package has been in the AUR since 2024 or earlier.",
+  "themes": {
+    "catppuccin-latte-mauve-standard+default": { "repo": "aur", "pkg": "catppuccin-gtk-theme-latte", "note": "catppuccin/gtk 1.0.3, the official palette, all 14 accents, GTK 3 and 4" },
+    "catppuccin-macchiato-mauve-standard+default": { "repo": "aur", "pkg": "catppuccin-gtk-theme-macchiato", "note": "catppuccin/gtk 1.0.3, the official palette, all 14 accents, GTK 3 and 4" },
+    "Tokyonight-Light": { "repo": "aur", "pkg": "tokyonight-gtk-theme-git", "note": "Fausto-Korpsvart's Tokyo Night, GTK 3 and 4; upstream renamed Tokyonight-GTK-Theme and archived 2025-10 (stable, no more changes); AUR since 2024-01" },
+    "Tokyonight-Dark": { "repo": "aur", "pkg": "tokyonight-gtk-theme-git", "note": "the Night palette (darker than Storm)" },
+    "Colloid-Light-Everforest": { "repo": "aur", "pkg": "colloid-everforest-gtk-theme-git", "note": "Colloid with its Everforest scheme, GTK 3 and 4; Mark Wagie's split package (yochananmarqos, in the AUR since 2021); the same names without -git are a 2026-10 re-upload of it by a new account, 0 votes, release checksum SKIP" },
+    "Colloid-Dark-Gruvbox": { "repo": "aur", "pkg": "colloid-gruvbox-gtk-theme-git", "note": "Colloid with its Gruvbox scheme, GTK 3 and 4" },
+    "Colloid-Teal-Light": { "repo": "aur", "pkg": "colloid-gtk-theme-git", "note": "Colloid's own palette in its teal accent, GTK 3 and 4; every accent, light and dark" },
+    "Colloid-Teal-Dark": { "repo": "aur", "pkg": "colloid-gtk-theme-git" },
+    "Colloid-Light": { "repo": "aur", "pkg": "colloid-gtk-theme-git", "note": "the default blue accent" },
+    "Colloid-Dark": { "repo": "aur", "pkg": "colloid-gtk-theme-git" },
+    "Colloid-Pink-Light": { "repo": "aur", "pkg": "colloid-gtk-theme-git" },
+    "Colloid-Pink-Dark": { "repo": "aur", "pkg": "colloid-gtk-theme-git" },
+    "Colloid-Teal-Light-Everforest": { "repo": "aur", "pkg": "colloid-everforest-gtk-theme-git", "note": "Colloid's Everforest scheme in its teal accent (the pair's accent is Everforest's aqua)" },
+    "Colloid-Teal-Dark-Gruvbox": { "repo": "aur", "pkg": "colloid-gruvbox-gtk-theme-git", "note": "Colloid's Gruvbox scheme in its teal accent" },
+    "adw-gtk3": { "repo": "extra", "pkg": "adw-gtk-theme", "note": "libadwaita's look for GTK 3, from the official repositories" },
+    "adw-gtk3-dark": { "repo": "extra", "pkg": "adw-gtk-theme" },
+    "catppuccin-macchiato-blue-standard+default": { "repo": "aur", "pkg": "catppuccin-gtk-theme-macchiato", "note": "Macchiato in its blue accent: the nearest ground to Night Owl's and to Tokyo Night Storm's (themes_coverage.md, 2026-11-08)" },
+    "Paper": { "vscode": "a5hk.paper", "note": "a VS Code theme: the Paper palette, light" },
+    "Rosé Pine Dawn": { "vscode": "mvllow.rose-pine", "note": "a VS Code theme; the extension brings Moon too" },
+    "Rosé Pine Moon": { "vscode": "mvllow.rose-pine" }
+  }
+}

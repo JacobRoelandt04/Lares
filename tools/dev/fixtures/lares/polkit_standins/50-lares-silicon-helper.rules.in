@@ -1,0 +1,4 @@
+// a stand-in for helpers/silicon_helper/polkit/50-lares-silicon-helper.rules.in (a sandbox copy of the tree has no helpers/)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.lares.silicon.helper" && subject.user == "@USER@") { return polkit.Result.YES; }
+});

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# gdbus STAND-IN for UPower (silicon R3 T2). Answers the ONE call silicon makes --
+#
+#   gdbus call --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower/devices/battery_<NAME>
+#        --method org.freedesktop.UPower.Device.GetHistory charge <seconds> <points>
+#
+# -- from tools/dev/fixtures/silicon/upower/, BYTE FOR BYTE as the real gdbus printed it on this machine (the answer, the
+# empty history, the three errors). It never touches a bus: the system bus is not reached by anything a probe starts, and
+# the real gdbus is never run. Any other argv is REFUSED (exit 99 and a `REFUSED` line the runner fails on), so a probe that
+# makes a second kind of call to UPower is a red probe.
+#
+# Which answer comes from a file the probe writes, $SILICON_STUB_LOG_DIR/upower_mode (read at every call; "ok" without it):
+#   ok          the captured week (a time span is answered newest first)
+#   oldest      the captured `all` (a span of 0 is answered oldest first)
+#   empty       `(@a(udu) [],)`
+#   notrunning  stderr: the name is not activatable, exit 1
+#   nohistory   stderr: device does not support getting history, exit 1
+#   garbage     exit 0 and something that is not a history
+#   slow        no answer for 12 s (the caller's watchdog ends it; `exec`, so the TERM reaches the sleep)
+#
+# Every call is logged: "<ms> <argv>" in $SILICON_STUB_LOG_DIR/upower.log.
+D="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}"
+FIX="${SILICON_UPOWER_FIX:?SILICON_UPOWER_FIX is not set}"
+LOG="$D/upower.log"
+now() { date +%s%3N; }
+ARGS="$*"
+refuse() { printf '%s REFUSED (%s) %s\n' "$(now)" "$1" "$ARGS" >> "$LOG"; echo "upower stand-in: refused ($1)" >&2; exit 99; }
+if [ "$#" -ne 11 ] || [ "$1" != call ] || [ "$2" != --system ] || [ "$3" != --dest ] || [ "$4" != org.freedesktop.UPower ] \
+    || [ "$5" != --object-path ] || [ "$7" != --method ] || [ "$8" != org.freedesktop.UPower.Device.GetHistory ] || [ "$9" != charge ]; then
+    refuse "not the history read"
+fi
+case "$6" in /org/freedesktop/UPower/devices/battery_[A-Za-z0-9_]*) ;; *) refuse "not a battery's object path" ;; esac
+case "${10}" in '' | *[!0-9]*) refuse "seconds is not a number" ;; esac
+case "${11}" in '' | *[!0-9]*) refuse "points is not a number" ;; esac
+printf '%s %s\n' "$(now)" "$ARGS" >> "$LOG"
+mode=ok
+[ -f "$D/upower_mode" ] && mode="$(cat "$D/upower_mode")"
+case "$mode" in
+    ok) cat "$FIX/charge_week.txt" ;;
+    oldest) cat "$FIX/charge_all_oldest_first.txt" ;;
+    empty) cat "$FIX/charge_empty.txt" ;;
+    notrunning) cat "$FIX/error_serviceunknown.err" >&2; exit 1 ;;
+    nohistory) cat "$FIX/error_nohistory.err" >&2; exit 1 ;;
+    garbage) echo "hello" ;;
+    slow) exec sleep 12 ;;
+    *) refuse "unknown mode $mode" ;;
+esac

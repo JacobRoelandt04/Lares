@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# nvidia-smi STAND-IN: logs EVERY call with its time (the probe proves none happens while the dGPU has
+# no user: asking the real one wakes the card) and answers the one CSV line the readout asks for.
+# The probe changes the answer by writing $SILICON_STUB_LOG_DIR/smi.csv.
+D="${SILICON_STUB_LOG_DIR:?SILICON_STUB_LOG_DIR is not set}"
+printf '%s %s\n' "$(date +%s%3N)" "$*" >> "$D/nvidia-smi.log"
+if [ -s "$D/smi.csv" ]; then cat "$D/smi.csv"; else echo "37, 52, 28.40, 2048, 8188"; fi

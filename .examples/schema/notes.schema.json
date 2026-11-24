@@ -1,0 +1,58 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "notes.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "root": {
+   "type": "string",
+   "default": "~/Documents/Notes",
+   "x-wants": "a path",
+   "description": "The folder the notes are in. ~ is your home. Read as the shell starts. (The wiki's \"Save to note\" is wiki.jsonc \"notesRoot\".)\n\nTakes a path. Default: \"~/Documents/Notes\". Read as the shell starts."
+  },
+  "openAt": {
+   "enum": [
+    "last",
+    "root",
+    "new"
+   ],
+   "default": "last",
+   "x-wants": "\"last\", \"root\" or \"new\"",
+   "description": "What the popup opens on: \"last\" (where you left it, within a session) | \"root\" (the tiles) | \"new\" (a new note, the cursor in it).\n\nTakes \"last\", \"root\" or \"new\". Default: \"last\"."
+  },
+  "escape": {
+   "enum": [
+    "close",
+    "back"
+   ],
+   "default": "close",
+   "x-wants": "\"close\" or \"back\"",
+   "description": "Escape in an open note: \"close\" (the popup closes) | \"back\" (back to the tiles; Escape there closes).\n\nTakes \"close\" or \"back\". Default: \"close\"."
+  },
+  "confirmDelete": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Deleting a note or a folder asks first (it goes to the trash either way). true | false.\n\nTakes true or false. Default: true."
+  },
+  "newName": {
+   "type": "string",
+   "pattern": "^[^/]+$",
+   "default": "Untitled",
+   "x-wants": "a text like Untitled",
+   "description": "The name of a note that has none.\n\nTakes a text like Untitled. Default: \"Untitled\"."
+  },
+  "linkClick": {
+   "enum": [
+    "ctrl",
+    "click"
+   ],
+   "default": "ctrl",
+   "x-wants": "\"ctrl\" or \"click\"",
+   "description": "A link is opened by \"ctrl\" (Ctrl+click; a plain click puts the cursor there) | \"click\".\n\nTakes \"ctrl\" or \"click\". Default: \"ctrl\"."
+  }
+ }
+}

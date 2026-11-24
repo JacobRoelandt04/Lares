@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Hyprland (Quickshell boot lock)
+Comment=Hyprland, locked by the Quickshell lock before anything starts (qs-shell setup: root step R1)
+Exec=/usr/bin/start-hyprland -- --locked-cmd /usr/local/bin/qs-boot-lock
+Type=Application
+DesktopNames=Hyprland
+Keywords=tiling;wayland;compositor;

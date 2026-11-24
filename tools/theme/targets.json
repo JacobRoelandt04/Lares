@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "options": {
+    "timeoutSec": 20
+  },
+  "targets": [
+    {
+      "name": "lares",
+      "type": "state",
+      "doc": "~/.config/theme/state.json: Theme.qml watches it, so the shell's crossfade starts when it lands (the first target)"
+    },
+    {
+      "name": "vscode",
+      "type": "setting",
+      "needs": ["vscodeTheme"],
+      "file": "${XDG_CONFIG_HOME}/Code/User/settings.json",
+      "key": "workbench.colorTheme",
+      "value": "{{assets.vscodeTheme}}",
+      "doc": "VS Code's workbench.colorTheme (the theme's assets.<mode>.vscodeTheme: a name VS Code has installed), set by an edit of the settings.json TEXT -- the file has comments and a trailing comma, so nothing is parsed and re-written; VS Code applies the change as the file lands -- about 0.4 s later, longer while its window is hidden: the SECOND target, so that it has taken the theme before the curtain shows its hidden window (ThemeControl, the hidden windows). theme-switch.py did this for two years; no file (VS Code not installed) is no failure; nothing is kept for `restore` (it is the user's long-lived file)"
+    },
+    {
+      "name": "wallpaper",
+      "type": "wallpaper",
+      "template": "hyprpaper.conf",
+      "output": "${XDG_CONFIG_HOME}/hypr/hyprpaper.conf",
+      "argv": ["hyprctl", "hyprpaper", "wallpaper", ",{{wallpaperPath}},{{wallpaperFit}}"],
+      "notRunning": "is it running",
+      "doc": "the wallpaper shell.jsonc sets for this theme and mode (theme.wallpapers.<theme>.<light|dark>: a path or a list of paths; theme.wallpaperFit): of a list, one is drawn from the slot's shuffle bag (~/.local/state/theme/wallpaper-bag.json) when the theme, the mode or the Hyprland session changed, else the current pick stays. hyprpaper.conf is written for the daemon's next start and `hyprctl hyprpaper wallpaper` tells the running one (hyprpaper 0.8+; no transition of its own: the shell's crossfade is the transition). Nothing set for the theme and mode is 'skipped'; hyprpaper not running is no failure"
+    },
+    {
+      "name": "yazi",
+      "type": "yazi",
+      "list": "${XDG_STATE_HOME}/theme/wallpapers-active.txt",
+      "config": "${XDG_CONFIG_HOME}/yazi/yazi.toml",
+      "opener": "wallpaper-listed",
+      "doc": "yazi's view of the current theme and mode's wallpapers (tools/theme/yazi/CHEATSHEET.md): the list file the wallpapers.yazi plugin marks files from, and the exact-path open rules between the BEGIN/END marks in yazi.toml's [open] prepend_rules that give those files \"Remove from wallpapers\" (themectl install sets the marks up; without them the rules are 'not set up', no failure)"
+    },
+    {
+      "name": "hyprland",
+      "type": "file",
+      "template": "hyprland-theme.lua",
+      "output": "${XDG_CONFIG_HOME}/hypr/config/theme.lua",
+      "reload": { "argv": ["hyprctl", "eval", "dofile(\"{{output}}\")"], "when": "always", "expect": "^ok", "label": "hyprctl eval dofile" },
+      "include": { "file": "${XDG_CONFIG_HOME}/hypr/hyprland.lua", "pattern": "require\\W+config/theme", "line": "pcall(require, \"config/theme\")   -- after require(\"config/appearance\"); guarded, so a missing file is not an error" },
+      "doc": "window borders, group borders, the shadow colour and Hyprglass's default_theme: a generated .lua, applied live by hyprctl eval (never hyprctl reload); a config.reloaded handler in it says the Hyprglass mode again after plugins.lua"
+    },
+    {
+      "name": "kitty",
+      "type": "file",
+      "template": "kitty-current-theme.conf",
+      "output": "${XDG_CONFIG_HOME}/kitty/current-theme.conf",
+      "reload": { "argv": ["pkill", "-USR1", "-x", "kitty"], "okCodes": [0, 1], "when": "changed", "label": "pkill -USR1 kitty" },
+      "include": { "file": "${XDG_CONFIG_HOME}/kitty/kitty.conf", "pattern": "^\\s*include\\s+current-theme\\.conf\\s*$", "line": "include current-theme.conf" },
+      "doc": "colours, cursor, selection and the 16 ANSI slots; kitty reloads its config on SIGUSR1"
+    },
+    {
+      "name": "btop",
+      "type": "link",
+      "needs": ["btopTheme"],
+      "output": "${XDG_CONFIG_HOME}/btop/themes/current.theme",
+      "target": "{{assets.btopTheme}}",
+      "shipped": "btop",
+      "reload": { "argv": ["pkill", "-USR2", "-x", "btop"], "okCodes": [0, 1], "when": "changed", "label": "pkill -USR2 btop" },
+      "include": { "file": "${XDG_CONFIG_HOME}/btop/btop.conf", "pattern": "^\\s*color_theme\\s*=\\s*\"current\"\\s*$", "line": "color_theme = \"current\"" },
+      "doc": "a theme named current in btop's themes directory, a link to the theme of the mode (assets.btopTheme): btop's stock theme where it ships one that matches (an absolute /usr/share/btop/themes path), else a custom one the repo ships in tools/theme/btop/ (a bare file name, made by tools/theme/pairgen.py), copied next to the link when first used; btop reloads on SIGUSR2"
+    },
+    {
+      "name": "starship",
+      "type": "file",
+      "template": "starship.toml",
+      "output": "${XDG_CONFIG_HOME}/starship.toml",
+      "doc": "the whole prompt config (starship has no include); the symlink into HyprV/starship is replaced by a file themectl owns"
+    },
+    {
+      "name": "libadwaita",
+      "type": "file",
+      "template": "libadwaita-gtk.css",
+      "output": "${XDG_CONFIG_HOME}/gtk-4.0/gtk.css",
+      "doc": "libadwaita's colours: GTK 4's user stylesheet (~/.config/gtk-4.0/gtk.css, loaded over every GTK 4 app) sets libadwaita 1.10's CSS variables (--window-bg-color, --view-bg-color, --accent-bg-color, ...) from the pair's tokens: the surface, the carved list fill, the sunk panel, the exact accent. libadwaita apps (loupe, zenity) ignore the GTK theme, so this is what makes them follow a pair; colours only, no widget restyled; a plain GTK 4 app keeps its GTK theme. Written before the gtk target. What was there first is kept for `restore`"
+    },
+    {
+      "name": "gtk",
+      "type": "gsettings",
+      "needs": ["gtkTheme", "iconTheme"],
+      "keys": [
+        { "schema": "org.gnome.desktop.interface", "key": "gtk-theme", "value": "{{assets.gtkTheme}}" },
+        { "schema": "org.gnome.desktop.interface", "key": "color-scheme", "value": "prefer-{{mode}}" },
+        { "schema": "org.gnome.desktop.interface", "key": "icon-theme", "value": "{{assets.iconTheme}}" }
+      ],
+      "doc": "gsettings: gtk-theme, color-scheme, icon-theme (the theme's assets: GTK takes installed names, not colours). gsettings is the ONE source the desktop follows: the shell reads icon-theme from it when it starts (tools/shell/lares-supervise exports QS_ICON_THEME), GTK apps follow it live"
+    },
+    {
+      "name": "nwg-look",
+      "type": "nwglook",
+      "needs": ["gtkTheme", "iconTheme"],
+      "file": "${XDG_DATA_HOME}/nwg-look/gsettings",
+      "config": "${XDG_CONFIG_HOME}/nwg-look/config",
+      "keys": [
+        { "key": "gtk-theme", "value": "{{assets.gtkTheme}}" },
+        { "key": "icon-theme", "value": "{{assets.iconTheme}}" },
+        { "key": "color-scheme", "value": "prefer-{{mode}}" }
+      ],
+      "off": ["export-gtk4-symlinks"],
+      "doc": "nwg-look in step with the gtk target: its stored settings (what `nwg-look -a` applies) carry the pair's gtk-theme, icon-theme and color-scheme, and its export-gtk4-symlinks is off, so its Apply never replaces ~/.config/gtk-4.0/gtk.css by a link into a GTK theme (the original config is kept for `restore`). Its window shows what gsettings said when it opened: close and reopen it after a switch (doctor says when one is running). No nwg-look files is 'skipped'"
+    },
+    {
+      "name": "gnome-accent",
+      "type": "gnomeAccent",
+      "schema": "org.gnome.desktop.interface",
+      "key": "accent-color",
+      "doc": "libadwaita's accent: gsettings org.gnome.desktop.interface accent-color, the named GNOME accent (blue teal green yellow orange red pink purple slate) nearest by CIEDE2000 to the theme's accent token. for whatever reads that key; libadwaita reads it only when no settings portal answers (this desktop's xdg-desktop-portal-gtk does, without it), and the libadwaita target's stylesheet sets the pair's exact accent over it"
+    },
+    {
+      "name": "evince",
+      "type": "evince",
+      "invertIn": ["dark"],
+      "doc": "Evince (Document Viewer) shows documents with inverted colours in the modes invertIn names: the default for a new document (gsettings org.gnome.Evince.Default inverted-colors), the copy evince keeps per document in its GVfs metadata (metadata::evince::inverted-colors) for every document GTK's recent list names, and every evince window open now (its inverted-colors window action over D-Bus). Skipped when evince is not installed"
+    },
+    {
+      "name": "gtk3-ini",
+      "type": "ini",
+      "needs": ["gtkTheme", "iconTheme"],
+      "file": "${XDG_CONFIG_HOME}/gtk-3.0/settings.ini",
+      "section": "Settings",
+      "keys": [
+        { "key": "gtk-theme-name", "value": "{{assets.gtkTheme}}" },
+        { "key": "gtk-icon-theme-name", "value": "{{assets.iconTheme}}" }
+      ],
+      "doc": "the same two names in GTK 3's settings.ini, for a program started without a settings daemon (the file is edited in place: its other keys and comments stay)"
+    },
+    {
+      "name": "gtk4-ini",
+      "type": "ini",
+      "needs": ["gtkTheme", "iconTheme"],
+      "file": "${XDG_CONFIG_HOME}/gtk-4.0/settings.ini",
+      "section": "Settings",
+      "keys": [
+        { "key": "gtk-theme-name", "value": "{{assets.gtkTheme}}" },
+        { "key": "gtk-icon-theme-name", "value": "{{assets.iconTheme}}" }
+      ],
+      "doc": "the same in GTK 4's settings.ini"
+    },
+    {
+      "name": "fastfetch",
+      "type": "link",
+      "needs": ["fastfetchLogo"],
+      "output": "${XDG_CONFIG_HOME}/fastfetch/archlogo_current.png",
+      "target": "{{assets.fastfetchLogo}}",
+      "shipped": "fastfetch",
+      "include": { "file": "${XDG_CONFIG_HOME}/fastfetch/config.jsonc", "pattern": "archlogo_current\\.png", "line": "\"source\": \"~/.config/fastfetch/archlogo_current.png\"" },
+      "doc": "archlogo_current.png -> the theme's logo for this mode: the user's own (eva, everbox) or one the repo ships in tools/theme/fastfetch/ (the line logo in the mode's accent, made by tools/theme/pairgen.py --logos), copied next to the link when first used"
+    },
+    {
+      "name": "hyprlock",
+      "type": "file",
+      "template": "hyprlock-colors.conf",
+      "output": "${XDG_CONFIG_HOME}/hypr/hyprlock-colors.conf",
+      "include": { "file": "${XDG_CONFIG_HOME}/hypr/hyprlock.conf", "pattern": "^\\s*source\\s*=\\s*.*hyprlock-colors\\.conf", "line": "source = ~/.config/hypr/hyprlock-colors.conf" },
+      "doc": "the fallback lock's colour variables ($FIELD, $BORDER, ...), until the shell's own lockscreen is deployed"
+    },
+    {
+      "name": "windows-vm",
+      "type": "vmshare",
+      "compose": "${XDG_CONFIG_HOME}/windows/compose.yaml",
+      "guest": "/shared",
+      "file": ".theme/mode",
+      "text": "{{mode}}\n",
+      "doc": "the word light or dark in the folder the Windows VM shares (the compose file's volume at /shared), for the small agent inside it (windows/ThemeSync.cs, windows/INSTALL.md) to apply. It works with the VM off, and no VM here is 'skipped'"
+    }
+  ]
+}

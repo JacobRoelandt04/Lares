@@ -1,0 +1,94 @@
+{
+	"type" : "a{sv}",
+	"data" : [
+		{
+			"Address" : {
+				"type" : "s",
+				"data" : "02:AE:00:00:00:2A"
+			},
+			"AddressType" : {
+				"type" : "s",
+				"data" : "public"
+			},
+			"Name" : {
+				"type" : "s",
+				"data" : "laptop-hotspot"
+			},
+			"Alias" : {
+				"type" : "s",
+				"data" : "laptop-hotspot"
+			},
+			"Class" : {
+				"type" : "u",
+				"data" : 0
+			},
+			"Connectable" : {
+				"type" : "b",
+				"data" : false
+			},
+			"Powered" : {
+				"type" : "b",
+				"data" : false
+			},
+			"PowerState" : {
+				"type" : "s",
+				"data" : "off-blocked"
+			},
+			"Discoverable" : {
+				"type" : "b",
+				"data" : false
+			},
+			"DiscoverableTimeout" : {
+				"type" : "u",
+				"data" : 180
+			},
+			"Pairable" : {
+				"type" : "b",
+				"data" : false
+			},
+			"PairableTimeout" : {
+				"type" : "u",
+				"data" : 0
+			},
+			"Discovering" : {
+				"type" : "b",
+				"data" : false
+			},
+			"UUIDs" : {
+				"type" : "as",
+				"data" : [
+					"60d825f8-1d39-5201-943c-a5b7e560e1df",
+					"e3336ec7-dd0a-57ba-925f-23aadb5ffdc4",
+					"ea69ec14-d627-5b7e-872d-1497cd97e969",
+					"4f8039a5-d453-5d9f-8087-93478ef42c51",
+					"3b6144c4-9671-5cf9-9522-c7bc524905d3",
+					"37264e26-7d13-5db5-ad25-3ca8feac7e09",
+					"62fe3c6b-48d0-5127-bdef-ef3913620f00",
+					"63daf4b1-c44b-5514-8d44-25ffec411762",
+					"2bf092b4-65f0-50bc-b219-e8fe9c4bda9c",
+					"9ce88593-bd2b-5756-a592-151e879c12ef",
+					"67d7d6d4-1358-548f-831b-3e10abc24fb3"
+				]
+			},
+			"Modalias" : {
+				"type" : "s",
+				"data" : "usb:v1D6Bp0246d0558"
+			},
+			"Roles" : {
+				"type" : "as",
+				"data" : [
+					"central",
+					"peripheral"
+				]
+			},
+			"Manufacturer" : {
+				"type" : "q",
+				"data" : 2
+			},
+			"Version" : {
+				"type" : "y",
+				"data" : 13
+			}
+		}
+	]
+}

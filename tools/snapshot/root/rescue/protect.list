@@ -1,0 +1,11 @@
+# Paths a restore keeps as they are NOW (contract docs/contracts/snapshots.md section 3). One absolute path a line; a directory
+# protects everything below it. Anything not listed here is overwritten or deleted to match the snapshot.
+/usr/local/lib/lares/snapshot
+/etc/pacman.d/hooks/00-lares-snapshot.hook
+/etc/pacman.d/hooks/zz-lares-snapshot-done.hook
+/etc/grub.d/45_lares_rescue
+/etc/lares
+/etc/fstab
+/etc/crypttab
+/usr/share/polkit-1/actions/org.lares.snapshot.policy
+/etc/polkit-1/rules.d/50-lares-snapshot.rules

@@ -1,0 +1,42 @@
+Script started on 2026-11-22 16:49:17+00:00 [COMMAND="stty cols 200 rows 50; python3 /home/vmuser/qs/tools/snapshot/lares-snapshot undo 5ef30ea6" <not executed on terminal>]
+]3008;start=60adfb7198e84ad7978f90bec8e52e6e;user=vmuser;hostname=lares-vm;machineid=96770bd41af54521ba84afafc9218013;bootid=7f16cf6c35be45eb8ea41001956caee2;pid=28669;pidfdid=28670;comm=sudo;targetuser=root;type=session\[?25lloading packages...
+resolving dependencies...
+looking for conflicting packages...
+
+Packages (1) tzdata-2026f-1
+
+Total Installed Size:  1.66 MiB
+Net Upgrade Size:      0.00 MiB
+
+:: Proceed with installation? [Y/n] [?25hy
+y
+[?25l(0/1) checking keys in keyring                                                                                           [------------------------------------------------------------------------]   0%
+(1/1) checking keys in keyring                                                                                           [########################################################################] 100%
+
+(0/1) checking package integrity                                                                                         [------------------------------------------------------------------------]   0%
+(1/1) checking package integrity                                                                                         [########################################################################] 100%
+
+(0/1) loading package files                                                                                              [------------------------------------------------------------------------]   0%
+(1/1) loading package files                                                                                              [########################################################################] 100%
+
+(0/1) checking for file conflicts                                                                                        [------------------------------------------------------------------------]   0%
+(1/1) checking for file conflicts                                                                                        [########################################################################] 100%
+
+(0/1) checking available disk space                                                                                      [------------------------------------------------------------------------]   0%
+(1/1) checking available disk space                                                                                      [########################################################################] 100%
+
+:: Running pre-transaction hooks...
+(1/1) Making a system snapshot if this update asks for one...
+lares-snapshot: start 1 package
+lares-snapshot: progress 15
+lares-snapshot: progress 80
+lares-snapshot: done e7bc2ca3 added=11715 seconds=3
+:: Processing package changes...
+(1/1) upgrading tzdata                                                                                                   [------------------------------------------------------------------------]   0%
+(1/1) upgrading tzdata                                                                                                   [########################################################################] 100%
+
+:: Running post-transaction hooks...
+(1/2) Arming ConditionNeedsUpdate...
+(2/2) Recording what the update changed...
+[?25h]3008;end=60adfb7198e84ad7978f90bec8e52e6e\
+Script done on 2026-11-22 16:49:35+00:00 [COMMAND_EXIT_CODE="0"]

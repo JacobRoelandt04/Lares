@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""A stand-in for aft-mtp-mount: logs its argv; with $BRIDGE_MOUNTINFO (the probe's fake mount table) it writes a line for the mount
+point, stays alive until TERM and removes the line then -- the way a foreground FUSE mount comes and goes."""
+import os
+import signal
+import sys
+import time
+
+a = sys.argv[1:]
+if os.environ.get("BRIDGE_STUB_LOG"):
+    with open(os.environ["BRIDGE_STUB_LOG"], "a") as f:
+        f.write("aft-mtp-mount " + " ".join(a) + "\n")
+mi, point = os.environ.get("BRIDGE_MOUNTINFO", ""), a[-1] if a else ""
+line = "41 29 0:40 / %s rw,nosuid,nodev,relatime shared:2 - fuse aft-mtp-mount rw,user_id=1000,group_id=1000\n" % point
+
+
+def edit(add):
+    if not mi:
+        return
+    try:
+        cur = open(mi).read()
+    except OSError:
+        cur = ""
+    cur = cur.replace(line, "")
+    open(mi + ".tmp", "w").write(cur + (line if add else ""))
+    os.replace(mi + ".tmp", mi)
+
+
+def end(*_):
+    edit(False)
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, end)
+edit(True)
+print("Device: Test Phone", flush=True)
+while True:
+    time.sleep(3600)

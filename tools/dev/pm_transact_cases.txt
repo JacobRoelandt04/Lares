@@ -1,0 +1,44 @@
+# pm_transact_cases.txt -- the ONE table of "is this a package transaction?" that tools/shell/lares (`pm_args_transact`, the restart guard) and
+# modules/common/system/PackageJobRules.js (`transacts`, the idle hold for package jobs) are both held to. A change to either rule is a change here
+# first; tools/dev/idle_auto_causes_probe.sh runs both over it.
+# <yes|no> TAB <pacman / yay arguments, split on single spaces>
+yes	-S foo
+yes	-Syu
+yes	-Su
+yes	-Sy
+yes	-Syyu
+yes	-Sdd foo
+yes	-U /tmp/foo-1-1-x86_64.pkg.tar.zst
+yes	-Rns foo
+yes	-R foo
+yes	--sync foo
+yes	--sync --refresh --sysupgrade
+yes	--upgrade /tmp/foo.pkg.tar.zst
+yes	--remove foo
+yes	--noconfirm -S foo
+yes	--sudo /home/u/helpers/sudo-askpass -Syu --sudoloop
+no	-Ss foo
+no	-Si foo
+no	-Sl
+no	-Sg
+no	-Sp foo
+no	--sync --search foo
+no	--sync --info foo
+no	--sync --list core
+no	--sync --groups
+no	--sync --print foo
+no	-Q
+no	-Qu
+no	-Qua
+no	-Qi foo
+no	-F foo
+no	-T foo
+no	-V
+no	-D --asdeps foo
+no	-Sy --dbpath /tmp/checkup-db-1000/
+no	-Sy --config /tmp/c --dbpath=/tmp/checkup-db-1000/
+no	--dbpath /tmp/x -Sy
+no	-b /tmp/x -Sy
+no	-U --dbpath /tmp/x foo
+no	--version
+no	

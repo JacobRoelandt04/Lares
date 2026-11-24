@@ -1,0 +1,18 @@
+# What tools/publish/privacy_check.py may find and let through: `rule<TAB>path glob<TAB>value`, the value as found
+# (case-insensitive), `*` for any rule. Only public things belong here; every line says why above it.
+
+# PipeWire's own module records (pw-dump) name their upstream authors.
+email	tools/dev/fixtures/airplay/*	wim.taymans@gmail.com
+email	tools/dev/fixtures/airplay/*	george.kiagiadakis@collabora.com
+
+# The owner's name where a public project carries it: the licence, the README's credit, the plugin's author field.
+term	LICENSE	Jacob
+term	README.md	Jacob
+term	tools/hypr-group-tabs/hyprpm.toml	Jacob
+term	tools/hypr-group-tabs/main.cpp	Jacob
+
+# The quick answers' city -> time zone table names cities, the owner's among many.
+term	tools/launcher/answers.py	ghent
+
+# The leak check's own definition of global IPv6 (2000::/3).
+ipv6	tools/publish/privacy_check.py	2000::

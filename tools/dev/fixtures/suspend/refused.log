@@ -1,0 +1,31 @@
+# the desktop, 2026-01-15: spd5118 refuses, systemd tries s2idle, refused again (journalctl -o short-precise, the lines of the sleep only)
+Jan 15 20:06:02.349825 host kernel: PM: suspend entry (deep)
+Jan 15 20:06:13.142604 host kernel: Freezing user space processes
+Jan 15 20:06:13.142694 host kernel: Freezing user space processes completed (elapsed 0.001 seconds)
+Jan 15 20:06:13.142710 host kernel: OOM killer disabled.
+Jan 15 20:06:13.142724 host kernel: Freezing remaining freezable tasks
+Jan 15 20:06:13.142737 host kernel: Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+Jan 15 20:06:13.142751 host kernel: printk: Suspending console(s) (use no_console_suspend to debug)
+Jan 15 20:06:13.142763 host kernel: spd5118 12-0053: PM: dpm_run_callback(): spd5118_suspend [spd5118] returns -6
+Jan 15 20:06:13.142957 host kernel: spd5118 12-0053: PM: failed to suspend async: error -6
+Jan 15 20:06:13.143261 host kernel: spd5118 12-0051: PM: dpm_run_callback(): spd5118_suspend [spd5118] returns -6
+Jan 15 20:06:13.143381 host kernel: spd5118 12-0051: PM: failed to suspend async: error -6
+Jan 15 20:06:13.143496 host kernel: usbhid 1-9.4:1.2: suspend error -5
+Jan 15 20:06:13.143680 host kernel: PM: Some devices failed to suspend, or early wake event detected
+Jan 15 20:06:13.143925 host kernel: OOM killer enabled.
+Jan 15 20:06:13.161828 host kernel: PM: suspend exit
+Jan 15 20:06:13.161862 host kernel: PM: suspend entry (s2idle)
+Jan 15 20:06:23.943623 host kernel: Freezing user space processes
+Jan 15 20:06:23.943799 host kernel: Freezing user space processes completed (elapsed 0.001 seconds)
+Jan 15 20:06:23.943886 host kernel: OOM killer disabled.
+Jan 15 20:06:23.943934 host kernel: Freezing remaining freezable tasks
+Jan 15 20:06:23.943987 host kernel: Freezing remaining freezable tasks completed (elapsed 0.130 seconds)
+Jan 15 20:06:23.944051 host kernel: printk: Suspending console(s) (use no_console_suspend to debug)
+Jan 15 20:06:23.944979 host kernel: spd5118 12-0053: PM: dpm_run_callback(): spd5118_suspend [spd5118] returns -6
+Jan 15 20:06:23.945534 host kernel: spd5118 12-0053: PM: failed to suspend async: error -6
+Jan 15 20:06:23.946238 host kernel: spd5118 12-0051: PM: dpm_run_callback(): spd5118_suspend [spd5118] returns -6
+Jan 15 20:06:23.946815 host kernel: spd5118 12-0051: PM: failed to suspend async: error -6
+Jan 15 20:06:23.947412 host kernel: usbhid 1-9.4:1.2: suspend error -5
+Jan 15 20:06:23.948194 host kernel: PM: Some devices failed to suspend, or early wake event detected
+Jan 15 20:06:23.949279 host kernel: OOM killer enabled.
+Jan 15 20:06:23.963972 host kernel: PM: suspend exit

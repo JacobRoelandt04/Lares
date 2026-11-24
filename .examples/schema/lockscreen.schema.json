@@ -1,0 +1,255 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "lockscreen.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "veil": {
+   "enum": [
+    "random",
+    "relief",
+    "gooey",
+    "dimples",
+    "paper",
+    "louvres",
+    "keycaps",
+    "dials"
+   ],
+   "default": "random",
+   "x-wants": "\"random\", \"relief\", \"gooey\", \"dimples\", \"paper\", \"louvres\", \"keycaps\" or \"dials\"",
+   "description": "The veil over the locked desktop: \"random\" (the next of \"veils\") or one veil by name:\n\"relief\" | \"gooey\" | \"dimples\" | \"paper\" | \"louvres\" | \"keycaps\" | \"dials\".\nA name that is no veil acts as \"random\" over the default list. Default \"random\".\n\nTakes \"random\", \"relief\", \"gooey\", \"dimples\", \"paper\", \"louvres\", \"keycaps\" or \"dials\". Default: \"random\"."
+  },
+  "veils": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "relief",
+     "gooey",
+     "dimples",
+     "paper",
+     "louvres",
+     "keycaps",
+     "dials"
+    ],
+    "x-wants": "\"relief\", \"gooey\", \"dimples\", \"paper\", \"louvres\", \"keycaps\" or \"dials\""
+   },
+   "default": [
+    "relief",
+    "gooey",
+    "dimples",
+    "paper",
+    "louvres",
+    "keycaps",
+    "dials"
+   ],
+   "x-wants": "a list of words (\"relief\", \"gooey\", \"dimples\", \"paper\", \"louvres\", \"keycaps\" or \"dials\")",
+   "description": "The veils \"random\" draws from, in a shuffle bag: each shows once per round and two locks in a row differ.\nAny of the seven names above; a name that is no veil is skipped. Default: all seven.\n\nTakes a list of words (\"relief\", \"gooey\", \"dimples\", \"paper\", \"louvres\", \"keycaps\" or \"dials\"). Default: [\"relief\",\"gooey\",\"dimples\",\"paper\",\"louvres\",\"keycaps\",\"dials\"]."
+  },
+  "idleSeconds": {
+   "type": "number",
+   "minimum": 0.1,
+   "default": 30,
+   "x-wants": "a number, 0.1 and up",
+   "description": "Seconds without a key or pointer motion before the veil eases to still and stops drawing (a face scan then\nwaits for the next input). Default 30; a number above 0.\n\nTakes a number, 0.1 and up. Default: 30."
+  },
+  "fps": {
+   "type": "number",
+   "minimum": 1,
+   "default": 60,
+   "x-wants": "a number, 1 and up",
+   "description": "The veil's frame rate. Default 60; 1 and up.\n\nTakes a number, 1 and up. Default: 60."
+  },
+  "batteryFpsRatio": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1,
+   "default": 0.5,
+   "x-wants": "a number 0 .. 1",
+   "description": "On battery the frame rate is fps x this (never below 1). Default 0.5; a factor, 0 .. 1.\n\nTakes a number 0 .. 1. Default: 0.5."
+  },
+  "blurInMs": {
+   "type": "number",
+   "minimum": 1,
+   "default": 250,
+   "x-wants": "a number, 1 and up",
+   "description": "Milliseconds over which the still of the desktop blurs to full strength as the lock starts. Default 250; 1 and up.\n\nTakes a number, 1 and up. Default: 250."
+  },
+  "veilRiseMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 1200,
+   "x-wants": "a number, 0 and up",
+   "description": "Milliseconds over which the veil rises over the blurred desktop. Default 1200; 0 and up.\n\nTakes a number, 0 and up. Default: 1200."
+  },
+  "unlockHoldMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 600,
+   "x-wants": "a number, 0 and up",
+   "description": "After a successful unlock the veil holds at full presence this many milliseconds before it fades. Default 600; 0 and up.\n\nTakes a number, 0 and up. Default: 600."
+  },
+  "unlockMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 400,
+   "x-wants": "a number, 0 and up",
+   "description": "Then the lock fades to the live desktop over this many milliseconds; the session is released by\nunlockHoldMs + unlockMs + 400 at the latest. Default 400; 0 and up.\n\nTakes a number, 0 and up. Default: 400."
+  },
+  "face": {
+   "enum": [
+    "auto",
+    "on",
+    "off"
+   ],
+   "default": "auto",
+   "x-wants": "\"auto\", \"on\" or \"off\"",
+   "description": "Face unlock (howdy): \"auto\" uses it when howdy is set up and stays quiet otherwise, \"on\" says what is missing when\nit is not, \"off\" never scans. Default \"auto\".\n\nTakes \"auto\", \"on\" or \"off\". Default: \"auto\"."
+  },
+  "keyringPassword": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "true: no face unlock while the login keyring is locked, so the password (which also opens the keyring) is asked\nonce per boot. false: the face is offered whatever the keyring. Default true.\n\nTakes true or false. Default: true."
+  },
+  "faceRearmCooldownMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 5000,
+   "x-wants": "a number, 0 and up",
+   "description": "Milliseconds between the end of one face scan and the start of the next. Default 5000; 0 and up.\n\nTakes a number, 0 and up. Default: 5000."
+  },
+  "fallbackDelayMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 2000,
+   "x-wants": "a number, 0 and up",
+   "description": "When the shell has not shown its lock popup on a screen within this many milliseconds, the lock draws its own\ncard there. Default 2000; 0 and up.\n\nTakes a number, 0 and up. Default: 2000."
+  },
+  "bootFallbackDelayMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 30000,
+   "x-wants": "a number, 0 and up",
+   "description": "At boot (the lock SDDM starts, before the shell) the card waits this long instead: the veil alone until the shell's\npopup comes; a wrong password brings the card at once. Default 30000 (lares's own start budget); 0 and up.\n\nTakes a number, 0 and up. Default: 30000."
+  },
+  "handoverGraceMs": {
+   "type": "number",
+   "minimum": 0,
+   "default": 3000,
+   "x-wants": "a number, 0 and up",
+   "description": "The card goes when the shell names its bar on the screen; if the shell's popup has not followed within this many\nmilliseconds the card comes back. Default 3000; 0 and up.\n\nTakes a number, 0 and up. Default: 3000."
+  },
+  "greetingName": {
+   "type": "string",
+   "default": "",
+   "x-wants": "a text",
+   "description": "The name in the greeting (\"Good morning, <name>\"). \"\" = the first word of the account's full name (the lock's own card, when the shell\nis not there, then greets without a name). Default \"\".\n\nTakes a text. Default: \"\"."
+  },
+  "popupBand": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "battery",
+     "weather",
+     "updates",
+     "screen"
+    ],
+    "x-wants": "\"battery\", \"weather\", \"updates\" or \"screen\""
+   },
+   "default": [
+    "battery",
+    "weather",
+    "updates",
+    "screen"
+   ],
+   "x-wants": "a list of words (\"battery\", \"weather\", \"updates\" or \"screen\")",
+   "description": "---- what the popup of a locked screen shows (the shell's, which follows a save at once) ---------------------------------\nThe band under the clock, in order: any of \"battery\", \"weather\", \"updates\", \"screen\" (screen time). [] = no band.\n\nTakes a list of words (\"battery\", \"weather\", \"updates\" or \"screen\"). Default: [\"battery\",\"weather\",\"updates\",\"screen\"]."
+  },
+  "popupFoot": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "music",
+     "wiki"
+    ],
+    "x-wants": "\"music\" or \"wiki\""
+   },
+   "default": [
+    "music",
+    "wiki"
+   ],
+   "x-wants": "a list of words (\"music\" or \"wiki\")",
+   "description": "What stands at its foot: the first of these that has something to show (\"music\", \"wiki\"). [] = nothing.\n\nTakes a list of words (\"music\" or \"wiki\"). Default: [\"music\",\"wiki\"]."
+  },
+  "greeting": {
+   "enum": [
+    "boot",
+    "always",
+    "never"
+   ],
+   "default": "boot",
+   "x-wants": "\"boot\", \"always\" or \"never\"",
+   "description": "The greeting (\"Good morning, <name>\"): \"boot\" (the first lock after the boot) | \"always\" | \"never\".\n\nTakes \"boot\", \"always\" or \"never\". Default: \"boot\"."
+  },
+  "faceWhen": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "boot",
+     "resume",
+     "return",
+     "ask"
+    ],
+    "x-wants": "\"boot\", \"resume\", \"return\" or \"ask\""
+   },
+   "default": [
+    "boot",
+    "resume",
+    "return",
+    "ask"
+   ],
+   "x-wants": "a list of words (\"boot\", \"resume\", \"return\" or \"ask\")",
+   "description": "When a face scan starts by itself: any of \"boot\" (the boot lock), \"resume\" (after a suspend), \"return\" (you are back at a lock that went\nidle), and \"ask\" (Enter on an empty field, or the first key) -- \"ask\" is always there. Default all four.\n\nTakes a list of words (\"boot\", \"resume\", \"return\" or \"ask\"). Default: [\"boot\",\"resume\",\"return\",\"ask\"]."
+  },
+  "lockedControls": {
+   "type": "array",
+   "items": {
+    "enum": [
+     "idle",
+     "volume",
+     "player"
+    ],
+    "x-wants": "\"idle\", \"volume\" or \"player\""
+   },
+   "default": [
+    "idle",
+    "volume",
+    "player"
+   ],
+   "x-wants": "a list of words (\"idle\", \"volume\" or \"player\")",
+   "description": "What takes the pointer while the session is locked: any of \"idle\" (the idle reel), \"volume\" (the pill), \"player\" (its buttons on the popup).\n\nTakes a list of words (\"idle\", \"volume\" or \"player\"). Default: [\"idle\",\"volume\",\"player\"]."
+  },
+  "obscure": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "class": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "title": {
+      "type": "string",
+      "x-wants": "a text"
+     }
+    }
+   },
+   "x-wants": "a list of objects",
+   "description": "Windows covered by a placeholder while locked: a list of { \"class\": \"<regex>\", \"title\": \"<regex>\" }. A window on a\nscreen's visible workspace is covered when every key given matches (a JavaScript regex, not anchored: add ^ and $;\na \"(?i)\" prefix makes it case-insensitive). The two below apply while there is no lockscreen.jsonc; built in: [].\n\nTakes a list of objects."
+  }
+ }
+}

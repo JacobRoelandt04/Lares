@@ -1,0 +1,5 @@
+captured: 2026-10-03T17:14:54+02:00
+kernel:   7.2.7-arch1-1
+board:    N6506MV / bios N6506MV.313
+files:    504 copied, 9 unreadable (created empty, mode kept in modes.txt)
+links:    30

@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# qs-shell-supervise -- the shell's supervisor. `qs-shell start` (what autostart.lua runs at login) starts it as a child of the
+# COMPOSITOR (hyprctl dispatch hl.dsp.exec_cmd), and nothing else should: it takes everything from <state dir>/supervise.env,
+# which `start` writes.
+#
+#   qs-shell-supervise --run <state dir>
+#
+# It keeps these promises while it runs:
+#   1. THE SHELL STAYS UP. `quickshell -n -p <deploy dir>/current/shell.qml` runs with QS_DISABLE_FILE_WATCHER=1 (an edit never
+#      reloads it; a deploy restarts it) and QS_DISABLE_CRASH_HANDLER=1 (with the handler on, a crash re-execs the same pid,
+#      invisibly here, and dumps a core), its output appended to <state dir>/shell.log and its pid written to <state dir>/pid by
+#      the `sh` that then execs quickshell (exec keeps the pid). A shell that exits is started again after a backoff that doubles
+#      (BACKOFF, 2*BACKOFF, ...). Every exit counts: 139 / 134 are crashes, 255 is "does not load" OR "crashed within 10 s" (the
+#      status cannot tell).
+#   2. A CRASH LOOP IS SAID ONCE AND TRIED SLOWER. More than RESTART_LIMIT exits inside RESTART_WINDOW seconds are a crash loop:
+#      ONE notice through Hyprland's own notification (`hyprctl notify`, an error for 30 s: the shell IS the notification daemon,
+#      so notify-send would have nobody to show it) -- the shell keeps crashing, `qs-shell log` says why, and a system update
+#      that is running has nobody to answer its sudo -- and from then on one try every SLOW_BACKOFF seconds, doubling up to
+#      SLOW_MAX. A shell that stays up STABLE seconds ends the loop (the next exits are counted afresh, and a new loop is said
+#      again); so does a restart asked by `qs-shell restart` (Super+Shift+F12), which also cuts a slow wait short. Nothing else
+#      is started in the shell's place.
+#   3. THE LOG STAYS SMALL. The state dir is on /run/user, a small tmpfs, and a shell that floods its log (a warning per frame)
+#      must not fill it: over LOG_MAX bytes (100 MiB; QS_SHELL_LOG_MAX) shell.log is cut to its last tenth, checked every 10 s.
+#   4. IT STOPS WHEN ASKED: TERM (also the stop file <state dir>/stop, and the state dir gone) stops the shell it started --
+#      `quickshell kill --pid` first (the shell quits itself, status 0), SIGTERM (143) when it stays, KILL last -- and exits.
+#      USR1 restarts the shell the same way, not counted as a crash; when <state dir>/switch names a commit, the restart points
+#      <deploy dir>/current at it BETWEEN the stop and the start (`qs-shell deploy` / `apply`): the shell is given the link's
+#      path, so its shellDir is the link, and a file read lazily across the switch would mix two commits.
+#   5. THE CACHES STAY SMALL. SWEEP_FIRST_MS (60 s) after it starts and then every 24 h it runs `qs-sweep --daily` (the retention
+#      sweep: tools/shell/qs-sweep, the table of what may age out; docs/shell.md "Retention"), niced and detached: one fork a
+#      day, no Timer in the shell. The tool is the supervisor's own commit's (`${SELF%/*}/qs-sweep`), else the deployed
+#      `current`'s. A running supervisor keeps its old bytes: a deploy restarts the shell, not the supervisor, so a change here
+#      first acts at the next login (or after the supervisor is stopped and `qs-shell start` runs).
+#
+# It writes <state dir>/supervise.pid, takes <state dir>/supervise.lock (one supervisor), and logs to <state dir>/supervise.log
+# and ~/.local/state/qs-shell/qs-shell.log. Core dumps are off.
+# shellcheck source-path=SCRIPTDIR
+set -u
+RUN=""
+while [ $# -gt 0 ]; do
+    case $1 in
+        --run) RUN=${2:-}; shift ;;
+        *) echo "qs-shell-supervise: unknown argument $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+[ -n "$RUN" ] && [ -r "$RUN/supervise.env" ] || { echo "qs-shell-supervise: no $RUN/supervise.env -- only 'qs-shell start' starts this" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$RUN/supervise.env"
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+# shellcheck source=qs-shell-lib.sh
+. "${SELF%/*}/qs-shell-lib.sh"
+LOG_TAG=supervise
+LOG_FILES=("$RUN/supervise.log" "$PERSIST/qs-shell.log")
+
+ulimit -c 0
+exec >> "$RUN/supervise.log" 2>&1
+exec 9> "$RUN/supervise.lock"
+flock -n 9 || exit 0
+echo $$ > "$RUN/supervise.pid"
+
+TICK=0.5
+STOP=0 RESTART_REQ=0 SHELL_PID="" STARTED_MS=0 SLOW=0 SLOW_DELAY_MS=0
+CRASHES=()
+BACKOFF_MS=$(to_ms "$BACKOFF") SLOW_BACKOFF_MS=$(to_ms "$SLOW_BACKOFF") SLOW_MAX_MS=$(to_ms "$SLOW_MAX") STABLE_MS=$(to_ms "$STABLE")
+LOGCAP_EVERY_MS=$(to_ms "${LOGCAP_EVERY:-10}") LOG_MAX=${LOG_MAX:-104857600}
+NEXT_LOGCAP=$(( $(now_ms) + LOGCAP_EVERY_MS ))
+SWEEP_FIRST_MS=60000 SWEEP_EVERY_MS=86400000
+NEXT_SWEEP=$(( $(now_ms) + SWEEP_FIRST_MS ))
+
+# ---- the shell --------------------------------------------------------------------------------------
+# The icon theme the desktop uses -- what GTK reports (gsettings, then settings.ini; themectl writes both, Papirus-Light / Papirus-Dark by
+# mode) -- the first of the two that is installed, else nothing (a stale gsettings can name a theme long gone, a Colloid pack). Quickshell
+# takes the icon theme once, at start, from QS_ICON_THEME (the shell has no static pragma, so there is one source), so this is the moment
+# the shell learns it. Papirus-Light and Papirus-Dark share every app icon, which is why a light/dark switch under a running shell moves none.
+shell_icon_theme() {
+    local t d
+    for t in "$(gsettings get org.gnome.desktop.interface icon-theme 2> /dev/null | tr -d "'")" \
+        "$(sed -n 's/^gtk-icon-theme-name=//p' "${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/settings.ini" 2> /dev/null | head -1)"; do
+        [ -n "$t" ] || continue
+        for d in "${XDG_DATA_HOME:-$HOME/.local/share}/icons" "$HOME/.icons" /usr/local/share/icons /usr/share/icons; do
+            [ -f "$d/$t/index.theme" ] && { printf '%s' "$t"; return 0; }
+        done
+    done
+    return 0
+}
+
+start_shell() {   # `env` WITHOUT -i: the shell keeps XDG_RUNTIME_DIR (the system update's askpass socket lives in it)
+    local icons
+    local -a envs=(QS_DISABLE_FILE_WATCHER=1 QS_DISABLE_CRASH_HANDLER=1)
+    icons=$(shell_icon_theme)
+    if [ -n "$icons" ]; then envs+=("QS_ICON_THEME=$icons"); else log "gsettings names no installed icon theme: the shell starts without one (icons fall back)"; fi
+    sh -c 'echo $$ > "$1"; shift; exec env "$@"' \
+        qs-shell-child "$RUN/pid" "${envs[@]}" "$QUICKSHELL" -n -p "$SHELL_QML" >> "$RUN/shell.log" 2>&1 < /dev/null 7<&- 9>&- &
+    SHELL_PID=$!
+    STARTED_MS=$(now_ms)
+    log "the shell started (pid $SHELL_PID${icons:+, icon theme $icons})"
+}
+
+stop_child() {   # stop the shell this supervisor started: quickshell kill --pid, then TERM, then KILL
+    local rc
+    if pid_alive "$SHELL_PID"; then
+        stop_quickshell "$SHELL_PID" "$STOP_TIMEOUT"
+        wait "$SHELL_PID" 2> /dev/null; rc=$?
+        log "the shell (pid $SHELL_PID) was stopped (status $rc: 0 = quickshell kill, 143 = TERM)"
+    else
+        wait "$SHELL_PID" 2> /dev/null
+    fi
+    return 0
+}
+
+pause_ms() {   # pause_ms <ms>: a wait that a stop -- or a restart asked by `qs-shell restart` -- ends
+    local end=$(( $(now_ms) + $1 ))
+    while [ "$(now_ms)" -lt "$end" ] && [ "$STOP" -eq 0 ] && [ "$RESTART_REQ" -eq 0 ] && [ ! -e "$RUN/stop" ]; do sleep 0.1; done
+}
+
+crash_loop_notice() {   # crash_loop_notice <exits> : the one notice of a crash loop (2. above)
+    local upd text
+    upd=$("$TOOL" update-running 2> /dev/null)
+    text="The shell keeps crashing ($1 exits in ${RESTART_WINDOW} s): it is tried again in $(( SLOW_BACKOFF_MS / 1000 )) s, then less often. qs-shell log shows why; Super+Shift+F12 tries now."
+    [ -z "$upd" ] || text="$text A SYSTEM UPDATE IS RUNNING (pid $upd): its next sudo has nobody to answer until the shell is back."
+    hypr_notice 3 "$text" 30000
+}
+
+on_shell_exit() {   # on_shell_exit <status>: start it again after the backoff -- or, in a crash loop, the slow one
+    local rc=$1 now t n delay_ms why=""
+    local -a kept=()
+    if [ "$rc" -gt 128 ] && [ "$rc" -le 192 ]; then why=" (signal $(kill -l $(( rc - 128 )) 2> /dev/null))"; fi
+    [ "$rc" -eq 255 ] && why=" (the configuration does not load, or quickshell crashed within 10 s of its start)"
+    log "the shell (pid $SHELL_PID) exited with status $rc$why"
+    if [ "$SLOW" -eq 0 ]; then
+        now=$(now_s)
+        for t in "${CRASHES[@]}"; do (( now - t < RESTART_WINDOW )) && kept+=("$t"); done
+        CRASHES=("${kept[@]}" "$now")
+        n=${#CRASHES[@]}
+        if (( n > RESTART_LIMIT )); then
+            SLOW=1 SLOW_DELAY_MS=$SLOW_BACKOFF_MS
+            log "the shell exited $n times within ${RESTART_WINDOW}s: a crash loop -- said once, tried every $(( SLOW_BACKOFF_MS / 1000 ))s and slower"
+            crash_loop_notice "$n"
+        else
+            delay_ms=$(( BACKOFF_MS << (n - 1) ))
+            log "restart $n of $RESTART_LIMIT in ${RESTART_WINDOW}s: in $(( delay_ms / 1000 )).$(( delay_ms % 1000 / 100 ))s"
+        fi
+    fi
+    if [ "$SLOW" -eq 1 ]; then
+        delay_ms=$SLOW_DELAY_MS
+        SLOW_DELAY_MS=$(( SLOW_DELAY_MS * 2 ))
+        (( SLOW_DELAY_MS > SLOW_MAX_MS )) && SLOW_DELAY_MS=$SLOW_MAX_MS
+        log "crash loop: the next try in $(( delay_ms / 1000 )).$(( delay_ms % 1000 / 100 ))s"
+    fi
+    pause_ms "$delay_ms"
+    [ "$RESTART_REQ" -eq 1 ] && return 0   # the asked restart starts it (do_restart)
+    [ "$STOP" -eq 0 ] && [ ! -e "$RUN/stop" ] && start_shell
+}
+
+check_shell() {
+    local rc
+    pid_alive "$SHELL_PID" && return 0
+    wait "$SHELL_PID" 2> /dev/null; rc=$?
+    on_shell_exit "$rc"
+}
+
+do_restart() {   # `qs-shell restart` / deploy's switch: a deliberate stop is not a crash, and it ends a crash loop
+    local rev
+    RESTART_REQ=0
+    log "restart requested"
+    if [ "$SLOW" -eq 1 ] || [ "${#CRASHES[@]}" -gt 0 ]; then log "the crash count starts afresh"; fi
+    SLOW=0 CRASHES=()
+    stop_child
+    if [ -s "$RUN/switch" ]; then   # deploy's switch: current moves while no shell runs
+        read -r rev < "$RUN/switch"
+        if [[ $rev =~ ^[0-9a-f]{40}$ ]] && [ -e "$DEPLOY_DIR/$rev/.complete" ] \
+            && ln -sfn "$rev" "$DEPLOY_DIR/.current.new" && mv -T "$DEPLOY_DIR/.current.new" "$DEPLOY_DIR/current"; then
+            log "switched $DEPLOY_DIR/current to $rev"
+        else
+            log "could NOT switch to '$rev': the shell starts from the snapshot current names"
+        fi
+        rm -f "$RUN/switch"
+    fi
+    start_shell
+}
+
+# ---- the periodic work ------------------------------------------------------------------------------
+cap_log() {   # cap_log: cut shell.log to its last tenth when it is over LOG_MAX (the shell appends: its next write lands after the cut)
+    local f=$RUN/shell.log size keep
+    size=$(stat -c %s "$f" 2> /dev/null) || return 0
+    [ "$size" -gt "$LOG_MAX" ] || return 0
+    keep=$(( LOG_MAX / 10 ))
+    if tail -c "$keep" "$f" > "$f.cut" && cat "$f.cut" > "$f"; then log "shell.log was $size bytes: cut to its last $keep"; fi
+    rm -f "$f.cut"
+}
+
+run_sweep() {   # the retention sweep, once: detached, at the lowest CPU and IO priority; it logs its own lines to qs-shell.log
+    local tool=${SELF%/*}/qs-sweep
+    [ -x "$tool" ] || tool=$DEPLOY_DIR/current/tools/shell/qs-sweep
+    if [ ! -x "$tool" ]; then log "no qs-sweep next to this supervisor: no retention sweep"; return 0; fi
+    log "retention sweep (qs-sweep --daily)"
+    ( exec nice -n 19 ionice -c3 "$tool" --daily > /dev/null 2>&1 < /dev/null 7<&- 9>&- ) &
+    return 0
+}
+
+periodic() {
+    local now
+    now=$(now_ms)
+    if { [ "$SLOW" -eq 1 ] || [ "${#CRASHES[@]}" -gt 0 ]; } && pid_alive "$SHELL_PID" && (( now - STARTED_MS >= STABLE_MS )); then
+        [ "$SLOW" -eq 1 ] && log "the shell has stayed up $(( STABLE_MS / 1000 ))s: the crash loop is over"
+        SLOW=0 CRASHES=()
+    fi
+    if [ "$now" -ge "$NEXT_LOGCAP" ]; then cap_log; NEXT_LOGCAP=$(( now + LOGCAP_EVERY_MS )); fi
+    if [ "$now" -ge "$NEXT_SWEEP" ]; then run_sweep; NEXT_SWEEP=$(( now + SWEEP_EVERY_MS )); fi
+}
+
+cleanup() {
+    stop_child
+    rm -f "$RUN/supervise.pid"
+    log "supervisor exits"
+}
+
+trap 'STOP=1' TERM INT HUP
+trap 'RESTART_REQ=1' USR1
+trap cleanup EXIT
+
+log "supervisor up (pid $$): shell $SHELL_QML, restart limit $RESTART_LIMIT in ${RESTART_WINDOW}s, then every $(( SLOW_BACKOFF_MS / 1000 ))s up to $(( SLOW_MAX_MS / 1000 ))s"
+start_shell
+while :; do
+    [ -e "$RUN/stop" ] && STOP=1
+    [ -d "$RUN" ] || STOP=1   # the state dir is gone: nobody is left to supervise for
+    [ "$STOP" -eq 1 ] && break
+    [ "$RESTART_REQ" -eq 1 ] && do_restart
+    check_shell
+    sleep "$TICK"
+    periodic
+done

@@ -1,0 +1,14 @@
+#!/bin/sh
+# lares-audio-diag -- what the session manager is doing, for the audio popup, when a call to the sound server has hung. Read only. One line:
+#     wireplumber <state> <wchan>
+# `state` is the process's (D = sitting in the kernel, as with a locked USB DAC: usb_start_wait_urb), "-" when it is not running.
+# LARES_AUDIO_DIAG_PID names the pid (a probe); otherwise systemd's. /proc only: nothing here talks to the stuck process.
+pid="${LARES_AUDIO_DIAG_PID:-}"
+[ -n "$pid" ] || pid=$(systemctl --user show -p MainPID --value wireplumber.service 2>/dev/null)
+if [ -z "$pid" ] || [ "$pid" = 0 ] || [ ! -r "/proc/$pid/stat" ]; then
+    echo "wireplumber - -"
+    exit 0
+fi
+state=$(sed 's/^.*) //' "/proc/$pid/stat" | cut -d' ' -f1)
+wchan=$(cat "/proc/$pid/wchan" 2>/dev/null)
+echo "wireplumber ${state:--} ${wchan:--}"

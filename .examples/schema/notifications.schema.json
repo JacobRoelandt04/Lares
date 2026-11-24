@@ -1,0 +1,2731 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "notifications.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "spot": {
+   "anyOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "corner": {
+       "enum": [
+        "top-right",
+        "top-left",
+        "bottom-right",
+        "bottom-left"
+       ],
+       "x-wants": "\"top-right\", \"top-left\", \"bottom-right\" or \"bottom-left\""
+      }
+     },
+     "required": [
+      "corner"
+     ],
+     "x-wants": "an object"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "bar": {
+       "type": "string",
+       "x-wants": "a text"
+      },
+      "along": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "x-wants": "a number 0 .. 1"
+      }
+     },
+     "required": [
+      "bar"
+     ],
+     "x-wants": "an object"
+    }
+   ],
+   "default": {
+    "corner": "top-right"
+   },
+   "x-wants": "an object, or an object",
+   "description": "Where the toasts appear: a screen corner, or a point along a bar:\n  \"spot\": { \"bar\": \"<barId>\", \"along\": 0.5 }\n\nTakes an object, or an object. Default: {\"corner\":\"top-right\"}."
+  },
+  "screen": {
+   "type": "string",
+   "default": "focused",
+   "x-wants": "a text",
+   "description": "Which display they come on: \"focused\" (the one you are on), or a connector's name (\"DP-1\"); while that one is not there, the focused one.\n\nTakes a text. Default: \"focused\"."
+  },
+  "timeouts": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "low": {
+     "type": "integer",
+     "minimum": -1,
+     "default": 4000,
+     "x-wants": "a whole number, -1 and up",
+     "description": "Takes a whole number, -1 and up. Default: 4000."
+    },
+    "normal": {
+     "type": "integer",
+     "minimum": -1,
+     "default": 8000,
+     "x-wants": "a whole number, -1 and up",
+     "description": "Takes a whole number, -1 and up. Default: 8000."
+    },
+    "critical": {
+     "type": "integer",
+     "minimum": -1,
+     "default": -1,
+     "x-wants": "a whole number, -1 and up",
+     "description": "Takes a whole number, -1 and up. Default: -1."
+    },
+    "clampMin": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 3000,
+     "x-wants": "a whole number, 0 and up",
+     "description": "Takes a whole number, 0 and up. Default: 3000."
+    },
+    "clampMax": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 60000,
+     "x-wants": "a whole number, 0 and up",
+     "description": "Takes a whole number, 0 and up. Default: 60000."
+    }
+   },
+   "description": "How long a toast stays, per urgency. A sender's own timeout is honoured\nbut clamped to [clampMin, clampMax]; its \"never\" (0) is honoured for\nnormal and critical only. Shell sources (timers, battery, ...) choose\ntheir own, or take a `sources` rule below."
+  },
+  "toasts": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "max": {
+     "type": "integer",
+     "minimum": 1,
+     "default": 5,
+     "x-wants": "a whole number, 1 and up",
+     "description": "toasts at once; older ones file into the manager (\"+N more\")\n\nTakes a whole number, 1 and up. Default: 5."
+    },
+    "floodCount": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 3,
+     "x-wants": "a whole number, 0 and up",
+     "description": "more than this many from one app inside floodWindowMs (0: no limit)...\n\nTakes a whole number, 0 and up. Default: 3."
+    },
+    "floodWindowMs": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 10000,
+     "x-wants": "a whole number, 0 and up",
+     "description": "...and the rest file silently (\"<app> . +N more\")\n\nTakes a whole number, 0 and up. Default: 10000."
+    },
+    "hoverResumeMinMs": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 2000,
+     "x-wants": "a whole number, 0 and up",
+     "description": "after a hover (or being away) a toast has at least this left\n\nTakes a whole number, 0 and up. Default: 2000."
+    },
+    "swipe": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "enum": [
+        "file",
+        "delete"
+       ],
+       "default": "file",
+       "x-wants": "\"file\" or \"delete\"",
+       "description": "Takes \"file\" or \"delete\". Default: \"file\"."
+      },
+      "left": {
+       "enum": [
+        "file",
+        "delete"
+       ],
+       "default": "delete",
+       "x-wants": "\"file\" or \"delete\"",
+       "description": "Takes \"file\" or \"delete\". Default: \"delete\"."
+      }
+     },
+     "description": "What swiping a toast away does, to each side: \"file\" (it goes into the manager) | \"delete\"."
+    }
+   }
+  },
+  "manager": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "openGroup": {
+     "enum": [
+      "latest",
+      "first",
+      "none",
+      "critical",
+      "system",
+      "normal",
+      "low"
+     ],
+     "default": "latest",
+     "x-wants": "\"latest\", \"first\", \"none\", \"critical\", \"system\", \"normal\" or \"low\"",
+     "description": "The group that is open when the manager opens: \"latest\" (of the newest notification) | \"first\" | \"none\" | \"critical\" | \"system\" |\n\"normal\" | \"low\".\n\nTakes \"latest\", \"first\", \"none\", \"critical\", \"system\", \"normal\" or \"low\". Default: \"latest\"."
+    },
+    "swipe": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "right": {
+       "enum": [
+        "pin",
+        "delete"
+       ],
+       "default": "pin",
+       "x-wants": "\"pin\" or \"delete\"",
+       "description": "Takes \"pin\" or \"delete\". Default: \"pin\"."
+      },
+      "left": {
+       "enum": [
+        "pin",
+        "delete"
+       ],
+       "default": "delete",
+       "x-wants": "\"pin\" or \"delete\"",
+       "description": "Takes \"pin\" or \"delete\". Default: \"delete\"."
+      }
+     },
+     "description": "What swiping a card does, to each side: \"pin\" | \"delete\"."
+    }
+   },
+   "description": "The manager (the bell's popup)."
+  },
+  "clickFocus": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "A click on a card that has no action of its own brings its app's window to the front (its workspace with it). true | false.\n\nTakes true or false. Default: true."
+  },
+  "bell": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "ring": {
+     "enum": [
+      "always",
+      "notDnd",
+      "never"
+     ],
+     "default": "always",
+     "x-wants": "\"always\", \"notDnd\" or \"never\"",
+     "description": "Takes \"always\", \"notDnd\" or \"never\". Default: \"always\"."
+    }
+   },
+   "description": "The bell rings (its glyph moves) for a new notification: \"always\" | \"notDnd\" (not while do-not-disturb is on) | \"never\"."
+  },
+  "retention": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "count": {
+     "type": "integer",
+     "minimum": -1,
+     "default": 200,
+     "x-wants": "a whole number, -1 and up",
+     "description": "Takes a whole number, -1 and up. Default: 200."
+    },
+    "days": {
+     "type": "number",
+     "minimum": -1,
+     "default": 7,
+     "x-wants": "a number, -1 and up",
+     "description": "Takes a number, -1 and up. Default: 7."
+    }
+   },
+   "description": "History in the manager: the newest `count`, none older than `days`\nsince its last update. Pinned notifications are never dropped."
+  },
+  "undoMs": {
+   "type": "integer",
+   "minimum": 1,
+   "default": 10000,
+   "x-wants": "a whole number, 1 and up",
+   "description": "How long \"Undo\" is offered after Clear / Clear all.\n\nTakes a whole number, 1 and up. Default: 10000."
+  },
+  "idleMs": {
+   "type": "integer",
+   "minimum": 1,
+   "default": 60000,
+   "x-wants": "a whole number, 1 and up",
+   "description": "No input for this long = you are away: toast countdowns stop until you are back.\n\nTakes a whole number, 1 and up. Default: 60000."
+  },
+  "sounds": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "low": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "default": [],
+     "x-wants": "a list of paths",
+     "description": "Takes a list of paths. Default: []."
+    },
+    "normal": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "default": [
+      "~/.local/share/sounds/notification.mp3",
+      "/usr/share/sounds/notification.mp3"
+     ],
+     "x-wants": "a list of paths",
+     "description": "Takes a list of paths. Default: [\"~/.local/share/sounds/notification.mp3\",\"/usr/share/sounds/notification.mp3\"]."
+    },
+    "critical": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "default": [
+      "~/.local/share/sounds/notification-critical.mp3",
+      "~/.local/share/sounds/notification.mp3",
+      "/usr/share/sounds/notification.mp3"
+     ],
+     "x-wants": "a list of paths",
+     "description": "Takes a list of paths. Default: [\"~/.local/share/sounds/notification-critical.mp3\",\"~/.local/share/sounds/notification.mp3\",\"/usr/share/sounds/notification.mp3\"]."
+    }
+   },
+   "description": "The sound per urgency: the FIRST file in the list that exists plays;\nnone existing = silent. A sender's sound-file / sound-name hint comes\nfirst, its suppress-sound hint silences it, and nothing sounds under DND."
+  },
+  "soundVolume": {
+   "type": "number",
+   "minimum": -1,
+   "maximum": 1,
+   "default": -1,
+   "x-wants": "a number -1 .. 1",
+   "description": "How loud they are, 0 .. 1; -1 plays them at the level of the sound server's stream.\n\nTakes a number -1 .. 1. Default: -1."
+  },
+  "dnd": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "remember": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Do-not-disturb is kept across a restart of the shell. false: it starts off.\n\nTakes true or false. Default: true."
+    },
+    "hours": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$",
+      "x-wants": "a text like 22:30-07:00"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Quiet hours: do-not-disturb is on between these times (\"22:30-07:00\", several allowed), and off again at their end. You can still\nswitch it by hand in between; the next start or end of an hour goes by the clock again. [] = none.\n\nTakes a list of texts. Default: []."
+    },
+    "summary": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "The summary toast (\"4 while you were sharing\") when a hold ends. true | false.\n\nTakes true or false. Default: true."
+    },
+    "holdApps": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [],
+     "x-wants": "a list of texts",
+     "description": "Window classes that hold toasts back while one of them has the focus (a game that is not fullscreen, a presentation).\n\nTakes a list of texts. Default: []."
+    },
+    "breakthroughSources": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [
+      "clock",
+      "auth"
+     ],
+     "x-wants": "a list of texts",
+     "description": "Shell sources that still toast under Do Not Disturb (criticals always do).\n\nTakes a list of texts. Default: [\"clock\",\"auth\"]."
+    },
+    "holdFullscreen": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Hold toasts back while a window is fullscreen (on the display the toasts come on) / the screen is shared\nor recorded; one summary toast comes when it ends. A critical still\nshows during a share.\n\nTakes true or false. Default: true."
+    },
+    "holdScreencast": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   }
+  },
+  "apps": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "mute": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "urgency": {
+      "enum": [
+       "low",
+       "normal",
+       "critical"
+      ],
+      "x-wants": "\"low\", \"normal\" or \"critical\""
+     },
+     "group": {
+      "enum": [
+       "critical",
+       "system",
+       "normal",
+       "low"
+      ],
+      "x-wants": "\"critical\", \"system\", \"normal\" or \"low\""
+     },
+     "timeoutMs": {
+      "type": "integer",
+      "minimum": -1,
+      "x-wants": "a whole number, -1 and up"
+     },
+     "sound": {
+      "type": "string",
+      "x-wants": "a path"
+     },
+     "drop": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "breakDnd": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "history": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     },
+     "focusSuppress": {
+      "type": "boolean",
+      "x-wants": "true or false"
+     }
+    }
+   },
+   "default": {
+    "kitty": {
+     "focusSuppress": false
+    },
+    "org.freedesktop.network-manager-applet": {
+     "drop": true
+    },
+    "NetworkManager Applet": {
+     "drop": true
+    },
+    "nm-applet": {
+     "drop": true
+    },
+    "blueman": {
+     "drop": true
+    },
+    "blueman-applet": {
+     "drop": true
+    }
+   },
+   "x-wants": "an object",
+   "description": "Per-app rules, matched on the notification's desktop entry first, then\nits app name (case-insensitive, \".desktop\" ignored). Keys:\n  \"mute\": true          no toast, no sound, still in the manager\n  \"urgency\": \"low\" | \"normal\" | \"critical\"\n  \"group\": \"critical\" | \"system\" | \"normal\" | \"low\"\n  \"timeoutMs\": 5000     overrides whatever the app asked for\n  \"sound\": \"/path/to/file.oga\" or \"none\"\n  \"breakDnd\": true      toasts under Do Not Disturb, whatever its urgency\n  \"drop\": true          no toast, no sound, NOTHING filed: the sender is told Dismissed at once\n                        (the OSD tells the network and bluetooth news, so the two applets are dropped)\n  \"history\": false      never written to the history file\n  \"focusSuppress\": true file silently while the app's own window is\n                        focused (the default; kitty is exempt so a\n                        terminal's notifications still show)\n\nDefault: {\"kitty\":{\"focusSuppress\":false},\"org.freedesktop.network-manager-applet\":{\"drop\":true},\"NetworkManager Applet\":{\"drop\":true},\"nm-applet\":{\"drop\":true},\"blueman\":{\"drop\":true},\"blueman-applet\":{\"drop\":true}}."
+  },
+  "sources": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "update": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "nudge": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "enabled": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        },
+        "afterBootMin": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 1440,
+         "default": 15,
+         "x-wants": "a number 0 .. 1440",
+         "description": "minutes after the BOOT the shell looks at what is waiting ...\n\nTakes a number 0 .. 1440. Default: 15."
+        },
+        "jitterMin": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 240,
+         "default": 4,
+         "x-wants": "a number 0 .. 240",
+         "description": "... plus up to this many more, at random\n\nTakes a number 0 .. 240. Default: 4."
+        },
+        "minCount": {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 100000,
+         "default": 20,
+         "x-wants": "a number 1 .. 100000",
+         "description": "It speaks when the updates number at least minCount and / or the last update\nis at least minDays old (\"rule\": \"either\" | \"both\" | \"count\" | \"days\").\n\nTakes a number 1 .. 100000. Default: 20."
+        },
+        "minDays": {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 3650,
+         "default": 7,
+         "x-wants": "a number 1 .. 3650",
+         "description": "Takes a number 1 .. 3650. Default: 7."
+        },
+        "rule": {
+         "enum": [
+          "either",
+          "both",
+          "count",
+          "days"
+         ],
+         "default": "either",
+         "x-wants": "\"either\", \"both\", \"count\" or \"days\"",
+         "description": "Takes \"either\", \"both\", \"count\" or \"days\". Default: \"either\"."
+        },
+        "highlights": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 8,
+         "default": 3,
+         "x-wants": "a number 0 .. 8",
+         "description": "the packages you favourited that are waiting, named on the card\n\nTakes a number 0 .. 8. Default: 3."
+        },
+        "timeoutMs": {
+         "type": "integer",
+         "minimum": -1,
+         "maximum": 3600000,
+         "default": 30000,
+         "x-wants": "a whole number -1 .. 3600000",
+         "description": "how long the card stays (-1: until you answer it)\n\nTakes a whole number -1 .. 3600000. Default: 30000."
+        }
+       }
+      },
+      "started": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "\"Update started\", the question a run waits at (a critical card; a plain yes / no is\nanswered from it), and \"Update complete\" / \"Update failed\" -- only while the popup is shut.\n\nTakes true or false. Default: true."
+      },
+      "asks": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "finished": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "rebootPackages": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "default": [
+        "linux",
+        "linux-lts",
+        "linux-zen",
+        "linux-hardened",
+        "linux-rt",
+        "linux-rt-lts",
+        "systemd",
+        "mesa"
+       ],
+       "x-wants": "a list of texts",
+       "description": "Updating one of these asks for a reboot (\"linux\" and the other kernels read as \"kernel\").\n\nTakes a list of texts. Default: [\"linux\",\"linux-lts\",\"linux-zen\",\"linux-hardened\",\"linux-rt\",\"linux-rt-lts\",\"systemd\",\"mesa\"]."
+      }
+     },
+     "description": "THE SYSTEM UPDATE. A nudge once the machine has been up a while, and the update run's own\ncards while the update popup is shut."
+    },
+    "battery": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "levels": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "pct": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99,
+          "x-wants": "a whole number 1 .. 99"
+         },
+         "urgency": {
+          "enum": [
+           "low",
+           "normal",
+           "critical"
+          ],
+          "x-wants": "\"low\", \"normal\" or \"critical\""
+         },
+         "hibernate": {
+          "type": "boolean",
+          "x-wants": "true or false"
+         },
+         "breakDnd": {
+          "type": "boolean",
+          "x-wants": "true or false"
+         },
+         "timeoutMs": {
+          "type": "integer",
+          "minimum": -1,
+          "x-wants": "a whole number, -1 and up"
+         },
+         "title": {
+          "type": "string",
+          "x-wants": "a text"
+         }
+        },
+        "required": [
+         "pct"
+        ]
+       },
+       "default": [
+        {
+         "pct": 8,
+         "urgency": "critical",
+         "hibernate": true,
+         "breakDnd": false,
+         "timeoutMs": 60000
+        },
+        {
+         "pct": 3,
+         "urgency": "critical",
+         "hibernate": true,
+         "breakDnd": true,
+         "timeoutMs": -1
+        }
+       ],
+       "x-wants": "a list of objects",
+       "description": "The charge falling to one of these, while discharging, puts ONE card up; each deeper level replaces\nthe one before; charging takes it away. The order here does not matter. A Critical card breaks\ndo-not-disturb. \"hibernate\" puts the Hibernate button on the card; \"timeoutMs\" is how long the card\nstays (absent: the urgency's own; -1: until you act); \"title\" names the level yourself. A level is a share of the pack the\ncharge limit leaves: with the 80 % limit on, 8 speaks at 6.\n\nTakes a list of objects. Default: [{\"pct\":8,\"urgency\":\"critical\",\"hibernate\":true,\"breakDnd\":false,\"timeoutMs\":60000},{\"pct\":3,\"urgency\":\"critical\",\"hibernate\":true,\"breakDnd\":true,\"timeoutMs\":-1}]."
+      },
+      "hibernate": {
+       "enum": [
+        "dud",
+        "systemctl"
+       ],
+       "default": "dud",
+       "x-wants": "\"dud\" or \"systemctl\"",
+       "description": "What the Hibernate button does: \"dud\" says hibernate is not set up yet (the machine has no resume\ndevice); \"systemctl\" runs `systemctl hibernate`, for the day it works.\n\nTakes \"dud\" or \"systemctl\". Default: \"dud\"."
+      },
+      "limitReached": {
+       "type": "boolean",
+       "default": false,
+       "x-wants": "true or false",
+       "description": "\"Charged to 80 %\": the pack reached its charge limit (or 100). Off: the OSD's battery card says it.\n\nTakes true or false. Default: false."
+      },
+      "fastDrain": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "enabled": {
+         "type": "boolean",
+         "default": true,
+         "x-wants": "true or false",
+         "description": "Takes true or false. Default: true."
+        },
+        "factor": {
+         "type": "number",
+         "minimum": 1.2,
+         "maximum": 20,
+         "default": 2,
+         "x-wants": "a number 1.2 .. 20",
+         "description": "Takes a number 1.2 .. 20. Default: 2."
+        },
+        "minW": {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 300,
+         "default": 15,
+         "x-wants": "a number 1 .. 300",
+         "description": "Takes a number 1 .. 300. Default: 15."
+        },
+        "minutes": {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 120,
+         "default": 5,
+         "x-wants": "a number 1 .. 120",
+         "description": "Takes a number 1 .. 120. Default: 5."
+        },
+        "tauMin": {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 600,
+         "default": 30,
+         "x-wants": "a number 1 .. 600",
+         "description": "Takes a number 1 .. 600. Default: 30."
+        },
+        "warmupMin": {
+         "type": "number",
+         "minimum": 0,
+         "maximum": 240,
+         "default": 10,
+         "x-wants": "a number 0 .. 240",
+         "description": "Takes a number 0 .. 240. Default: 10."
+        }
+       },
+       "description": "A runaway process: the draw stays `factor` times above the usual (and over `minW` watts) for\n`minutes`. The usual is eased over `tauMin` minutes, kept across restarts, and not judged for the\nfirst `warmupMin` minutes of learning."
+      }
+     },
+     "description": "THE BATTERY. Fed by silicon's battery (the one reader the shell has)."
+    },
+    "stocks": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "sudden": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "scope": {
+       "enum": [
+        "portfolio",
+        "holdings",
+        "all"
+       ],
+       "default": "portfolio",
+       "x-wants": "\"portfolio\", \"holdings\" or \"all\"",
+       "description": "Which stocks: \"portfolio\" (held and watched), \"holdings\" (held only), \"all\" (every quote the\nstocks popup has; currency pairs are never judged).\n\nTakes \"portfolio\", \"holdings\" or \"all\". Default: \"portfolio\"."
+      }
+     },
+     "description": "THE STOCKS. The alerts of stocks.jsonc (a day move, a price above, a price below) are cards of a\nnormal urgency like any other: they stay their 8 s (\"timeoutMs\" here gives them another time, -1\nkeeps them until you answer) and wait in the manager. The sudden move is an alert kind of its own:\na stock that moves at least X % within Y minutes while its market is open (X and Y, with numbers\nper symbol, are in stocks.jsonc under \"sudden\"), once per direction per day."
+    },
+    "screenshot": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "toast": {
+       "enum": [
+        "auto",
+        "always",
+        "never"
+       ],
+       "default": "auto",
+       "x-wants": "\"auto\", \"always\" or \"never\"",
+       "description": "\"auto\": while the OSD shows its card, this one is filed silently (no second popup over the same\npicture); if the OSD posts a notification of its own it stays out; where the OSD says nothing it toasts.\n\"always\" toasts as well, \"never\" only files.\n\nTakes \"auto\", \"always\" or \"never\". Default: \"auto\"."
+      }
+     },
+     "description": "A SCREENSHOT taken (tools/osd/shot.sh tells the OSD, which shows its capture card with the picture). This is\nthe same shot as a card that WAITS in the manager: the picture, Open, Edit (swappy), Copy path."
+    },
+    "usb": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mount": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "the card's Mount button; false: no Mount button\n\nTakes true or false. Default: true."
+      },
+      "openAfterMount": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Mount opens the drive too\n\nTakes true or false. Default: true."
+      },
+      "openCommand": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "minItems": 1,
+       "default": [
+        "kitty",
+        "-o",
+        "background_opacity=0.75",
+        "--title",
+        "yazi",
+        "yazi",
+        "{path}"
+       ],
+       "x-wants": "a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]",
+       "description": "what Open runs, detached; {path} is the first mount point\n\nTakes a command as a list of texts, like [\"kitty\", \"-e\", \"yazi\"]. Default: [\"kitty\",\"-o\",\"background_opacity=0.75\",\"--title\",\"yazi\",\"yazi\",\"{path}\"]."
+      },
+      "unsafeWarn": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "a card when a drive vanishes while it was still mounted\n\nTakes true or false. Default: true."
+      },
+      "safeSec": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 3600,
+       "default": 10,
+       "x-wants": "a number 0 .. 3600",
+       "description": "how long \"can be removed\" stays once the drive has gone (0: it goes with the drive)\n\nTakes a number 0 .. 3600. Default: 10."
+      },
+      "debounceMs": {
+       "type": "number",
+       "minimum": 100,
+       "maximum": 10000,
+       "default": 600,
+       "x-wants": "a number 100 .. 10000",
+       "description": "how long the devices must be quiet after udisks speaks\n\nTakes a number 100 .. 10000. Default: 600."
+      }
+     },
+     "description": "A USB DRIVE plugged in (udisks): Open (mounts it first if need be) and Eject; \"can be removed\" when the\nunmount and the power-off both worked. The card goes when the drive does."
+    },
+    "calendar": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "maximum": 3600000,
+       "default": 30000,
+       "x-wants": "a whole number -1 .. 3600000",
+       "description": "how long the card stays (-1: until you act)\n\nTakes a whole number -1 .. 3600000. Default: 30000."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "leadMin": {
+       "anyOf": [
+        {
+         "type": "number",
+         "minimum": 1,
+         "maximum": 1440,
+         "x-wants": "a number 1 .. 1440"
+        },
+        {
+         "type": "array",
+         "items": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1440,
+          "x-wants": "a number 1 .. 1440"
+         },
+         "minItems": 1,
+         "maxItems": 6,
+         "x-wants": "a list of numbers"
+        }
+       ],
+       "default": 10,
+       "x-wants": "a number 1 .. 1440, or a list of numbers",
+       "description": "minutes before an appointment; several: [60, 10] (1 .. 1440 each)\n\nTakes a number 1 .. 1440, or a list of numbers. Default: 10."
+      },
+      "allDayAt": {
+       "type": "string",
+       "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d)?$",
+       "default": "",
+       "x-wants": "a text like 09:00",
+       "description": "an all-day appointment is announced at this time of its day (\"09:00\"); \"\" = not at all\n\nTakes a text like 09:00. Default: \"\"."
+      },
+      "calendars": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "default": [],
+       "x-wants": "a list of texts",
+       "description": "only these calendars' ids (calendars.jsonc \"id\"); [] = all of them\n\nTakes a list of texts. Default: []."
+      }
+     },
+     "description": "CALENDAR reminders, from the clock's calendar."
+    },
+    "disk": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mounts": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^/",
+        "x-wants": "a text like /home"
+       },
+       "default": [
+        "/",
+        "/home"
+       ],
+       "x-wants": "a list of texts",
+       "description": "Takes a list of texts. Default: [\"/\",\"/home\"]."
+      },
+      "minFreeGB": {
+       "type": "number",
+       "minimum": 0.1,
+       "maximum": 100000,
+       "default": 5,
+       "x-wants": "a number 0.1 .. 100000",
+       "description": "free space under this is a Normal card ...\n\nTakes a number 0.1 .. 100000. Default: 5."
+      },
+      "criticalGB": {
+       "type": "number",
+       "minimum": 0.05,
+       "maximum": 100000,
+       "default": 1,
+       "x-wants": "a number 0.05 .. 100000",
+       "description": "... under this a Critical one (GB of 1024^3 bytes, as `df -h` prints them)\n\nTakes a number 0.05 .. 100000. Default: 1."
+      },
+      "perMount": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "x-wants": "a number, 0 and up"
+       },
+       "default": {},
+       "x-wants": "an object",
+       "description": "a mount of its own: { \"/home\": 20 }\n\nDefault: {}."
+      },
+      "pollMin": {
+       "type": "number",
+       "minimum": 0.05,
+       "maximum": 1440,
+       "default": 5,
+       "x-wants": "a number 0.05 .. 1440",
+       "description": "Takes a number 0.05 .. 1440. Default: 5."
+      },
+      "recover": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "default": 0.15,
+       "x-wants": "a number 0 .. 1",
+       "description": "a level is left when the free space is this share above its line\n\nTakes a number 0 .. 1. Default: 0.15."
+      }
+     },
+     "description": "The DISK running low. Paths that are on one filesystem make one card (\"/ and /home\": /home that is no mount of\nits own is on /). df is asked once per path."
+    },
+    "units": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "system": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "user": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "pollSec": {
+       "type": "number",
+       "minimum": 5,
+       "maximum": 3600,
+       "default": 60,
+       "x-wants": "a number 5 .. 3600",
+       "description": "Takes a number 5 .. 3600. Default: 60."
+      },
+      "ignore": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-wants": "a text"
+       },
+       "default": [
+        "geoclue.service"
+       ],
+       "x-wants": "a list of texts",
+       "description": "units not to hear about: names or * globs (\"sddm.service\", \"user@*\"). geoclue is started on demand by the weather and often times out: nothing to act on. Your list replaces this one ([] = hear about every unit)\n\nTakes a list of texts. Default: [\"geoclue.service\"]."
+      },
+      "logLines": {
+       "type": "number",
+       "minimum": 1,
+       "maximum": 40,
+       "default": 8,
+       "x-wants": "a number 1 .. 40",
+       "description": "lines of the journal \"Show log\" puts on the card (the newest at the foot)\n\nTakes a number 1 .. 40. Default: 8."
+      },
+      "copyLines": {
+       "type": "number",
+       "minimum": 1,
+       "maximum": 100000,
+       "default": 2000,
+       "x-wants": "a number 1 .. 100000",
+       "description": "what \"Copy log\" copies: the last this many lines of the unit's journal\n\nTakes a number 1 .. 100000. Default: 2000."
+      }
+     },
+     "description": "A systemd UNIT failed: \"Show log\" puts the journal's tail on the card (\"Hide log\" takes it off), and \"Copy log\"\ncopies the WHOLE journal, not the few lines the card has room for."
+    },
+    "thermal": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "default": true,
+       "x-wants": "true or false",
+       "description": "Takes true or false. Default: true."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "pollSec": {
+       "type": "number",
+       "minimum": 1,
+       "maximum": 300,
+       "default": 15,
+       "x-wants": "a number 1 .. 300",
+       "description": "Takes a number 1 .. 300. Default: 15."
+      },
+      "minFraction": {
+       "type": "number",
+       "minimum": 0.01,
+       "maximum": 1,
+       "default": 0.25,
+       "x-wants": "a number 0.01 .. 1",
+       "description": "a poll is hot when the CPU spent this share of it throttled by heat ...\n\nTakes a number 0.01 .. 1. Default: 0.25."
+      },
+      "sustainSec": {
+       "type": "number",
+       "minimum": 5,
+       "maximum": 3600,
+       "default": 60,
+       "x-wants": "a number 5 .. 3600",
+       "description": "... and hot in every poll for this many seconds says it ...\n\nTakes a number 5 .. 3600. Default: 60."
+      },
+      "cooldownMin": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1440,
+       "default": 15,
+       "x-wants": "a number 0 .. 1440",
+       "description": "... at most one card per this many minutes ...\n\nTakes a number 0 .. 1440. Default: 15."
+      },
+      "quietMin": {
+       "type": "number",
+       "minimum": 0.5,
+       "maximum": 1440,
+       "default": 2,
+       "x-wants": "a number 0.5 .. 1440",
+       "description": "... taken away after this many minutes that were not hot\n\nTakes a number 0.5 .. 1440. Default: 2."
+      },
+      "root": {
+       "type": "string",
+       "default": "/sys/devices/system/cpu",
+       "x-wants": "a path",
+       "description": "Takes a path. Default: \"/sys/devices/system/cpu\"."
+      }
+     },
+     "description": "The CPU too hot to run at full speed, for a long while (the kernel's own throttled time; a power profile's or a\ncharger's ceiling is not heat and says nothing here)."
+    },
+    "clock": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "launcher": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "llm": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "auth": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "notifications": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "aerial": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "panorama": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "silicon": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "wiki": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "weather": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "bridge": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "dictation": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "shell": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "session": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "theme": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "osd": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    },
+    "config": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "enabled": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "mute": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "urgency": {
+       "enum": [
+        "low",
+        "normal",
+        "critical"
+       ],
+       "x-wants": "\"low\", \"normal\" or \"critical\"",
+       "description": "Takes \"low\", \"normal\" or \"critical\"."
+      },
+      "group": {
+       "enum": [
+        "critical",
+        "system",
+        "normal",
+        "low"
+       ],
+       "x-wants": "\"critical\", \"system\", \"normal\" or \"low\"",
+       "description": "Takes \"critical\", \"system\", \"normal\" or \"low\"."
+      },
+      "timeoutMs": {
+       "type": "integer",
+       "minimum": -1,
+       "x-wants": "a whole number, -1 and up",
+       "description": "Takes a whole number, -1 and up."
+      },
+      "sound": {
+       "type": "string",
+       "x-wants": "a path",
+       "description": "Takes a path."
+      },
+      "drop": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "breakDnd": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "history": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      },
+      "focusSuppress": {
+       "type": "boolean",
+       "x-wants": "true or false",
+       "description": "Takes true or false."
+      }
+     },
+     "x-wants": "an object"
+    }
+   },
+   "description": "The shell's own sources. The nine below are services of their own with keys of their own:\n\"update\", \"battery\", \"stocks\", \"screenshot\", \"usb\", \"calendar\", \"disk\", \"units\", \"thermal\". Each has\n  \"enabled\": true       false switches the source off -- its card goes\n                        with it -- and true brings it back; the file is\n                        read hot\nThe other names things are posted under: \"clock\", \"launcher\", \"llm\", \"auth\", \"notifications\", \"aerial\", \"panorama\",\n\"silicon\", \"wiki\", \"weather\", \"bridge\", \"dictation\", \"shell\", \"session\", \"theme\", \"osd\", \"config\" (a mistake in one of these\nfiles). They have no switch: \"mute\": true keeps one quiet.\nEvery block takes the rule keys an app's takes (mute, urgency, group, timeoutMs, sound, breakDnd, drop, history). \"timeoutMs\" counts\nwhere the post gives no time of its own; most are silent until \"sound\" names a file (the clock's alarms ring by themselves);\n\"focusSuppress\" is for apps alone (a source has no window).\nA key with the wrong type, or a number or word outside what it allows, is\nnamed in the shell's log and keeps the value written here."
+  }
+ }
+}

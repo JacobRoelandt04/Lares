@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+"""lares-sweep -- the shell's retention sweep: files that only ever grow get a limit.
+
+    lares-sweep [--dry-run] [--daily] [--rule ID]...
+
+One table of rules (RULES, below): where a cache lives, what counts as USED, how old unused may get, how many to keep.
+A normal run deletes and writes ONE LINE PER RULE to lares's log (~/.local/state/lares/tool/lares.log); --dry-run prints
+what it would delete (every path) and writes nothing, deletes nothing. --daily does nothing when a sweep finished in the last
+20 hours (stamp file), so the supervisor can call it at every start and once a day. The sweep takes no lock on anything the
+shell or its tools use: a cache is rebuilt when it is missing, which is the whole premise.
+
+WHAT "USED" MEANS. The newest of a file's atime and mtime: mtime is the last time it was written (a chart is rewritten at
+every fetch, a logo when it is baked), atime the last time anything READ it (a logo's Image, a chart's FileView). On this
+machine's mounts (ext4, relatime) a read moves atime once a day at most, which is exact enough for 90 days. A mount with
+`noatime` (or an atime this sweep cannot trust) cannot say what was read: a rule that goes by atime is SKIPPED there, with a
+line saying so, and never falls back to mtime alone. A unit that is more than one file (a logo slug's files, a launcher
+generation, a crash report) is as used as its most used file.
+
+WHAT IT NEVER DOES. It never deletes outside a rule's directory (every delete asserts that the resolved parent of the path is
+inside the resolved rule directory), never follows a symlink (a link is skipped, not read through, not removed; a rule
+directory that is itself a link is skipped whole), and takes its home from $HOME / $XDG_* only, so a test runs it on a fake HOME.
+"""
+import argparse
+import fcntl
+import json
+import os
+import shutil
+import stat
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+CACHE = os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache")
+STATE = os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state")
+DAY = 86400.0
+
+# ---- THE TABLE ---------------------------------------------------------------------------------------------------------------
+# id      the name in the log line and for --rule
+# kind    generations | files | slugs | orphans | newest
+# path    the directory the rule owns (nothing outside it is ever touched)
+# used    what counts as used: "atime+mtime" (the newer of the two) or "mtime"
+# days    unused for longer than this is deleted (None: age plays no part)
+# keep    keep this many newest units whatever their age (None: no count limit)
+# glob    which names in the directory are units (files / slugs)
+RULES = [
+    dict(id="launcher-icons", kind="generations", path=os.path.join(CACHE, "lares", "launcher", "icons"),
+         used="atime+mtime", days=90, keep=None,
+         why="<theme>/p<hash>/ generations of the baked icon set that the theme's `current` link no longer names"),
+    dict(id="stocks-logos", kind="slugs", path=os.path.join(CACHE, "lares", "stocks", "logos"),
+         used="atime+mtime", days=90, keep=None, index="index.json",
+         why="a symbol's <slug>.png / .mono.png / .none (and its index.json row, or the module would show a missing file)"),
+    dict(id="stocks-charts", kind="files", path=os.path.join(CACHE, "lares", "stocks", "charts"),
+         used="atime+mtime", days=90, keep=None, glob=".json",
+         why="<symbol>_<range>.json of a symbol nobody opened for 90 days"),
+    dict(id="qml-cache", kind="files", path=os.path.join(CACHE, "lares", "qmlcache"), used="atime+mtime", days=30, keep=None, glob=".qmlc",
+         why="Qt's compiled QML of the shell (QML_DISK_CACHE_PATH, lares-supervise): units of files no start has read for 30 days"),
+    dict(id="qml-cache-js", kind="files", path=os.path.join(CACHE, "lares", "qmlcache"), used="atime+mtime", days=30, keep=None, glob=".jsc",
+         why="the same for compiled JS"),
+    dict(id="wiki-images", kind="orphans", path=os.path.join(STATE, "lares", "wiki", "img"),
+         used="atime+mtime", days=90, keep=None,
+         refs=[os.path.join(STATE, "lares", "wiki"), os.path.join(CACHE, "lares", "wiki")],
+         why="img/ files that no entry, live page or daily extra names any more"),
+    dict(id="crash-dumps", kind="newest", path=os.path.join(CACHE, "quickshell", "crashes"),
+         used="mtime", days=None, keep=10,
+         why="one directory per crash (report + log): the newest 10"),
+]
+
+LOG = os.environ.get("LARES_SWEEP_LOG") or os.path.join(STATE, "lares", "tool", "lares.log")
+STAMP = os.environ.get("LARES_SWEEP_STAMP") or os.path.join(STATE, "lares", "tool", "sweep.stamp")
+MOUNTINFO = os.environ.get("LARES_SWEEP_MOUNTINFO") or "/proc/self/mountinfo"
+DAILY_GAP = 20 * 3600
+
+
+# ---- reading times -----------------------------------------------------------------------------------------------------------
+def stamp_of(st, how):
+    return max(st.st_atime, st.st_mtime) if how == "atime+mtime" else st.st_mtime
+
+
+def tree_used(path, how):
+    """The newest use of any REGULAR FILE in `path` (a file, or a directory walked without following links); a directory with
+    no file in it goes by its own mtime. Directories and links never count: a directory's times move with the sweep's own
+    listing and with every file added or removed, and a link is not content."""
+    best = None
+    stack = [path]
+    while stack:
+        p = stack.pop()
+        try:
+            st = os.lstat(p)
+        except OSError:
+            continue
+        if stat.S_ISREG(st.st_mode):
+            t = stamp_of(st, how)
+            if best is None or t > best:
+                best = t
+        elif stat.S_ISDIR(st.st_mode):
+            try:
+                for e in os.scandir(p):
+                    stack.append(e.path)
+            except OSError:
+                pass
+    if best is None:
+        try:
+            best = os.lstat(path).st_mtime
+        except OSError:
+            pass
+    return best
+
+
+def tree_size(path):
+    n = 0
+    for dp, _dn, fn in os.walk(path, followlinks=False):
+        for f in fn:
+            try:
+                n += os.lstat(os.path.join(dp, f)).st_size
+            except OSError:
+                pass
+    if not os.path.isdir(path):
+        try:
+            n = os.lstat(path).st_size
+        except OSError:
+            pass
+    return n
+
+
+def mount_options(path):
+    """The per-mount options of the mount holding `path` (the longest mount point that prefixes its real path), or None."""
+    real = os.path.realpath(path)
+    best, opts = "", None
+    try:
+        with open(MOUNTINFO) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 6:
+                    continue
+                mp = parts[4].replace("\\040", " ")
+                if (real == mp or real.startswith(mp.rstrip("/") + "/") or mp == "/") and len(mp) >= len(best):
+                    best, opts = mp, parts[5].split(",")
+    except OSError:
+        return None
+    return opts
+
+
+def atime_trusted(path):
+    opts = mount_options(path)
+    return opts is not None and "noatime" not in opts
+
+
+# ---- deleting, with the assertion ---------------------------------------------------------------------------------------------
+class Refused(Exception):
+    pass
+
+
+def assert_inside(base_real, path):
+    """The resolved PARENT of `path` is the rule's directory or below it; the path's own last name is never resolved
+    (a link is removed as a link, never followed)."""
+    parent = os.path.realpath(os.path.dirname(path))
+    if not (parent == base_real or parent.startswith(base_real + os.sep)):
+        raise Refused("%s resolves outside %s" % (path, base_real))
+    if os.path.realpath(path) == base_real or path.rstrip("/") == base_real:
+        raise Refused("%s is the rule directory itself" % path)
+
+
+def remove(path, base_real):
+    assert_inside(base_real, path)
+    if os.path.islink(path):
+        raise Refused("%s is a symlink" % path)
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    else:
+        os.unlink(path)
+
+
+# ---- the kinds ---------------------------------------------------------------------------------------------------------------
+class Ctx:
+    def __init__(self, rule, dry):
+        self.r = rule
+        self.dry = dry
+        self.base = rule["path"]
+        self.base_real = os.path.realpath(self.base)
+        self.removed = []      # (path, size)
+        self.kept = 0
+        self.notes = []
+        self.now = time.time()
+
+    def stale(self, used):
+        return used is not None and self.r["days"] is not None and self.now - used > self.r["days"] * DAY
+
+    def drop(self, path):
+        size = tree_size(path)
+        if self.dry:
+            print("  would remove %s" % path)
+        else:
+            try:
+                remove(path, self.base_real)
+            except (Refused, OSError) as e:
+                self.notes.append("not removed: %s" % e)
+                self.kept += 1
+                return False
+        self.removed.append((path, size))
+        return True
+
+
+def names(ctx):
+    try:
+        return sorted(os.scandir(ctx.base), key=lambda e: e.name)
+    except OSError:
+        return []
+
+
+def run_generations(ctx):
+    # base/<theme>/<generation>: a generation dir is a unit unless the theme's `current` link names it
+    for theme in names(ctx):
+        if theme.is_symlink() or not theme.is_dir(follow_symlinks=False):
+            continue
+        cur = os.path.join(theme.path, "current")
+        keepname = os.path.basename(os.readlink(cur)) if os.path.islink(cur) else None
+        try:
+            gens = sorted(os.scandir(theme.path), key=lambda e: e.name)
+        except OSError:
+            continue
+        for g in gens:
+            if g.is_symlink() or not g.is_dir(follow_symlinks=False):
+                continue
+            if g.name == keepname:
+                ctx.kept += 1
+                continue
+            if ctx.stale(tree_used(g.path, ctx.r["used"])):
+                ctx.drop(g.path)
+            else:
+                ctx.kept += 1
+
+
+def run_files(ctx):
+    for e in names(ctx):
+        if e.is_symlink() or not e.is_file(follow_symlinks=False) or not e.name.endswith(ctx.r["glob"]):
+            continue
+        if ctx.stale(tree_used(e.path, ctx.r["used"])):
+            ctx.drop(e.path)
+        else:
+            ctx.kept += 1
+
+
+def logo_slug(name):
+    for suf in (".mono.png", ".png", ".none"):
+        if name.endswith(suf):
+            return name[: -len(suf)]
+    return None
+
+
+def run_slugs(ctx):
+    groups = {}
+    for e in names(ctx):
+        if e.is_symlink() or not e.is_file(follow_symlinks=False):
+            continue
+        s = logo_slug(e.name)
+        if s:
+            groups.setdefault(s, []).append(e.path)
+    gone = []
+    for slug, paths in sorted(groups.items()):
+        used = max(tree_used(p, ctx.r["used"]) for p in paths)
+        if ctx.stale(used):
+            if all([ctx.drop(p) for p in paths]):
+                gone.append(slug)
+        else:
+            ctx.kept += 1
+    idx = os.path.join(ctx.base, ctx.r["index"])
+    if gone and not ctx.dry and os.path.isfile(idx) and not os.path.islink(idx):
+        try:
+            with open(idx) as f:
+                d = json.load(f)
+            if isinstance(d, dict) and any(s in d for s in gone):
+                for s in gone:
+                    d.pop(s, None)
+                tmp = idx + ".sweep"
+                with open(tmp, "w") as f:
+                    json.dump(d, f, indent=1, sort_keys=True)
+                os.replace(tmp, idx)
+        except (OSError, ValueError) as e:
+            ctx.notes.append("index not updated: %s" % e)
+    elif gone and ctx.dry:
+        print("  would drop %d row(s) from %s" % (len(gone), idx))
+
+
+def referenced(roots, skip_dir):
+    """Every string 'img/<name>' in any .json under `roots` (outside skip_dir): the pool's own words for its pictures."""
+    refs, seen = set(), 0
+
+    def walk(v):
+        if isinstance(v, str):
+            if v.startswith("img/"):
+                refs.add(v[4:])
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+
+    for root in roots:
+        for dp, dn, fn in os.walk(root, followlinks=False):
+            if os.path.realpath(dp) == os.path.realpath(skip_dir):
+                dn[:] = []
+                continue
+            for f in fn:
+                p = os.path.join(dp, f)
+                if f.endswith(".json") and not os.path.islink(p):
+                    try:
+                        with open(p) as fh:
+                            walk(json.load(fh))
+                        seen += 1
+                    except (OSError, ValueError) as e:
+                        raise Refused("cannot read %s (%s): the pool is unknown, nothing is removed" % (p, e))
+    return refs, seen
+
+
+def run_orphans(ctx):
+    refs, seen = referenced(ctx.r["refs"], ctx.base)
+    if seen == 0:
+        raise Refused("no entry file found under %s: the pool is unknown, nothing is removed" % ", ".join(ctx.r["refs"]))
+    for e in names(ctx):
+        if e.is_symlink() or not e.is_file(follow_symlinks=False):
+            continue
+        if e.name in refs:
+            ctx.kept += 1
+        elif ctx.stale(tree_used(e.path, ctx.r["used"])):
+            ctx.drop(e.path)
+        else:
+            ctx.kept += 1
+
+
+def run_newest(ctx):
+    units = []
+    for e in names(ctx):
+        if e.is_symlink() or not e.is_dir(follow_symlinks=False):
+            continue
+        units.append((tree_used(e.path, ctx.r["used"]) or 0, e.path))
+    units.sort(reverse=True)
+    ctx.kept += min(len(units), ctx.r["keep"])
+    for _t, p in units[ctx.r["keep"]:]:
+        ctx.drop(p)
+
+
+KINDS = {"generations": run_generations, "files": run_files, "slugs": run_slugs, "orphans": run_orphans, "newest": run_newest}
+
+
+def human(n):
+    for u in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024 or u == "GiB":
+            return "%d %s" % (n, u) if u == "B" else "%.1f %s" % (n, u)
+        n /= 1024.0
+
+
+def sweep_rule(rule, dry):
+    """-> the one line for this rule."""
+    what = ("%d days unused" % rule["days"]) if rule["days"] is not None else "newest %d" % rule["keep"]
+    head = "%s (%s)" % (rule["id"], what)
+    base = rule["path"]
+    if not os.path.lexists(base):
+        return "%s: %s is not there" % (head, base)
+    if os.path.islink(base) or not os.path.isdir(base):
+        return "%s: SKIPPED, %s is a symlink or not a directory" % (head, base)
+    if "atime" in rule["used"] and not atime_trusted(base):
+        return "%s: SKIPPED, the mount of %s is noatime (or unknown): what was read cannot be told" % (head, base)
+    ctx = Ctx(rule, dry)
+    try:
+        KINDS[rule["kind"]](ctx)
+    except Refused as e:
+        return "%s: SKIPPED, %s" % (head, e)
+    size = sum(s for _p, s in ctx.removed)
+    line = "%s: %s %d, %s, kept %d" % (head, "would remove" if dry else "removed", len(ctx.removed), human(size), ctx.kept)
+    if ctx.notes:
+        line += " [" + "; ".join(ctx.notes) + "]"
+    return line
+
+
+def write_log(lines):
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a") as f:
+            for ln in lines:
+                f.write("%s lares-sweep: %s\n" % (time.strftime("%H:%M:%S"), ln))
+    except OSError:
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description="the shell's retention sweep")
+    ap.add_argument("--dry-run", action="store_true", help="print what would be deleted; delete and log nothing")
+    ap.add_argument("--daily", action="store_true", help="do nothing when a sweep finished in the last 20 hours")
+    ap.add_argument("--rule", action="append", default=[], help="only this rule id (repeatable)")
+    a = ap.parse_args()
+    ids = [r["id"] for r in RULES]
+    for r in a.rule:
+        if r not in ids:
+            ap.error("no rule %r (have: %s)" % (r, ", ".join(ids)))
+    if a.dry_run and a.daily:
+        ap.error("--daily and --dry-run do not go together")
+
+    lockf = None
+    if not a.dry_run:
+        try:
+            os.makedirs(os.path.dirname(STAMP), exist_ok=True)
+            lockf = open(STAMP + ".lock", "w")
+            fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return 0   # another sweep is running
+        except OSError:
+            lockf = None
+    if a.daily:
+        try:
+            if time.time() - os.stat(STAMP).st_mtime < DAILY_GAP:
+                return 0
+        except OSError:
+            pass
+
+    lines = []
+    for rule in RULES:
+        if a.rule and rule["id"] not in a.rule:
+            continue
+        try:
+            ln = sweep_rule(rule, a.dry_run)
+        except Exception as e:   # one rule's trouble never stops the others
+            ln = "%s: FAILED %s: %s" % (rule["id"], type(e).__name__, e)
+        lines.append(ln)
+        print(ln)
+    if not a.dry_run:
+        write_log(lines)
+        try:
+            with open(STAMP, "w") as f:
+                f.write("%d\n" % time.time())
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

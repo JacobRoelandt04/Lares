@@ -1,0 +1,13 @@
+==trust
+ User "Owner" (id=0, flags=0x4c13) (current): trustState=UNTRUSTED, trustManaged=0, deviceLocked=1, isActiveUnlockRunning=0, strongAuthRequired=0x0
+==window
+    mKeyguardOccluded=true mKeyguardOccludedChanged=false mPendingKeyguardOccluded=true
+  mCurrentFocus=Window{3b1c0d7 u0 com.example.app/com.example.app.Main}
+  mFocusedApp=ActivityRecord{25776545 u0 com.example.app/.Main t24689}
+    mShowingDream=false mDreamingLockscreen=false
+    isKeyguardShowing=true
+==power
+  mWakefulness=Awake
+==idle
+  mScreenOn=true
+  mScreenLocked=true

@@ -1,0 +1,81 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Anekantavada",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Anekantavada",
+  "url": "https://en.wikipedia.org/wiki/Anekantavada",
+  "revid": 1376664520,
+  "license": "CC BY-SA 4.0",
+  "quality": "featured"
+ },
+ "title": "Anekantavada",
+ "category": {
+  "family": "philosophy",
+  "topic": "philosophy-and-religion",
+  "via": "thompson",
+  "why": {
+   "p": 0.05,
+   "oneIn": 20,
+   "openRate": null
+  }
+ },
+ "intro": {
+  "text": "Anekāntavāda is the Jain doctrine about metaphysical truths that emerged in ancient India. It states that the ultimate truth and reality is complex and has multiple aspects and viewpoints. According to Jainism, no single, specific statement can describe the nature of existence and the absolute truth. This knowledge, it adds, is comprehended only by the Arihants. Other beings and their statements about absolute truth are incomplete, and at best a partial truth. All knowledge claims, according to the anekāntavāda doctrine must be qualified in many ways, including being affirmed and denied. Anekāntavāda is a fundamental doctrine of Jainism.",
+  "words": 98,
+  "provenance": "cleaned",
+  "stripped": [
+   "native_names",
+   "parentheticals"
+  ],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 20,
+    "e": 24,
+    "target": "Jainism",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Jainism"
+   },
+   {
+    "s": 355,
+    "e": 363,
+    "target": "Arihant",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Arihant"
+   },
+   {
+    "s": 637,
+    "e": 644,
+    "target": "Jainism",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Jainism"
+   }
+  ]
+ },
+ "images": [],
+ "installed": null,
+ "popularity": {
+  "views60d": 14800,
+  "band": 0.31
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

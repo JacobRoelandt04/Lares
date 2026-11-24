@@ -1,0 +1,11 @@
+// The sheet's fixed config: the mock config dir of every `cfg=user` state in tools/dev/sheet_states.txt holds this file.
+// These are the non-default values the user's desktop runs on (shell.jsonc as of the cleanup's start, as C4's migration leaves it:
+// tools/dev/config_migrate.py), minus what no picture shows and minus every path of theirs. The sheet never reads the live file. A
+// step that moves a key moves it here too: its migration runs on this file, and the `user-*` states must not change.
+{
+    "shadow": {
+        "mode": "halo",
+        "aura": true
+    },
+    "border": true
+}

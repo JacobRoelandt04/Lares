@@ -1,0 +1,62 @@
+{
+ "v": 1,
+ "doc": "Every prompt of the intro pipeline (judge_ollama.py, judge_jev.py, generate.py). Templates use {name} placeholders filled by judge.fill(): a literal replace, so nothing else in a template is special. The four rules are the user's engagement rules (PLAN.md 'Text'); they are stated once under `rules` and substituted everywhere, so a locator, a rule check and the writer all judge by the same words. The picture-of-the-day title (`title`, lib/title.py) is asked of the writer model only when the deterministic cleanup is still too long, and its answer is checked by code.",
+ "rules": {
+  "defines": "It says what the subject is, up front: the first sentence names the subject and says what kind of thing it is.",
+  "hook": "It has at least one concrete hook: a specific fact, number, name, date or surprising detail a newcomer would remember, not only generalities.",
+  "selfContained": "It is self-contained: someone who has read nothing else on the page understands it. It does not lean on 'as above', 'the following', 'this section' or on an earlier paragraph.",
+  "noHowTo": "It does not open like a how-to: it is not an instruction, a command, a configuration step or a list of steps.",
+  "length": "It is one paragraph of 80 to 150 words."
+ },
+ "definition": "An introduction is the paragraph that tells a curious newcomer, who has never heard of the subject, what it is and why it is worth knowing. It is NOT a hatnote or notice ('This article needs expansion', 'Related articles', 'See also', 'Not to be confused with'), a table of contents, a link list, a heading, a code block, a list item, an instruction or command, or a configuration detail. On an encyclopedia page it is the first real prose paragraph; on a how-to page it may be the short description that comes before the steps.",
+ "local": {
+  "locate_system": "You choose the introduction of a wiki page for a curious newcomer.\n\n{definition}\n\nA good introduction obeys four rules:\n1. {defines}\n2. {hook}\n3. {selfContained}\n4. {noHowTo}\n\nYou are given the page title and its paragraphs, each numbered in square brackets. Answer with JSON: \"intro_para\" is the number of the paragraph that is the best introduction, or \"none\" when NO paragraph qualifies (do not pick the least bad one). \"confidence\" is your probability, from 0 to 1, that your choice is right. Then rate the paragraph you chose, each from 0 to 1: \"defines\" (rule 1 holds), \"hook\" (rule 2 holds), \"self_contained\" (rule 3 holds), \"howto_opening\" (it DOES open like a how-to, so 1 is bad). Use 0.9 or more only when a rule clearly holds and 0.1 or less only when it clearly fails. When you answer \"none\", give 0 for all five numbers.",
+  "rules_system": "You judge one part of a wiki page for a curious newcomer.\n\n{definition}\n\nAn introduction obeys four rules:\n1. {defines}\n2. {hook}\n3. {selfContained}\n4. {noHowTo}\n\nYou are given the page title and its numbered paragraphs, and told which paragraph(s) to judge. Answer with JSON, each number from 0 to 1: \"defines\" (rule 1 holds), \"hook\" (rule 2 holds), \"self_contained\" (rule 3 holds), \"howto_opening\" (it DOES open like a how-to, so 1 is bad). Use 0.9 or more only when a rule clearly holds and 0.1 or less only when it clearly fails.",
+  "locate_user": "Page title: {title}\n\nParagraphs (answer with the number in brackets):\n\n{paragraphs}",
+  "rules_user": "Page title: {title}\n\nParagraphs:\n\n{paragraphs}\n\nJudge: {judged}.",
+  "grounded_system": "You check a summary against its source. Answer with JSON: \"grounded\" is the probability, from 0 to 1, that EVERY factual claim in the SUMMARY is supported by the SOURCE. One invented or unsupported fact (a date, a number, a name, a consequence) makes it low. Wording that only rephrases the source is supported.",
+  "grounded_user": "SOURCE:\n{source}\n\nSUMMARY:\n{summary}",
+  "graphic_system": "You screen images for a general audience. Answer with JSON: \"graphic\" is the probability, from 0 to 1, that the image shows graphic or disturbing content such as corpses, gore or explicit violence, judging only from the caption and description.",
+  "graphic_user": "Caption: {caption}\nDescription: {description}",
+  "interest_system": "You predict what a reader opens. Answer with JSON: \"interest\" is the probability, from 0 to 1, that a reader who recently opened the listed articles will open the candidate article.",
+  "interest_user": "Recently opened: {recent}\n\nCandidate: {title}\n{lead}"
+ },
+ "jev": {
+  "intro_para": "Which paragraph is the best introduction to the topic for a newcomer: it says what the subject is and why it matters, and is not a hatnote, a notice, an instruction, a configuration detail, a heading, a code block or a link list? Answer none when no paragraph qualifies.",
+  "none_option": "no paragraph qualifies",
+  "paragraph_option": "paragraph {n}",
+  "rules_twopass": {
+   "defines_up_front": "{P} says what the subject is in its first sentence: it names the subject and says what kind of thing it is.",
+   "concrete_hook": "{P} contains at least one concrete, specific fact a newcomer would remember, such as a name, number, date, place or surprising detail, and not only generalities.",
+   "self_contained": "{P} can be understood by someone who has read nothing else on the page.",
+   "howto_opening": "{P} opens by telling the reader to install, run, configure or edit something: it is an instruction rather than an explanation."
+  },
+  "rules_onepass": {
+   "defines_up_front": "The paragraph that best introduces the topic says what the subject is in its first sentence: it names the subject and says what kind of thing it is.",
+   "concrete_hook": "The paragraph that best introduces the topic contains at least one concrete, specific fact a newcomer would remember, such as a name, number, date, place or surprising detail, and not only generalities.",
+   "self_contained": "The paragraph that best introduces the topic can be understood by someone who has read nothing else on the page.",
+   "howto_opening": "The paragraph that best introduces the topic opens by telling the reader to install, run, configure or edit something: it is an instruction rather than an explanation."
+  },
+  "grounded": "Every factual claim in summary is supported by source_text.",
+  "graphic": "image shows graphic or disturbing content such as corpses, gore or explicit violence.",
+  "interest": "How likely is a reader who recently opened recently_opened_titles to open the candidate article?",
+  "interest_candidate": "How likely is a reader who recently opened recently_opened_titles to open the article of candidate {n}, the entry of candidates whose n is {n}?",
+  "interest_levels": [
+   "Certainly not",
+   "Unlikely",
+   "Maybe",
+   "Likely",
+   "Certainly"
+  ]
+ },
+ "write": {
+  "system": "You write the opening paragraph of a short article card for a curious newcomer.\n\nWrite ONE paragraph of 100 to 130 words about the subject itself. It must obey four rules:\n1. {defines}\n2. {hook}\n3. {selfContained}\n4. {noHowTo}\n\nWrite about the SUBJECT, never about the text: do not say 'this article', 'this page', 'this guide', 'this document' or 'the text'. Never name or quote these rules: do not write 'the subject is', 'a concrete hook', 'self-contained' or anything like them.\nUse ONLY facts stated in the text the user gives you. Add nothing from your own knowledge, not even what kind of thing the subject is, unless the text says it; do not guess a date, a number or a name. Plain prose: no headings, no lists, no bullet points, no markdown, no code, no commands, no file paths, no quotation marks around the answer, no preamble such as 'Here is'. Reply with the paragraph and nothing else.",
+  "user": "Subject: {title}\n\nText:\n{text}\n\nWrite the paragraph now.",
+  "feedback": "That paragraph {problem}. Rewrite it as ONE paragraph of 100 to 130 words about the subject itself, with the same rules and only facts from the text. Reply with the paragraph and nothing else."
+ },
+ "title": {
+  "system": "You shorten the file name of a Wikimedia Commons photo into the title of a small card.\n\nReply with ONE short title: at most 6 words and 40 characters, naming what the photo shows, in the language of the file name. Use only words that appear in the file name or in the description: you may leave words out and never add one. Leave out dates, camera codes, photographers, the places after the subject and scientific names in brackets. Keep the capitalisation of the file name's first word. No quotation marks, no full stop, no preamble, no explanation. Reply with the title and nothing else.",
+  "user": "File name: {title}\n\nDescription: {description}\n\nShort title:",
+  "feedback": "That title {problem}. Reply with ONE short title of at most 6 words and 40 characters, using only words from the file name or the description, and nothing else."
+ }
+}

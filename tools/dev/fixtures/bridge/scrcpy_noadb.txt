@@ -1,0 +1,5 @@
+adb server version (41) doesn't match this client (40); killing...
+* daemon started successfully
+INFO: scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>
+INFO: ADB device found:
+ERROR: Could not find any ADB device

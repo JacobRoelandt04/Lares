@@ -1,0 +1,401 @@
+// shell.jsonc -- the shell's own settings (shell.qml, modules/shell). The template of ~/.config/quickshell/config/shell.jsonc.
+// Every key is optional and every value below IS the default: a missing key (or one with a bad value) takes it, a number out of
+// its range is clamped to the range. The file is read hot (the scale: see "scale"). `//` and `/* */` comments are allowed. Keep only
+// what you change. mockups/shell.qml's Layout tab writes topMode, centre, zones, islands and outlets to the mock shell's copy.
+// The layout's NUMBERS (the spacing between modules, the least void, the title's slot, the workspaces' groove, the joint, the halo)
+// are not settings of this file: they are the shell's constants, tuned on mockups/shell.qml's Layout tab (ShellConfig.qml).
+{
+    // The top bar: "islands" (three 40 px islands on the top edge -- left, centre, right -- with the wallpaper between them) or
+    // "continuous" (one bar across the whole edge, the three zones laid out along it). The same modules stand in either; nothing is
+    // rebuilt by the switch.
+    "topMode": "islands",
+
+    // The face of the shell's own text (the placeholders' names, and what is handed to the modules that take one). Any installed family.
+    "font": "Audiowide",
+
+    // "centred": the centre island sits in the middle of the screen. "equal": it is placed so both voids are the same.
+    "centre": "centred",
+
+    // The modules of each island, in order (left to right). Ids: power idle theme notes llm windowtray weather clock stocks player
+    // volume aerial bridge panorama silicon update notifications (`network` is still read as aerial). Move an id to another zone to move the module; a module left out comes back in its
+    // own zone at the end; an unknown id or a second copy is ignored.
+    "zones": {
+        "left": ["power", "idle", "theme", "notes", "llm", "windowtray"],
+        "centre": ["weather", "clock", "stocks"],
+        "right": ["player", "volume", "aerial", "bridge", "panorama", "silicon", "update", "notifications"]
+    },
+
+    // The island lengths in px, per output (by connector name: `hyprctl monitors`); "default" for any output not named. A length left
+    // out is what the modules need (the room at the ends, their widths, the gaps and the title's slot, which follows the title), so the
+    // defaults fit 2880 px. A length given here (a whole number above 0) is FIXED: leave the left one out for the island to follow the
+    // title. Example:
+    //   "islands": { "eDP-1": { "left": 760, "centre": 640, "right": 480 }, "default": { "left": 800 } }
+    "islands": {},
+
+    // Where notes and the LLM open: a slim bar ("left", "right" or "bottom") and where along it, 0 .. 1 from its start on the screen (0 is the top of a
+    // side bar, under the island: the popup rests flush in the corner), or "top": under its own button, as every other popup.
+    "outlets": {
+        "notes": { "bar": "left", "along": 0 },
+        "llm": { "bar": "left", "along": 0 }
+    },
+
+    // THE SCALE. "global" is DEVICE pixels per DESIGN pixel -- the one number to turn: 1.25 makes the whole shell 25 % bigger (the bar,
+    // the popups, the pill windows and every texture, canvas and decoded image in them) on any output, whatever scale Hyprland itself
+    // gives that output: the two are independent, the shell divides Hyprland's own out. 1.0 is the size the modules were designed at.
+    // 0.5 .. 4.
+    // "bar" and "popup" are RATIOS on it (0.5 .. 2) for when the proportions between the bar and the popups feel off: "bar" scales the
+    // main bar -- its 40 px thickness (and the room the windows keep clear of it), the lengths of the islands and every module in them --
+    // and "popup" every popup's content, with the radius, the fillets and the snaps the surface is drawn with; a popup that continues
+    // its bar's cell (the reel strips, the tray's strip) follows "bar". The outlet bars stay the compositor's own 6 px gap.
+    // "popups" is one popup's OWN ratio, by its owner's id (silicon, weather, clock, stocks, player, aerial (`network` is read as aerial), bridge, panorama, update, notifications (the
+    // manager), notes, llm, clipboard, launcher, windowtray), 0.5 .. 2: that popup's content is laid out in its own units and drawn this
+    // much larger INSTEAD of "popup" (an entry says what the popup's ratio is; it is not a factor on "popup"), with its radius, its
+    // textures and the box it asks the engine for. Silicon's board is read at 1.35 (its text is small at the global scale) and the LLM's
+    // chat at 1.1 (a feature-rich popup, a little bigger); an entry of yours replaces that one, `"popups": { "silicon": 1.0 }` puts it back.
+    // "<id>.detail" is the ratio of a popup's DETAIL -- every card that opens beside it: its secondary, that card's own, and the tray's
+    // label and menus under the reel's strip -- by the same owner id: `"popups": { "silicon.detail": 1.2 }` draws silicon's tuning and GPU
+    // cards at 1.2 while the board stays at its own. A detail is independent of its main popup: with no "<id>.detail" entry it takes the
+    // plain "popup" ratio, never its main popup's (so silicon's cards are 1.0 at "popup": 1.0 although its board is 1.35). Same range, same
+    // "outputs" override as "popups".
+    // "pills" is the same for the floating pills -- the OSD's ("osd"), the toasts' ("toast") and the popups' that float over a fullscreen
+    // window ("popup"); a pill with no entry takes "popup".
+    // "outputs": an entry per output (connector names) wins over the block's own value, key by key ("popups" and "pills" too):
+    //   "outputs": { "eDP-1": { "global": 1.5 }, "DP-3": { "global": 1.0, "popup": 1.1, "popups": { "silicon": 1.2, "silicon.detail": 1.1 }, "pills": { "osd": 1.1 } } }
+    // Anything that is not a number is the default. Read when the shell starts (the shell runs with QS_DISABLE_FILE_WATCHER=1:
+    // `lares restart`); where the file watcher is on, a saved change applies at once.
+    "scale": {
+        "global": 1.0,
+        "bar": 1.0,
+        "popup": 1.0,
+        "popups": { "silicon": 1.35, "aerial": 1.35, "llm": 1.1 },
+        "pills": {},
+        "outputs": {}
+    },
+
+    // THE SHELL'S EDGE. A shadow under everything the surface is (the bars, the popups while they open and travel, the launcher's
+    // card, the droplets, the ripples, the toasts, the OSD) and a ring round it; the colours are the theme's, so dark mode has its own.
+    "shadow": {
+        // "off" | "halo": a halo is one band of the same thickness all round the outline, round every curve. Its numbers (reach,
+        // strength, spread, softness, blend) are the shell's constants, tuned on mockups/shell.qml's Layout tab. `"shadow": "halo"` (a
+        // word, or `true`) is the same as this object with "halo".
+        "mode": "off",
+        // A Theme token's name ("shellShadow", "shadowDeep", "accent" ...) or "#rrggbb"; null is the theme's own (Theme.shellShadow), so
+        // dark mode has its own (a hex is the same in both modes). The alpha is the halo's strength.
+        "color": null,
+        // THE AURA, a prototype: true lets the halo LIGHT UP with a few hues flowing round the outline, under slow noise, for ~3 s:
+        // `quickshell ipc call shell aura <palette> <group>` (palettes: accent siri ok warn error cool; groups: all | island (the centre
+        // island and what hangs from it) | side (the side islands and the slim bars); `shell auraStop` lets go), and the events the shell
+        // plays it on. false: the verb answers "aura is off". It needs no shadow: with the shadow off the aura is its own halo (44 px) and
+        // is gone with it; with a shadow it lies over it. true | false.
+        "aura": false,
+        // Which events light it: the end of a chat answer that took at least this many seconds (false: never), a system update that ended
+        // with its popup shut, a timer or alarm, the screen being shared or recorded.
+        "auraEvents": { "llm": 60, "update": true, "timer": true, "screencast": true }
+    },
+    // A ring just outside the surface: false | true (3 px) | a width in px, 0 .. 12 | { "width": 3, "color": null }, the
+    // colour as the shadow's (null: Theme.shellBorder).
+    "border": false,
+
+    // THE THEME BUTTON (left click: the theme popup, one card per pair and mode; right click: light <-> dark), the curtain and the
+    // wallpaper.
+    "theme": {
+        // "shell": the shell alone (Theme.toggleMode): kitty, btop, the window borders, GTK and the wallpaper keep their mode.
+        // "themectl": the whole desktop: tools/theme/themectl toggle / set <pair> <mode>, a child of the shell (its ok / FAIL lines go to
+        // the shell's log, a failed run is one notification). The shell follows ~/.config/theme/state.json as ever. Before switching, run
+        // `tools/theme/themectl doctor` and add the include lines it asks for to the apps' own configs.
+        "apply": "shell",
+        // THE PROGRAMS a switch by themectl touches: every one unless it is false here: vscode wallpaper yazi hyprland kitty btop starship libadwaita gtk
+        // nwg-look gnome-accent evince gtk3-ini gtk4-ini fastfetch hyprlock windows-vm. { "evince": false } leaves evince as it is.
+        "targets": {},
+        // THE PAIRS that are offered and cycled through, in this order, by file name ("eva", "catppuccin" ...). [] = all of them, by name.
+        "pairs": [],
+        // THE CURTAIN (a prototype): a picture of every screen is shown over the desktop while the switch runs behind it, and a shader
+        // takes the picture away when the desktop has settled, so the windows, the bars and the apps change together instead of one after
+        // the other. The curtain takes NO input: clicks, keys and the wheel reach the windows under it. Whatever would make the picture a
+        // lie ends the run at once (a workspace switch, a window opening, closing, moving, going fullscreen or floating, an output plugged
+        // or unplugged, the session locking, another click on the button). It is never used while the session is locked. A key or a click
+        // INSIDE the focused window shows when the curtain goes, 1.2 s at most. true | false.
+        "curtain": false,
+        // With the curtain: the windows nobody is looking at (other workspaces, the special workspace, a group's hidden tabs) are
+        // shown for a few frames each UNDER the picture, so none comes back in the old colours later, and everything is put back
+        // (workspaces, tabs, focus, pointer). On unless exactly false.
+        "curtainRepaint": true,
+        // The frames a window stays on show (1-60), counted on the slowest monitor: its class's entry below, else this. A step that
+        // shows several windows stays as long as the one that needs most. If a window still comes back in the old colours, give its
+        // class more frames (the class as `hyprctl clients` says it, or as the debug run names it; any case, never a part of it).
+        "curtainRepaintFrames": 3,
+        "curtainRepaintClassFrames": { "com.microsoft.VSCode": 16, "zen": 24 },
+        // To WATCH it: true runs a switch without the curtain and the repaint slowed to curtainRepaintDebugMs a step (200-5000),
+        // each step named in a notice at the top of the screen. Set it back to false afterwards.
+        "curtainRepaintDebug": false,
+        "curtainRepaintDebugMs": 900,
+        // "radial" (opens from the pointer: the theme button) | "peel" (travels from it across the screen) | "louvres" | "cycle" (the
+        // next one each time).
+        "curtainStyle": "radial",
+        // A second prototype, and nothing without "curtain": the shell is NOT in the picture. It stays live through the switch (the
+        // vinyl and the board move, the theme OSD opens, a popup opens and closes) and changes palette by the same line as the windows,
+        // in the same frame. An output with a fullscreen window over the shell keeps the plain curtain. true | false.
+        "curtainLive": false,
+        // THE WALLPAPERS PER THEME (applied by tools/theme/themectl): for each theme -- a light/dark pair, by its file name -- the pictures
+        // of each mode, a path or a list of paths. Of a list, one is drawn on every switch to that theme or mode and at the first apply of
+        // a session, from a shuffle bag (each picture once per round, never the same twice in a row; `themectl wallpaper list` shows it).
+        // themectl writes ~/.config/hypr/hyprpaper.conf with the picture and tells a running hyprpaper. A theme and mode with no entry
+        // keep the wallpaper that is up. A path takes ~ and must be absolute otherwise. yazi's "Set as wallpaper" adds a picture to the
+        // current theme and mode's list and "Remove from wallpapers" takes one out (tools/theme/yazi/CHEATSHEET.md). Example:
+        //   "wallpapers": { "eva": { "light": ["~/Pictures/wallpapers/light/dunes.jpeg", "~/Pictures/wallpapers/light/sky.png"],
+        //                            "dark": "~/Pictures/wallpapers/dark/amoled-flower.png" } }
+        "wallpapers": {},
+        // How the picture fills the output: "cover" | "contain" | "tile" | "fill".
+        "wallpaperFit": "cover"
+    },
+
+    // APP ICONS are the icon theme the desktop uses -- what GTK reports (gsettings org.gnome.desktop.interface icon-theme: themectl writes
+    // Papirus-Light / Papirus-Dark by mode). Quickshell takes the theme once, at start, so a theme CHANGED under a running shell shows after
+    // its restart. A script in the launcher shows text-x-script unless its `# icon:` header names an icon the theme has.
+    "icons": {
+        // An app's own picture: the key is the window class, the desktop id (without .desktop) or the icon name, any case; the value a
+        // path (~ allowed) or a theme icon name. One that points at a missing file is ignored. It holds for the launcher, the window title
+        // and screentime alike. Example: { "kitty": "~/.config/kitty/kitty.app.png" }
+        "overrides": {},
+        // The one icon shown when the theme has none for an app. The window title shows the Arch logo instead for a window with no icon.
+        "fallback": "application-x-executable"
+    },
+
+    // WHAT A RIGHT OR MIDDLE CLICK ON A BAR BUTTON DOES: { "<button>": { "right": ..., "middle": ... } }. A click not named here is as shipped: the
+    // right click of theme switches light / dark, of player plays / pauses, of volume mutes the half it is on, of notifications turns
+    // do-not-disturb on or off; every other right or middle click does nothing. A click is "none", "popup" (open or close the button's
+    // popup), one of the button's own words, or a command as a list (it runs by itself). While the session is locked only what is as shipped works. The words:
+    //   "theme": "mode" (light / dark) "next" (the next pair)      "notes": "new"                     "llm": "new"
+    //   "weather": "refresh" "nextPlace"                            "clock": "timer" (pause / resume) "timers" "wiki"
+    //   "stocks": "refresh"                                         "player": "toggle" "next" "prev" "stop"
+    //   "volume": "mute"                                            "aerial": "vpn" "airplane"
+    //   "bridge": "mirror" "shot" "clip" (the phone's clipboard)   "panorama": "displays" "presets"
+    //   "silicon": "nextProfile"   "update": "check"               "notifications": "dnd" "clear"     "windowtray": ("popup" alone)
+    // Example: { "clock": { "right": ["xdg-open", "https://calendar.proton.me"], "middle": "timer" }, "volume": { "middle": ["pavucontrol"] } }
+    "clicks": {},
+
+    // POPUPS THAT A CLICK OUTSIDE CLOSES: any of "theme" "notes" "llm" "weather" "clock" "stocks" "player" "audio" (the sound popup) "aerial" "bridge" "panorama"
+    // "silicon" "update" "notifications". The click does nothing else, and while such a popup is open the pointer reaches nothing else on that
+    // display (no scrolling, no drop); what you type goes where it went. [] = none: a popup is closed by its button or Escape.
+    "clickAway": [],
+
+    // WHICH DISPLAYS GET THE BARS (and the popups that hang from them): "all" | "internal" (the laptop's own panel) | a list of connector
+    // names, a "!" before one leaves it out: ["DP-1"], ["!HDMI-A-1"]. When that leaves none of the displays that are there, all of them get the bars.
+    "bars": { "outputs": "all" },
+
+    // THE BAR GLYPHS' FLOURISHES: played by a hover, played by the key that opens a module's popup. (The OLED care's random ones are "oled" below.)
+    "flourishes": { "hover": true, "key": true },
+
+    // The terminal the launcher runs a terminal app in, as a list; the app's own command is added at the end.
+    "terminal": ["kitty", "-e"],
+
+    // Programs that count as a screen share while they run (the toasts are held, the idle mode raised), beside the portal's shares.
+    "recorders": ["wf-recorder", "wl-screenrec", "wayvnc"],
+
+    // THE GEOCLUE AGENT (read by tools/shell/lares, not by the shell). The weather finds its place through geoclue (`where-am-i`), and
+    // geoclue refuses every client until an agent has registered for the user. true makes `lares start` (the login) start geoclue's
+    // demo agent (/usr/lib/geoclue-2.0/demos/agent) as the compositor's child, unless an agent runs already. The demo agent ASKS -- a
+    // Yes / No notification, closing it is No -- for
+    // each client geoclue.conf has no section for, at every start; until it is answered the weather keeps its saved places. true | false.
+    "geoclueAgent": false,
+
+    // DICTATION (a prototype, off unless "enabled" is true; docs/dictation.md). fn+F10 (XF86Launch5) starts and stops a take,
+    // Shift+fn+F10 one in Dutch; the binds are lines of your keybinds.lua (`lares binds` prints them). The microphone listens from the press, and the aura's smaller
+    // half (the centre island) comes at once; the whole aura comes when the words can appear (the model loaded: ~5 s after a start or
+    // a rest, at once otherwise) -- nothing said meanwhile is lost. A muted mic is unmuted for the take and muted again after. The words appear underlined in the focused text field (an app's, or the shell's LLM input and
+    // notes editor) and correct themselves while you speak; a pause writes the sentence for good. With no text field focused, the
+    // text is on the clipboard at the stop. The speech model runs locally: tools/stt/setup.sh sets it up once (a private Python under
+    // ~/.local/share/lares/stt, the model in ~/.cache/lares-stt). Hot, like the rest of the file.
+    "dictation": {
+        "enabled": false,
+        // "auto" is the bench's pick: Parakeet hears every take and writes English; Canary writes the Dutch sentences -- every one
+        // when the take runs on the NVIDIA card, only in a Shift+fn+F10 take on the iGPU (there it costs ~2-3 s a sentence). Or
+        // "parakeet-tdt-0.6b-v3" alone (fast) | "canary-1b-v2" alone | "parakeet-tdt-0.6b-v3+canary-1b-v2" (Canary for every final).
+        "model": "auto",
+        // Where a take runs, chosen at each take: "auto" the NVIDIA card when the GPU mode puts it on the bus (Hybrid, Smart -- there
+        // allow "lares-stt" in silicon's list), on AC and on battery, else the Arc iGPU | "cuda" the same | "gpu" the iGPU always | "cpu".
+        "device": "auto",
+        // The tidy pass: each sentence's false starts, repeats and stutters removed before it is written ("I want to, I want to go"
+        // -> "I want to go"; "on Thursday, sorry, Friday" -> "on Friday"). A small local model proposes, a fixed rule check decides:
+        // it can only remove words, and a removal it cannot name leaves the sentence as heard. ~0.7 s more per sentence when it
+        // runs on the CPU (Integrated mode), far less on the NVIDIA card. Fillers ("uh", "um") are never written, tidy or not.
+        "tidy": false,
+        // The pause, ms, that ends a sentence (it is then written for good), and how often, ms, the sentence being spoken is heard again.
+        "endSilenceMs": 700,
+        "hopMs": 700,
+        // The pause, ms, a sentence waits instead when the last word before it was a filler ("uh", "um"): you are thinking.
+        "thinkSilenceMs": 3000,
+        // Minutes the model (about 1-2 GB) stays loaded after the last take; the helper then runs light again (no model, ~15 MB). 1 and up.
+        "keepWarmMin": 10,
+        // true: the model stays loaded after the first take (the first take of a session still loads it) -- but for a take on the NVIDIA card,
+        // which is let go as below.
+        "preload": false,
+        // Minutes instead when the take ran on the NVIDIA card: the helper holds the card awake for as long as it lives. 0.25 and up.
+        "dgpuKeepMin": 2,
+        // Window classes with no text input (Xwayland apps) that get the final text typed instead, e.g. ["steam"].
+        "typeInto": [],
+        // The volume a muted mic at 0 % is raised to for a take (0 .. 1.5); -1 is the last volume it had.
+        "micVolume": -1,
+        // Each take's text (never its audio, never a password field's) in ~/.local/state/lares/dictation/takes.jsonl, the last "logKeep":
+        // the window, the mode, the device, the timings from the press, the routes, per sentence what was heard and what was written
+        // and why it was cut, and how the take ended: the helper's own reason, its exit code and last error line, a stall, a GPU
+        // that failed and the CPU that took over.
+        "logTakes": true,
+        // A voice ask (Alt+fn+F10: say a question, the local model answers it) ends by itself this long, ms, after its last sentence
+        // was written and nobody speaks (8 s when nothing was said at all); 0: only the key ends it. Ctrl+fn+F10 transcribes the
+        // sound of the focused window instead (a video, a call) and puts the transcript on the clipboard when you press it again.
+        "askEndMs": 2500,
+        // The key: "toggle" (a press starts a take, the next ends it) | "hold" (the take lasts while the key is held). The question and the window
+        // take are always toggles.
+        "key": "toggle",
+        // A take in which nothing was said for this many minutes ends by itself. 0 = never. 0 .. 60.
+        "endAfterMin": 0,
+        // A muted microphone is unmuted for the take. false: a take on a muted microphone says so and does not start.
+        "unmute": true,
+        // The aura comes with a take (it needs "shadow": { "aura": true }).
+        "aura": true,
+        // The text is on the clipboard: "fallback" (when no field took it) | "always".
+        "copy": "fallback",
+        // The language of the key ("auto": English unless the model knows better) and of Shift+key. "auto" | "en" | "nl"; "en" | "nl".
+        "language": "auto",
+        "altLanguage": "nl",
+        // How many takes the log keeps. 1 .. 10000.
+        "logKeep": 100,
+        // The final text's rules (tools/stt/sttlib/textrules.py); a missing key is its default.
+        "text": {
+            // "F ten" / "F one zero" / "F one O" -> F10 (F1-F24); "<name> sign" -> the symbol ("greater than sign" -> >, "at sign" -> @,
+            // "hash sign" -> #); a take that begins "greater than" begins with ">" (a note header: "> After review"). "codes": letters,
+            // digits and "underscore" / "dash" / "hyphen" / "dot" spelled one by one are ONE code, letters in capitals ("X nine five Z B
+            // three oh nine underscore QR ST" -> X95ZB309_QRST; "oh" is a zero beside a digit; three pieces that mix letters and digits,
+            // or a connector word with two; plain numbers and a lone "A" or "B" in a sentence stay words).
+            "symbols": { "fkeys": true, "signs": true, "leadingQuote": true, "codes": true },
+            // Words the model gets wrong that are never right as heard: whole words, any case, written as given. Not for real words.
+            "words": { "Hyperland": "Hyprland" },
+            // Words that are dropped wherever they stand, beside the built in "uh", "um" ...: single words, any case. A pause after one is
+            // thinking, as after an "uh".
+            "fillers": [],
+            // "X uh X" -> "X": a repeat across a filler or a thinking pause is written once (a repeat with nothing between is kept).
+            "repeats": true,
+            // A pause after a sentence that has not ended (no full stop, or "the", "and", "to" ...) waits thinkSilenceMs like a filler's;
+            // a sentence that continues one written unfinished begins in lower case.
+            "unfinished": true
+        }
+    },
+
+    // THE OLED CARE (docs/oledcare.md): the bars' content steps a device pixel every 240 s, and now and then one of the bar's glyphs plays
+    // its flourish by itself (the motion a hover plays), so nothing stands still for hours. Read hot.
+    "oled": {
+        // The one switch for all of it (the pixel shift and the random flourishes). true | false; false puts the bars back at the
+        // centre and plays nothing. The step the shift stood at is kept.
+        "enabled": true,
+        // The pixel shift, and the seconds between two steps. The flourishes below go on without it. 30 .. 86400.
+        "shift": true,
+        "shiftEveryS": 240,
+        // The random flourishes:
+        "flourishes": {
+            // while nobody has touched the machine for a minute | while someone works. true | false.
+            "idle": true,
+            "active": true,
+            // the wait between two, seconds: [min, max], drawn evenly each time (10 .. 86400; one number is [n, n]).
+            "idleEveryS": [120, 240],
+            "activeEveryS": [600, 1200],
+            // which glyphs take part: a group, or one glyph of a reel ("group.glyph", which wins over its group). A glyph named nowhere takes
+            // its default: in for the decorative ones (the reels' items, the system update's archive, the weather icon, the audio and network pills'
+            // halves, the notes glyph, the chat star, the theme button's swatch, the bridge's phone, the panorama's panes, the stocks line), out for the ones that say something
+            // happened (the bell: a notification, the player's disc: a new song, silicon: a profile change, the GPU's mode). A reel plays only the item it
+            // is turned to. Groups and glyphs: "power" (.sleep .poweroff .reboot .hibernate .logout .lock), "idleReel" (.zzz .sunset .mug
+            // .infinity), "update", "weather", "audio" (.speaker .mic), "aerial" (.wifi: whatever the network half shows, .bluetooth),
+            // "notes", "llm", "theme", "bridge", "panorama", "stocks", "bell", "player", "silicon" (.gpu: the GPU mode's glyph; "silicon" alone is both of its glyphs).
+            // Example: { "power.hibernate": false, "audio.mic": false, "bell": true }
+            "glyphs": {}
+        }
+    },
+
+    // ESCAPE WITH A POPUP'S DETAIL OPEN (the side popup beside weather, stocks, silicon, the network, the displays, the wiki). "all": one
+    // press closes the popup and its detail together. "detail": the first press puts the detail away, the next closes the popup. Whatever
+    // you are in the middle of goes first either way: an open menu, a rename, a confirm, a typed search. Hot. "all" | "detail".
+    "escape": "all",
+
+    // THE MOUSE. A side button held while the mouse moves is a two-finger swipe (a mouse has no second axis): every gesture a touchpad makes
+    // in the shell follows it. Held while the wheel turns: one step sideways a notch (the next tab, view, day, page). A click of one: one step
+    // back (the Back button) or on (Forward). Hot.
+    "input": {
+        // which side buttons: "both" | "back" | "forward" | "off"
+        "sideButtons": "both",
+        // a click of one goes back / on. true | false
+        "sideClick": true,
+        // how far a swipe goes per px of the mouse. 0.2 .. 5
+        "sideGain": 1,
+        // the pointer during a swipe: "hold" hides it and keeps it where it was, as a touchpad does; "free" lets it go with the mouse
+        "sidePointer": "hold",
+        // how far a list scrolls per wheel notch (px, 20 .. 600) and how long it takes to ease out (ms, 0 .. 600; 0 = at once)
+        "notchPx": 120,
+        "notchMs": 140
+    },
+
+    // THE POINTER OVER THE SHELL. false: the plain arrow everywhere, in every window of the shell. true: it shows what it is over -- a hand
+    // on what can be clicked, the beam on text, the resize arrows on a grip. The bridge's free look hides it either way. Hot. true | false.
+    "hoverCursor": false,
+
+    // THE MODULES. false: the module is not loaded at all -- no service, no button on the bar, no popup, no key, no process of its own. For a
+    // machine that has no use for one (a desktop: "silicon", the battery and the laptop's CPU / GPU control). Read once, as the shell starts:
+    // `lares restart` after a change. Only the ones you switch off need a line. "clipboard": false takes the picker along (it pastes
+    // through the clipboard). The clock, the window title with the tray, the notifications and the launcher are always there.
+    // true | false.
+    "modules": {
+        "power": true,          // the power reel (with it off, log out and shut down from a terminal)
+        "idle": true,           // the idle reel and everything that holds or dims the screen
+        "theme": true,          // the theme button and popup (themectl itself works on)
+        "notes": true,
+        "llm": true,            // the chat (Ollama)
+        "weather": true,
+        "stocks": true,
+        "player": true,         // mpd
+        "volume": true,         // the sound popup (the volume keys and their OSD work on)
+        "aerial": true,         // the network popup
+        "bridge": true,         // the phone
+        "panorama": true,       // the displays (with it off the brightness keys reach no external display either)
+        "silicon": true,        // battery, CPU profiles, GPU modes, fans: an ASUS laptop's
+        "update": true,         // the system update
+        "clipboard": true,
+        "picker": true,         // emoji, alt codes, Nerd Fonts
+        "wiki": true,
+        "screentime": true
+    },
+
+    // WORKAROUNDS for faults of the platform: each is a switch to turn off the day the fault is gone.
+    "workarounds": {
+        // QT'S QML DISK CACHE TAKES ONLY LOCAL FILES, and Quickshell serves every file of a config on its own `qs:` URL scheme, so the
+        // whole shell (~1000 files and scripts) was read, parsed and compiled at every start (5-7 s before the first QML line). With this
+        // on, shell.qml (a stub) creates the shell's body (modules/shell/ShellMain.qml) from a `file:` URL, which Qt caches (lares's
+        // supervisor keeps the cache in ~/.cache/lares/qmlcache): a start reads the compiled units instead. Off loads the body on `qs:` as
+        // before (the day Quickshell or Qt caches it, or if a start misbehaves). lares's supervisor reads it each time it starts the shell
+        // (it passes LARES_FILE_ROOT=0 for false: a shell started by hand says it the same way). The log says `LARES root file|qs`.
+        // A change acts at the next start of the shell. true | false.
+        "fileRoot": true,
+        // QT'S COLLECTOR LOSES LIVE OBJECTS when one of its cycles starts while a screen's window is built (Qt 6.12: the bar came up with
+        // the idle reel stuck open and blank flourishes, 2026-11-14). With this on the shell collects once as each screen's window is
+        // built, which closes that gap: one collection per screen at the shell's start (and when an output is plugged in), before the
+        // window's first frame, and nothing after it. `tools/dev/qt_gc_attach_probe.sh` says when a Qt no longer has the fault; turn it
+        // off then. The log says `LARES gc at build <output>: on|off`. Read as each window is built: a change acts at the next start
+        // of the shell. true | false.
+        "gcAtScreenBuild": true,
+        // THE BAR WINDOW IS ONE TRANSPARENT SURFACE OVER THE WHOLE SCREEN, and Hyprland blends all of it under every frame the shell
+        // draws (a title's motion: ~25 full-screen blends). With this on, each bar window tells Hyprland where it can have ink -- the
+        // bars' edges, the popups, toasts and the OSD that are out, with their shadow, ring and joints -- and Hyprland blends only that.
+        // Whatever draws elsewhere (the theme's switch, the lock, a glyph's flourish) gives the whole window back while it does. Ink the
+        // region missed would be cut, so it is off until it has been seen on your own screen. Hot. true | false.
+        "visibleInk": false,
+        // MPD 0.24 SKIPS A PIECE OF THE SONG WHEN IT GOES ON AFTER A PAUSE: the player seeks back to where it stopped. Off when a later mpd does not.
+        // Hot. true | false.
+        "mpdResumeSeek": true
+    },
+
+    "debug": {
+        // THE FRAME JOURNAL. Every window of the shell watches its own frames; a frame it MISSES while it was drawing continuously -- a
+        // stutter -- is written down with what was going on, to ~/.local/state/lares/perf/frame-journal.jsonl (about a day is kept).
+        // At rest it costs nothing; while something moves, ~0.03-0.05 ms of CPU a frame. Read when the shell starts and hot with the file.
+        // true | false.
+        "frameJournal": true
+    }
+}

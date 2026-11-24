@@ -1,0 +1,300 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "wiki.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "askAt": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 1000,
+   "default": 5,
+   "x-wants": "a whole number 0 .. 1000",
+   "description": "---- the refill ask -------------------------------------------------------------------\nWhen a tab has this many unseen entries left (or fewer), ONE notification asks\n\"Only 5 Discover entries left -- process 30 new ones now?\". Answering runs a batch.\nDefault 5; a whole number, 0 .. 1000.\n\nTakes a whole number 0 .. 1000. Default: 5."
+  },
+  "batchSize": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 200,
+   "default": 30,
+   "x-wants": "a whole number 1 .. 200",
+   "description": "How many new entries one batch processes. Default 30; a whole number, 1 .. 200.\n\nTakes a whole number 1 .. 200. Default: 30."
+  },
+  "rolloverHour": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 12,
+   "default": 4,
+   "x-wants": "a whole number 0 .. 12",
+   "description": "---- the day --------------------------------------------------------------------------\nThe wiki day rolls at this local hour. An article nobody saw carries over. Default 4; a whole number, 0 .. 12.\n\nTakes a whole number 0 .. 12. Default: 4."
+  },
+  "seenMs": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 600000,
+   "default": 5000,
+   "x-wants": "a whole number 0 .. 600000",
+   "description": "---- what counts as attention (milliseconds) ---------------------------------------\nRead this long in the wiki detail (the clock popup's, opened by you) = seen: it is replaced at the next\nrollover and never shown again. Each tab on its own; a glance elsewhere never counts. Default 5000; 0 .. 600000.\n\nTakes a whole number 0 .. 600000. Default: 5000."
+  },
+  "dwellMs": {
+   "type": "integer",
+   "minimum": 1000,
+   "maximum": 3600000,
+   "default": 15000,
+   "x-wants": "a whole number 1000 .. 3600000",
+   "description": "The pointer over the card this long = a weak \"I like this\" (once per card). Default 15000; 1000 .. 3600000.\n\nTakes a whole number 1000 .. 3600000. Default: 15000."
+  },
+  "quickNextMs": {
+   "type": "integer",
+   "minimum": 0,
+   "maximum": 600000,
+   "default": 4000,
+   "x-wants": "a whole number 0 .. 600000",
+   "description": "\"Next\" before this long on a card = a weak \"not this\" (quick next). Default 4000; 0 .. 600000.\n\nTakes a whole number 0 .. 600000. Default: 4000."
+  },
+  "ollamaUrl": {
+   "type": "string",
+   "pattern": "^https?://",
+   "default": "http://localhost:11434",
+   "x-wants": "a text like http://localhost:11434",
+   "description": "---- the tool (passed to tools/wiki/wiki.py in its environment) --------------------\nThe local Ollama that judges and writes when Jev is off or unavailable; the shell's GPU helper watches it too while the LLM's\nserver is not this machine's. Default \"http://localhost:11434\"; an http:// or https:// URL.\n\nTakes a text like http://localhost:11434. Default: \"http://localhost:11434\"."
+  },
+  "jev": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Jev (Defapi) locates and scores intros. false = the local model does it all. Default true.\n\nTakes true or false. Default: true."
+  },
+  "jevKey": {
+   "type": "string",
+   "default": "",
+   "x-wants": "a text",
+   "x-secret": true,
+   "description": "Jev's API key (Defapi, \"dk-...\"). Empty: no Jev, the local model does it all. Default \"\" (a secret: never printed).\n\nTakes a text. Default: \"\"."
+  },
+  "notesRoot": {
+   "type": "string",
+   "default": "~/Documents/Notes",
+   "x-wants": "a path",
+   "description": "---- save to note -----------------------------------------------------------------------\nSave-to-note writes <notesRoot>/<notesFolder>/<title>.md. notesRoot: a path (\"~/\" is the home). Default \"~/Documents/Notes\".\n\nTakes a path. Default: \"~/Documents/Notes\"."
+  },
+  "notesFolder": {
+   "type": "string",
+   "pattern": "^(?!\\.{1,2}$)[^/]+$",
+   "default": "Wiki",
+   "x-wants": "a text like Wiki",
+   "description": "One plain folder name (no \"/\", not \".\" or \"..\"). Default \"Wiki\".\n\nTakes a text like Wiki. Default: \"Wiki\"."
+  },
+  "show": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "calendar": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "notifications": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "lock": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    },
+    "launcher": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Takes true or false. Default: true."
+    }
+   },
+   "description": "---- where the card is ------------------------------------------------------------------\nOn the calendar, in an empty notification manager, on the lock screen, under the launcher's search. Each is true or false; default true."
+  },
+  "families": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "history": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "geography": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "people": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "visual-arts": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "performing-arts": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "literature": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "philosophy": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "society": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "physical-sciences": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "life-sciences": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "earth": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "technology": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "everyday": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "arch-installed": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "arch-discovery": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "wikipedia-cs": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "arch-tips": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    },
+    "other-wikis": {
+     "type": "boolean",
+     "x-wants": "true or false",
+     "description": "Takes true or false."
+    }
+   },
+   "default": {},
+   "x-wants": "an object",
+   "description": "---- subjects ----------------------------------------------------------------------------\nA subject that is false is never picked and never fetched (what is in the pool stays there). Discover: history geography people visual-arts\nperforming-arts literature philosophy society physical-sciences life-sciences earth technology everyday. Deepen: arch-installed\narch-discovery wikipedia-cs arch-tips other-wikis. For example { \"people\": false }.\n\nDefault: {}."
+  },
+  "askAgainHours": {
+   "type": "number",
+   "minimum": 1,
+   "maximum": 720,
+   "default": 24,
+   "x-wants": "a number 1 .. 720",
+   "description": "---- the batches -------------------------------------------------------------------------\n\"Later\" on the refill ask is asked again after this many hours. Default 24; 1 .. 720.\n\nTakes a number 1 .. 720. Default: 24."
+  },
+  "jevCapUsd": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 10,
+   "default": 0.04,
+   "x-wants": "a number 0 .. 10",
+   "description": "What one batch may cost at Jev, US dollars. Default 0.04; 0 .. 10.\n\nTakes a number 0 .. 10. Default: 0.04."
+  },
+  "models": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "write": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"\"."
+    },
+    "judge": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"\"."
+    }
+   },
+   "description": "The local models that write and judge (\"\" = the ones tools/wiki/data/models.json names; a judge it has no thresholds for takes its\n\"default\" ones)."
+  },
+  "sources": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "wikipedia": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "Discover, and Deepen's Wikipedia computing\n\nTakes true or false. Default: true."
+    },
+    "arch": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the Arch wiki: pages of what you have installed and what you have not\n\nTakes true or false. Default: true."
+    },
+    "archTips": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the \"Tips and tricks\" sections of installed software's Arch pages (only with \"arch\")\n\nTakes true or false. Default: true."
+    },
+    "gentoo": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "wiki.gentoo.org\n\nTakes true or false. Default: true."
+    },
+    "kernel": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "docs.kernel.org\n\nTakes true or false. Default: true."
+    },
+    "freedesktop": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "the freedesktop.org specifications\n\nTakes true or false. Default: true."
+    }
+   },
+   "description": "---- sources ----------------------------------------------------------------------------\nSwitch a source off and its families leave the batch plan (entries already in the\npool stay). Discover is Wikipedia; Deepen is the rest. Each is true or false; default true."
+  }
+ }
+}

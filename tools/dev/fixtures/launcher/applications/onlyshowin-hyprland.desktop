@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Hyprland Only
+Comment=Shown only where XDG_CURRENT_DESKTOP is Hyprland
+Exec=hyprland-only
+Icon=preferences-desktop
+OnlyShowIn=Hyprland;

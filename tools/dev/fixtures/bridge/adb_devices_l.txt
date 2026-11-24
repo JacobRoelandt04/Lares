@@ -1,0 +1,7 @@
+List of devices attached
+RZ8N30ABCDE            device usb:1-4 product:NX789J model:NX789J device:NX789J transport_id:1
+192.168.0.240:5555     device product:NX789J model:NX789J device:NX789J transport_id:2
+adb-RZ8N30ABCDE-xYz1Qa._adb-tls-connect._tcp device product:NX789J model:NX789J device:NX789J transport_id:5
+R58M12345XY            unauthorized usb:1-5 transport_id:3
+emulator-5554          offline transport_id:4
+R9ZZ00000AA            no permissions (user in plugdev group; are your udev rules wrong?); see [http://developer.android.com/tools/device.html] usb:1-6 transport_id:6

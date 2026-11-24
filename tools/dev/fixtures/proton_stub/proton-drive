@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""A stand-in for the `proton-drive` CLI (0.9.0) with a directory as the remote. Its shapes and words are the real CLI's, as recorded by
+tools/dev/proton_cli_try.sh on 2026-11-22: the entries of `fs list -j`, `fs size -j`, the transfer summary, "Node not found", what a killed
+upload leaves (nothing), where a trashed item is (/trash/<name>), and the CLI's own words with no account ("You need to login first").
+Not recorded, so guessed: a refusal for too many requests, and every fault below that says "Error:".
+
+  PROTON_STUB_ROOT   the remote: <root>/my-files and <root>/trash (required)
+  PROTON_STUB_LOG    default <root>/calls.log: one JSON line per call
+Fault injection (env):
+  STUB_FAIL_UPLOAD_N=n    the n-th upload call fails (exit 1) before it writes anything
+  STUB_PARTIAL_N=n[,m]    those upload calls write the first half of their first file, then fail
+  STUB_SHORT_N=n[,m]      those upload calls write half of their first file and say they are done (exit 0)
+  STUB_SIGNED_OUT=1       every call: "You are not signed in" (exit 1)
+  STUB_THROTTLED=1        every upload: "Too many requests (429)" (exit 1)
+  STUB_LIST_FAIL=1        every list fails
+  STUB_LIST_FAIL_N=n      the n-th list fails, the others work
+  STUB_DELETE_FAIL=1      every delete fails (a trash that succeeded stays in the trash)
+A trash item of a name already in the trash is kept beside it as <name>~dup<n>; /trash lists both under <name>, and `fs delete /trash/<name>`
+takes the plain one: that is what makes a name ambiguous.
+  STUB_TERM_AT_UPLOAD=n   the n-th upload call sends TERM to its parent (the tool), then sleeps
+`empty-trash` is never to be called: it leaves <root>/EMPTY_TRASH_CALLED and exits 99.
+"""
+import hashlib
+import json
+import os
+import shutil
+import sys
+import time
+
+ROOT = os.environ["PROTON_STUB_ROOT"]
+os.makedirs(os.path.join(ROOT, "my-files"), exist_ok=True)
+os.makedirs(os.path.join(ROOT, "trash"), exist_ok=True)
+argv = sys.argv[1:]
+with open(os.environ.get("PROTON_STUB_LOG") or os.path.join(ROOT, "calls.log"), "a") as f:
+    f.write(json.dumps(argv) + "\n")
+
+
+def die(text, code=1):
+    sys.stderr.write(text + "\n")
+    sys.exit(code)
+
+
+def real(path):
+    for top in ("my-files", "trash"):
+        if path == "/" + top or path.startswith("/" + top + "/"):
+            return os.path.join(ROOT, top) + path[len(top) + 1:]
+    die("Error: path %s is not under /my-files or /trash" % path)
+
+
+def counter(name):
+    p = os.path.join(ROOT, ".n-" + name)
+    n = int(open(p).read()) + 1 if os.path.exists(p) else 1
+    open(p, "w").write(str(n))
+    return n
+
+
+def entry(full):
+    """One entry of `fs list -j`. The ids are made up; totalStorageSize is the encrypted size (larger than the file, never equal to it)."""
+    d = os.path.isdir(full)
+    e = {"uid": "VOL==~" + hashlib.sha1(full.encode()).hexdigest(), "parentUid": "VOL==~parent", "name": {"ok": True, "value": os.path.basename(full)},
+         "keyAuthor": {"ok": True, "value": "<email>"}, "directRole": "admin", "type": "folder" if d else "file", "isShared": False,
+         "creationTime": "2026-11-22T17:49:49.000Z", "modificationTime": "2026-11-22T17:49:49.000Z"}
+    if d:
+        e["folder"] = {"isImported": False}
+    else:
+        data = open(full, "rb").read()
+        e["mediaType"] = "application/octet-stream"
+        e["totalStorageSize"] = len(data) + 84
+        e["activeRevision"] = {"state": "active", "storageSize": len(data) + 84, "claimedSize": len(data), "isImported": False,
+                               "claimedDigests": {"sha1": hashlib.sha1(data).hexdigest(), "sha1Verified": False}}
+    return e
+
+
+def parse(args):
+    opts, rest, i = {}, [], 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-f", "-d"):
+            opts[a] = args[i + 1]
+            i += 2
+            continue
+        if a in ("-t", "-j", "--json"):
+            opts[a] = True
+        else:
+            rest.append(a)
+        i += 1
+    return opts, rest
+
+
+def main():
+    if os.environ.get("STUB_SIGNED_OUT"):
+        die("You need to login first")
+    if len(argv) < 2 or argv[0] != "fs":
+        die("Command not found")
+    cmd, (opts, rest) = argv[1], parse(argv[2:])
+    if cmd == "list":
+        if os.environ.get("STUB_LIST_FAIL") or str(counter("list")) == os.environ.get("STUB_LIST_FAIL_N"):
+            die("Error: the listing failed")
+        full = real(rest[0])
+        if not os.path.isdir(full):
+            die("Node not found: %s" % os.path.basename(rest[0]))
+        out = []
+        for n in sorted(os.listdir(full)):
+            e = entry(os.path.join(full, n))
+            e["name"]["value"] = n.split("~dup")[0]
+            if os.environ.get("STUB_NAMELESS") == n:
+                e["name"] = {"ok": False, "error": "cannot be decrypted"}
+            out.append(e)
+        print("[\n" + ",\n".join(json.dumps(e) for e in out) + "\n]" if out else "[]")
+    elif cmd == "size":
+        full = real(rest[0])
+        n = total = 0
+        for dp, ds, fs in os.walk(full):
+            n += len(ds) + len(fs)
+            total += sum(os.path.getsize(os.path.join(dp, f)) + 84 for f in fs)
+        print(json.dumps({"size": total, "numberOfDescendants": n}))
+    elif cmd == "create-folder":
+        parent = real(rest[0])
+        if not os.path.isdir(parent):
+            die("Error: %s does not exist" % rest[0])
+        os.makedirs(os.path.join(parent, rest[1]), exist_ok=False)
+        print("{\n  name: { ok: true, value: '%s' },\n  type: 'folder'\n}" % rest[1])
+    elif cmd == "upload":
+        upload(opts, rest)
+    elif cmd == "trash":
+        for p in rest:
+            full = real(p)
+            if not os.path.exists(full) or p.startswith("/trash"):
+                die("Error: %s cannot be trashed" % p)
+            dest = os.path.join(ROOT, "trash", os.path.basename(full))
+            k = 0
+            while os.path.exists(dest):
+                k += 1
+                dest = os.path.join(ROOT, "trash", "%s~dup%d" % (os.path.basename(full), k))
+            shutil.move(full, dest)
+            print("\u2705 " + os.path.basename(full))
+    elif cmd == "delete":
+        if os.environ.get("STUB_DELETE_FAIL"):
+            die("Error: the delete failed")
+        for p in rest:
+            if not p.startswith("/trash/"):
+                die("Error: %s is not in the trash" % p)
+            full = real(p)
+            if not os.path.exists(full):
+                die("Error: %s does not exist" % p)
+            shutil.rmtree(full) if os.path.isdir(full) else os.remove(full)
+            print("\u2705 " + os.path.basename(full))
+    elif cmd == "empty-trash":
+        open(os.path.join(ROOT, "EMPTY_TRASH_CALLED"), "w").close()
+        die("empty-trash is never to be called", 99)
+    elif cmd == "download":
+        local = rest[-1]
+        for p in rest[:-1]:
+            full = real(p)
+            if not os.path.exists(full):
+                die("Node not found: %s" % os.path.basename(p))
+            dest = os.path.join(local, os.path.basename(full))
+            if os.path.isdir(full):
+                shutil.copytree(full, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy(full, dest)
+    else:
+        die("Command not found")
+
+
+def upload(opts, rest):
+    n = counter("upload")
+    if os.environ.get("STUB_THROTTLED"):
+        die("Error: Too many requests (429). Try again later.")
+    if str(n) == os.environ.get("STUB_FAIL_UPLOAD_N"):
+        die("Error: the upload failed")
+    if str(n) == os.environ.get("STUB_TERM_AT_UPLOAD"):
+        os.kill(os.getppid(), 15)
+        time.sleep(30)
+    if "-f" not in opts or "-d" not in opts:
+        die("Error: this would ask what to do with a conflict, and nobody can answer")
+    parent = real(rest[-1])
+    if not os.path.isdir(parent):
+        die("Error: %s does not exist" % rest[-1])
+    cut = {k: True for k in (os.environ.get("STUB_PARTIAL_N") or "").split(",") if k}
+    cut.update({k: False for k in (os.environ.get("STUB_SHORT_N") or "").split(",") if k})
+    sent = []
+    for i, local in enumerate(rest[:-1]):
+        dest = os.path.join(parent, os.path.basename(local))
+        if os.path.isdir(local):
+            shutil.copytree(local, dest, dirs_exist_ok=opts["-d"] == "merge")
+            continue
+        if os.path.exists(dest):
+            if open(dest, "rb").read() == open(local, "rb").read() or opts["-f"] == "skip":
+                continue
+            if opts["-f"] == "replace":
+                die("Error: the tool must never replace (the old copy would share a name in the trash)")
+        data = open(local, "rb").read()
+        if i == 0 and str(n) in cut:
+            open(dest, "wb").write(data[:len(data) // 2])
+            if cut[str(n)]:
+                die("Error: the connection was lost")
+            continue
+        open(dest, "wb").write(data)
+        sent.append(os.path.basename(local))
+    print("Transfer summary:\n  Uploaded: %d items" % len(sent))
+
+
+main()

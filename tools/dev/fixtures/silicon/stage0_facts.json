@@ -1,0 +1,3012 @@
+{
+ "taken": "2026-10-02T21:41:01+0200",
+ "kernel": "6.18.54-1-lts",
+ "dmi": {
+  "board_name": "N6506MV",
+  "product_name": "ASUS Vivobook Pro 15 N6506MV_N6506MV",
+  "sys_vendor": "ASUSTeK COMPUTER INC.",
+  "bios_version": "N6506MV.313",
+  "bios_date": "10/13/2025"
+ },
+ "cmdline": "BOOT_IMAGE=/vmlinuz-linux-lts root=UUID=00000000-0000-4000-8000-000000000001 rw loglevel=3 quiet hibernate.compressor=lz4 nvidia_drm.modeset=1 nvidia_drm.fbdev=1 nvidia.NVreg_PreserveVideoMemoryAllocations=1 split_lock_detect=off nowatchdog mitigations=off pcie_aspm=force acpi_mask_gpe=0x6f",
+ "topology": [
+  {
+   "cpu": 0,
+   "kind": "P",
+   "core_id": "16",
+   "siblings": "0,5",
+   "l3": true
+  },
+  {
+   "cpu": 1,
+   "kind": "P",
+   "core_id": "8",
+   "siblings": "1-2",
+   "l3": true
+  },
+  {
+   "cpu": 2,
+   "kind": "P",
+   "core_id": "8",
+   "siblings": "1-2",
+   "l3": true
+  },
+  {
+   "cpu": 3,
+   "kind": "P",
+   "core_id": "12",
+   "siblings": "3-4",
+   "l3": true
+  },
+  {
+   "cpu": 4,
+   "kind": "P",
+   "core_id": "12",
+   "siblings": "3-4",
+   "l3": true
+  },
+  {
+   "cpu": 5,
+   "kind": "P",
+   "core_id": "16",
+   "siblings": "0,5",
+   "l3": true
+  },
+  {
+   "cpu": 6,
+   "kind": "P",
+   "core_id": "20",
+   "siblings": "6-7",
+   "l3": true
+  },
+  {
+   "cpu": 7,
+   "kind": "P",
+   "core_id": "20",
+   "siblings": "6-7",
+   "l3": true
+  },
+  {
+   "cpu": 8,
+   "kind": "P",
+   "core_id": "24",
+   "siblings": "8-9",
+   "l3": true
+  },
+  {
+   "cpu": 9,
+   "kind": "P",
+   "core_id": "24",
+   "siblings": "8-9",
+   "l3": true
+  },
+  {
+   "cpu": 10,
+   "kind": "P",
+   "core_id": "28",
+   "siblings": "10-11",
+   "l3": true
+  },
+  {
+   "cpu": 11,
+   "kind": "P",
+   "core_id": "28",
+   "siblings": "10-11",
+   "l3": true
+  },
+  {
+   "cpu": 12,
+   "kind": "E",
+   "core_id": "0",
+   "siblings": "12",
+   "l3": true
+  },
+  {
+   "cpu": 13,
+   "kind": "E",
+   "core_id": "1",
+   "siblings": "13",
+   "l3": true
+  },
+  {
+   "cpu": 14,
+   "kind": "E",
+   "core_id": "2",
+   "siblings": "14",
+   "l3": true
+  },
+  {
+   "cpu": 15,
+   "kind": "E",
+   "core_id": "3",
+   "siblings": "15",
+   "l3": true
+  },
+  {
+   "cpu": 16,
+   "kind": "E",
+   "core_id": "4",
+   "siblings": "16",
+   "l3": true
+  },
+  {
+   "cpu": 17,
+   "kind": "E",
+   "core_id": "5",
+   "siblings": "17",
+   "l3": true
+  },
+  {
+   "cpu": 18,
+   "kind": "E",
+   "core_id": "6",
+   "siblings": "18",
+   "l3": true
+  },
+  {
+   "cpu": 19,
+   "kind": "E",
+   "core_id": "7",
+   "siblings": "19",
+   "l3": true
+  },
+  {
+   "cpu": 20,
+   "kind": "LPE",
+   "core_id": "32",
+   "siblings": "20",
+   "l3": false
+  },
+  {
+   "cpu": 21,
+   "kind": "LPE",
+   "core_id": "33",
+   "siblings": "21",
+   "l3": false
+  }
+ ],
+ "topology_summary": {
+  "P": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "E": [
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "LPE": [
+   20,
+   21
+  ],
+  "?": []
+ },
+ "sibling_pairs": [
+  "0,5",
+  "1-2",
+  "10-11",
+  "3-4",
+  "6-7",
+  "8-9"
+ ],
+ "cpufreq": {
+  "policies": 22,
+  "driver": {
+   "intel_pstate": [
+    "policy0",
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11",
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19",
+    "policy20",
+    "policy21"
+   ]
+  },
+  "governor": {
+   "powersave": [
+    "policy0",
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11",
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19",
+    "policy20",
+    "policy21"
+   ]
+  },
+  "governors_available": {
+   "performance powersave": [
+    "policy0",
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11",
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19",
+    "policy20",
+    "policy21"
+   ]
+  },
+  "epp": {
+   "balance_power": [
+    "policy0",
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11",
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19",
+    "policy20",
+    "policy21"
+   ]
+  },
+  "epp_available_intersection": [
+   "balance_performance",
+   "balance_power",
+   "default",
+   "performance",
+   "power"
+  ],
+  "max_freq_khz": {
+   "4800000": [
+    "policy0",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11"
+   ],
+   "5100000": [
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4"
+   ],
+   "3800000": [
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19"
+   ],
+   "2500000": [
+    "policy20",
+    "policy21"
+   ]
+  },
+  "base_freq_khz": {
+   "2300000": [
+    "policy0",
+    "policy1",
+    "policy2",
+    "policy3",
+    "policy4",
+    "policy5",
+    "policy6",
+    "policy7",
+    "policy8",
+    "policy9",
+    "policy10",
+    "policy11"
+   ],
+   "1800000": [
+    "policy12",
+    "policy13",
+    "policy14",
+    "policy15",
+    "policy16",
+    "policy17",
+    "policy18",
+    "policy19"
+   ],
+   "1000000": [
+    "policy20",
+    "policy21"
+   ]
+  }
+ },
+ "intel_pstate": {
+  "status": "active",
+  "no_turbo": "0",
+  "min_perf_pct": "50",
+  "max_perf_pct": "100",
+  "hwp_dynamic_boost": "0"
+ },
+ "platform_profile": {
+  "legacy": {
+   "profile": "balanced",
+   "choices": "quiet balanced performance"
+  },
+  "class": {
+   "platform-profile-0": {
+    "name": "asus-wmi",
+    "choices": "quiet balanced performance",
+    "profile": "balanced"
+   }
+  }
+ },
+ "asus_wmi": {
+  "gpu_mux_mode": "1",
+  "throttle_thermal_policy": "0",
+  "dgpu_disable": {
+   "error": "No such file or directory"
+  },
+  "egpu_enable": {
+   "error": "No such file or directory"
+  }
+ },
+ "firmware_attributes": [],
+ "rapl": {
+  "intel-rapl:0": {
+   "name": "package-0",
+   "enabled": "1",
+   "long_term": {
+    "limit_uw": "65000000",
+    "window_us": "55967744",
+    "max_uw": "45000000",
+    "mode": "0o644"
+   },
+   "short_term": {
+    "limit_uw": "115000000",
+    "window_us": "2440",
+    "max_uw": "0",
+    "mode": "0o644"
+   },
+   "peak_power": {
+    "limit_uw": "217000000",
+    "window_us": {
+     "error": "No data available"
+    },
+    "max_uw": "0",
+    "mode": "0o644"
+   }
+  },
+  "intel-rapl-mmio:0": {
+   "name": "package-0",
+   "enabled": "1",
+   "long_term": {
+    "limit_uw": "45000000",
+    "window_us": "55967744",
+    "max_uw": "45000000",
+    "mode": "0o644"
+   },
+   "short_term": {
+    "limit_uw": "115000000",
+    "window_us": "2440",
+    "max_uw": "0",
+    "mode": "0o644"
+   },
+   "peak_power": {
+    "limit_uw": "217000000",
+    "window_us": {
+     "error": "No data available"
+    },
+    "max_uw": "0",
+    "mode": "0o644"
+   }
+  }
+ },
+ "battery": {
+  "status": "Full",
+  "capacity": "100",
+  "charge_control_end_threshold": "100",
+  "energy_now": "59455000",
+  "energy_full": "59455000",
+  "energy_full_design": "75000000",
+  "power_now": "0",
+  "voltage_now": "16854000",
+  "voltage_min_design": "15944000",
+  "cycle_count": "197"
+ },
+ "ac_online": "1",
+ "hwmon": {
+  "hwmon6": "asus",
+  "hwmon4": "coretemp",
+  "hwmon2": "BAT0",
+  "hwmon0": "AC0",
+  "hwmon5": "iwlwifi_1",
+  "hwmon3": "nvme",
+  "hwmon1": "acpitz"
+ },
+ "drm_cards": {
+  "card0": {
+   "pci": "0000:01:00.0",
+   "driver": "nvidia",
+   "rc6": [],
+   "power_state": "D3cold",
+   "runtime_status": "suspended"
+  },
+  "card1": {
+   "pci": "0000:00:02.0",
+   "driver": "i915",
+   "rc6": [
+    "/sys/devices/pci0000:00/0000:00:02.0/drm/card1/gt/gt0/rc6_residency_ms",
+    "/sys/devices/pci0000:00/0000:00:02.0/drm/card1/gt/gt1/rc6_residency_ms"
+   ],
+   "power_state": "D0",
+   "runtime_status": "active"
+  }
+ },
+ "connectors": {
+  "card0-HDMI-A-1": "disconnected",
+  "card1-DP-4": "disconnected",
+  "card1-DP-2": "disconnected",
+  "card1-eDP-1": "connected",
+  "card1-DP-3": "disconnected",
+  "card0-eDP-2": "disconnected",
+  "card1-DP-1": "disconnected"
+ },
+ "nvidia_loaded_version": "615.71.09",
+ "kernels": {
+  "6.18.54-1-lts": {
+   "pkgbase": "linux-lts",
+   "nvidia_ko": [
+    "/usr/lib/modules/6.18.54-1-lts/updates/dkms/nvidia.ko.zst"
+   ],
+   "version": "615.71.09"
+  },
+  "7.2.7-arch1-1": {
+   "pkgbase": "linux",
+   "nvidia_ko": [
+    "/usr/lib/modules/7.2.7-arch1-1/updates/dkms/nvidia.ko.zst"
+   ],
+   "version": "615.71.09"
+  }
+ },
+ "grubenv": "# GRUB Environment Block\n# WARNING: Do not edit this file by tools other than grub-editenv!!!\nsaved_entry=gnulinux-advanced-00000000-0000-4000-8000-000000000001>gnulinux-linux-lts-advanced-00000000-0000-4000-8000-000000000001\n##############################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################",
+ "services": {
+  "asusd": {
+   "active": "active",
+   "enabled": "static"
+  },
+  "asus-boot-quiet": {
+   "active": "inactive",
+   "enabled": "enabled"
+  },
+  "asus-power-fix": {
+   "active": "active",
+   "enabled": "enabled"
+  },
+  "asus-shutdown": {
+   "active": "active",
+   "enabled": "disabled"
+  },
+  "cardwired": {
+   "active": "active",
+   "enabled": "enabled"
+  },
+  "nvidia-persistenced": {
+   "active": "active",
+   "enabled": "enabled"
+  },
+  "nvidia-powerd": {
+   "active": "failed",
+   "enabled": "disabled"
+  },
+  "powertop": {
+   "active": "active",
+   "enabled": "enabled"
+  },
+  "power-profiles-daemon": {
+   "active": "inactive",
+   "enabled": "not-found"
+  },
+  "upower": {
+   "active": "active",
+   "enabled": "enabled"
+  }
+ },
+ "asusd_ron": "(\n    charge_control_end_threshold: 100,\n    base_charge_control_end_threshold: 0,\n    disable_nvidia_powerd_on_battery: true,\n    ac_command: \"\",\n    bat_command: \"\",\n    platform_profile_linked_epp: true,\n    platform_profile_on_battery: Quiet,\n    change_platform_profile_on_battery: false,\n    platform_profile_on_ac: Quiet,\n    change_platform_profile_on_ac: false,\n    profile_quiet_epp: Power,\n    profile_balanced_epp: BalancePower,\n    profile_custom_epp: Performance,\n    profile_performance_epp: Performance,\n    ac_profile_tunings: {\n        Performance: (\n            enabled: false,\n            group: {},\n        ),\n        Quiet: (\n            enabled: false,\n            group: {},\n        ),\n        Balanced: (\n            enabled: false,\n            group: {},\n        ),\n    },\n    dc_profile_tunings: {\n        Performance: (\n            enabled: false,\n            group: {},\n        ),\n        Balanced: (\n            enabled: false,\n            group: {},\n        ),\n        Quiet: (\n            enabled: false,\n            group: {},\n        ),\n    },\n    armoury_settings: {},\n)",
+ "cardwire": {
+  "cli_get": {
+   "rc": 0,
+   "out": "Current Mode: Hybrid\nAvailable Mode: integrated, hybrid, smart",
+   "err": ""
+  },
+  "cli_list": {
+   "rc": 0,
+   "out": "ID  NAME                                PCI           RENDER      CARD   DEFAULT DISCRETE  BLOCKED\n--  ----------------------------------  ------------  ----------  -----  -------  -------  -------\n0   Intel                               0000:00:02.0  renderD128  card1  (*)      ( )      false  \n1   NVIDIA GeForce RTX 4060 Laptop GPU  0000:01:00.0  renderD129  card0  ( )      (*)      false",
+   "err": ""
+  },
+  "Mode": {
+   "rc": 0,
+   "out": "{\"type\":\"u\",\"data\":1}",
+   "err": "",
+   "json": {
+    "type": "u",
+    "data": 1
+   }
+  },
+  "AvailableModes": {
+   "rc": 0,
+   "out": "{\"type\":\"au\",\"data\":[[0,1,3]]}",
+   "err": "",
+   "json": {
+    "type": "au",
+    "data": [
+     [
+      0,
+      1,
+      3
+     ]
+    ]
+   }
+  },
+  "GetAppPolicies": {
+   "rc": 0,
+   "out": "{\"type\":\"a{s(sasasu)}\",\"data\":[{\"gcr-prompter\":[\"Access Prompt\",[\"gcr-prompter\"],[\"security-medium\"],0],\"cardwire-gui\":[\"Cardwire\",[\"cardwire-gui\"],[\"preferences-system\"],0],\"polkit-gnome-authentication-agent-1\":[\"PolicyKit Authentication Agent\",[\"polkit-gnome-authentication-agent-1\"],[],0],\"mpv\":[\"mpv Media Player\",[\"mpv\"],[\"mpv\"],0],\"evince\":[\"Document Viewer\",[\"org.gnome.Evince\"],[\"org.gnome.Evince\"],0],\"timeshift\":[\"Timeshift\",[\"timeshift-gtk\"],[\"timeshift\"],0],\"vesktop\":[\"Vesktop\",[\"vesktop\"],[\"vesktop\"],0],\"steam-runtime-steam-remote\":[\"Steam\",[\"steam\"],[\"steam\"],0],\"obs\":[\"OBS Studio\",[\"com.obsproject.Studio\"],[\"com.obsproject.Studio\"],0],\"swappy\":[\"Swappy\",[\"swappy\"],[\"swappy\"],0],\"cmake\":[\"CMake\",[\"cmake-gui\"],[\"CMakeSetup\"],0],\"qemu-system-x86_64\":[\"QEMU\",[\"qemu\"],[\"qemu\"],0],\"btop\":[\"btop++\",[\"btop\"],[\"btop\"],0],\"quickshell\":[\"Quickshell\",[\"org.quickshell\"],[\"org.quickshell\"],0],\"code\":[\"Visual Studio Code - URL Handler\",[\"code-url-handler\"],[\"vscode\"],0],\"zen-bin\":[\"Zen Browser\",[\"zen\"],[\"zen-browser\"],0],\"wleave\":[\"Wleave\",[\"sh.natty.Wleave\"],[\"wleave\"],0],\"docker-desktop\":[\"Docker Desktop\",[\"docker-desktop\"],[\"/opt/docker-desktop/share/icon.original.png\"],0],\"nm-applet\":[\"NetworkManager Applet\",[\"nm-applet\"],[\"nm-device-wireless\"],0],\"steam_app_1295660\":[\"Sid Meier's Civilization VII\",[\"Sid Meier's Civilization VII\"],[\"steam_icon_1295660\"],1],\"kitty\":[\"kitty URL Launcher\",[\"kitty-open\"],[\"kitty\"],0],\"wineserver\":[\"A Wine application\",[\"wine-extension-reg\"],[],0],\"yazi\":[\"Yazi File Manager\",[\"yazi\"],[\"yazi\"],0],\"explorer.exe\":[\"Explorer\",[\"explorer\"],[\"/home/user/.local/share/winapps/apps/explorer/icon.svg\"],0],\"javaldx\":[\"OpenJDK Java 11 Runtime\",[\"java-java11-openjdk\"],[\"java11-openjdk\"],0],\"xwayland\":[\"Xwayland\",[\"org.freedesktop.Xwayland\"],[],0]}]}",
+   "err": "",
+   "json": {
+    "type": "a{s(sasasu)}",
+    "data": [
+     {
+      "gcr-prompter": [
+       "Access Prompt",
+       [
+        "gcr-prompter"
+       ],
+       [
+        "security-medium"
+       ],
+       0
+      ],
+      "cardwire-gui": [
+       "Cardwire",
+       [
+        "cardwire-gui"
+       ],
+       [
+        "preferences-system"
+       ],
+       0
+      ],
+      "polkit-gnome-authentication-agent-1": [
+       "PolicyKit Authentication Agent",
+       [
+        "polkit-gnome-authentication-agent-1"
+       ],
+       [],
+       0
+      ],
+      "mpv": [
+       "mpv Media Player",
+       [
+        "mpv"
+       ],
+       [
+        "mpv"
+       ],
+       0
+      ],
+      "evince": [
+       "Document Viewer",
+       [
+        "org.gnome.Evince"
+       ],
+       [
+        "org.gnome.Evince"
+       ],
+       0
+      ],
+      "timeshift": [
+       "Timeshift",
+       [
+        "timeshift-gtk"
+       ],
+       [
+        "timeshift"
+       ],
+       0
+      ],
+      "vesktop": [
+       "Vesktop",
+       [
+        "vesktop"
+       ],
+       [
+        "vesktop"
+       ],
+       0
+      ],
+      "steam-runtime-steam-remote": [
+       "Steam",
+       [
+        "steam"
+       ],
+       [
+        "steam"
+       ],
+       0
+      ],
+      "obs": [
+       "OBS Studio",
+       [
+        "com.obsproject.Studio"
+       ],
+       [
+        "com.obsproject.Studio"
+       ],
+       0
+      ],
+      "swappy": [
+       "Swappy",
+       [
+        "swappy"
+       ],
+       [
+        "swappy"
+       ],
+       0
+      ],
+      "cmake": [
+       "CMake",
+       [
+        "cmake-gui"
+       ],
+       [
+        "CMakeSetup"
+       ],
+       0
+      ],
+      "qemu-system-x86_64": [
+       "QEMU",
+       [
+        "qemu"
+       ],
+       [
+        "qemu"
+       ],
+       0
+      ],
+      "btop": [
+       "btop++",
+       [
+        "btop"
+       ],
+       [
+        "btop"
+       ],
+       0
+      ],
+      "quickshell": [
+       "Quickshell",
+       [
+        "org.quickshell"
+       ],
+       [
+        "org.quickshell"
+       ],
+       0
+      ],
+      "code": [
+       "Visual Studio Code - URL Handler",
+       [
+        "code-url-handler"
+       ],
+       [
+        "vscode"
+       ],
+       0
+      ],
+      "zen-bin": [
+       "Zen Browser",
+       [
+        "zen"
+       ],
+       [
+        "zen-browser"
+       ],
+       0
+      ],
+      "wleave": [
+       "Wleave",
+       [
+        "sh.natty.Wleave"
+       ],
+       [
+        "wleave"
+       ],
+       0
+      ],
+      "docker-desktop": [
+       "Docker Desktop",
+       [
+        "docker-desktop"
+       ],
+       [
+        "/opt/docker-desktop/share/icon.original.png"
+       ],
+       0
+      ],
+      "nm-applet": [
+       "NetworkManager Applet",
+       [
+        "nm-applet"
+       ],
+       [
+        "nm-device-wireless"
+       ],
+       0
+      ],
+      "steam_app_1295660": [
+       "Sid Meier's Civilization VII",
+       [
+        "Sid Meier's Civilization VII"
+       ],
+       [
+        "steam_icon_1295660"
+       ],
+       1
+      ],
+      "kitty": [
+       "kitty URL Launcher",
+       [
+        "kitty-open"
+       ],
+       [
+        "kitty"
+       ],
+       0
+      ],
+      "wineserver": [
+       "A Wine application",
+       [
+        "wine-extension-reg"
+       ],
+       [],
+       0
+      ],
+      "yazi": [
+       "Yazi File Manager",
+       [
+        "yazi"
+       ],
+       [
+        "yazi"
+       ],
+       0
+      ],
+      "explorer.exe": [
+       "Explorer",
+       [
+        "explorer"
+       ],
+       [
+        "/home/user/.local/share/winapps/apps/explorer/icon.svg"
+       ],
+       0
+      ],
+      "javaldx": [
+       "OpenJDK Java 11 Runtime",
+       [
+        "java-java11-openjdk"
+       ],
+       [
+        "java11-openjdk"
+       ],
+       0
+      ],
+      "xwayland": [
+       "Xwayland",
+       [
+        "org.freedesktop.Xwayland"
+       ],
+       [],
+       0
+      ]
+     }
+    ]
+   }
+  },
+  "ProcessBlocked": {
+   "rc": 0,
+   "out": "{\"type\":\"a((tu)usus)\",\"data\":[[[[1790662705,72825124],786,\"systemd-logind\",1,\"\"],[[1790662705,193828825],1102,\"Xorg\",1,\"\"],[[1790662706,309280106],1167,\"systemd\",1,\"\"],[[1790662707,161828173],1216,\"Hyprland\",1,\"\"],[[1790662709,476964517],1302,\"Xwayland\",1,\"\"],[[1790662709,477026415],1256,\"hyprlock\",1,\"\"],[[1790662710,84437185],1405,\"wireplumber\",1,\"\"],[[1790662710,281941876],1548,\"xdg-desktop-portal-hyprland\",1,\"\"],[[1790662728,721468701],915,\"asusd\",1,\"\"],[[1790662730,180495125],2725,\"kitty\",1,\"\"],[[1790663120,139070202],11334,\"hyprlock\",1,\"\"],[[1790663580,676831407],17102,\"hyprlock\",1,\"\"],[[1790666353,770668224],45004,\"hyprlock\",1,\"\"],[[1790667352,515396996],51855,\"hyprlock\",1,\"\"],[[1790667749,35803099],55677,\"hyprlock\",1,\"\"],[[1790667930,63100138],57382,\"zen-bin\",1,\"\"],[[1790669422,492643915],75952,\"hyprlock\",1,\"\"],[[1790672417,359801808],77183,\"zen-bin\",1,\"\"],[[1790672781,232940686],83011,\"hyprlock\",1,\"\"],[[1790753013,352995046],84186,\"kitty\",1,\"\"],[[1790753437,488919356],91334,\"kitty\",1,\"\"],[[1790753637,200173746],94505,\"kitty\",1,\"\"],[[1790753702,837321047],95934,\"quickshell\",1,\"\"],[[1790753717,486091840],96535,\"kitty\",1,\"\"],[[1790753719,517046585],96546,\"btop\",1,\"\"],[[1790753805,161907066],100339,\"quickshell\",1,\"\"],[[1790753930,747606508],107593,\"quickshell\",1,\"\"],[[1790753957,86362259],108107,\"quickshell\",1,\"\"],[[1790753982,451186421],108545,\"quickshell\",1,\"\"],[[1790753988,708091858],108777,\"quickshell\",1,\"\"],[[1790753994,991730992],108983,\"quickshell\",1,\"\"],[[1790754001,590564552],109186,\"quickshell\",1,\"\"],[[1790754015,510499733],109533,\"quickshell\",1,\"\"],[[1790754019,693288086],109750,\"quickshell\",1,\"\"],[[1790754024,14875898],109971,\"quickshell\",1,\"\"],[[1790754027,704998549],110191,\"quickshell\",1,\"\"],[[1790754031,517823391],110410,\"quickshell\",1,\"\"],[[1790754035,132397505],110623,\"quickshell\",1,\"\"],[[1790754038,890708991],110876,\"quickshell\",1,\"\"],[[1790754043,200469062],111090,\"quickshell\",1,\"\"],[[1790754047,579623566],111344,\"quickshell\",1,\"\"],[[1790754051,312212034],111541,\"quickshell\",1,\"\"],[[1790754055,123809002],111761,\"quickshell\",1,\"\"],[[1790754069,397181049],112102,\"quickshell\",1,\"\"],[[1790754078,243261835],112398,\"quickshell\",1,\"\"],[[1790754081,894973264],112593,\"quickshell\",1,\"\"],[[1790754085,654522904],112812,\"quickshell\",1,\"\"],[[1790754089,337443297],113037,\"quickshell\",1,\"\"],[[1790754093,123593429],113255,\"quickshell\",1,\"\"],[[1790754096,800516235],113466,\"quickshell\",1,\"\"],[[1790754100,593435938],113684,\"quickshell\",1,\"\"],[[1790754104,874689858],113906,\"quickshell\",1,\"\"],[[1790754109,268197344],114122,\"quickshell\",1,\"\"],[[1790754113,11841640],114337,\"quickshell\",1,\"\"],[[1790754116,875156147],114557,\"quickshell\",1,\"\"],[[1790754131,238214655],114900,\"quickshell\",1,\"\"],[[1790754139,797917109],115155,\"quickshell\",1,\"\"],[[1790754176,480554942],115967,\"quickshell\",1,\"\"],[[1790754331,146599711],121044,\"quickshell\",1,\"\"],[[1790754433,414468227],124908,\"quickshell\",1,\"\"],[[1790754485,171342678],125878,\"quickshell\",1,\"\"],[[1790754497,578834221],126154,\"quickshell\",1,\"\"],[[1790754509,969436983],126398,\"quickshell\",1,\"\"],[[1790754522,336296399],126646,\"quickshell\",1,\"\"],[[1790754534,733230053],126910,\"quickshell\",1,\"\"],[[1790754547,174648610],127157,\"quickshell\",1,\"\"],[[1790754628,479751742],128669,\"quickshell\",1,\"\"],[[1790757100,549113463],163217,\"quickshell\",1,\"\"],[[1790757116,744101840],163586,\"vesktop\",1,\"\"],[[1790757117,78188051],163729,\"vesktop\",1,\"\"],[[1790757119,726373657],163986,\"vesktop\",1,\"\"],[[1790757127,323719131],164177,\"quickshell\",1,\"\"],[[1790757137,86267284],164491,\"vesktop\",1,\"\"],[[1790757137,284280536],164638,\"vesktop\",1,\"\"],[[1790757139,144208267],164861,\"vesktop\",1,\"\"],[[1790757147,764309056],165175,\"steam\",1,\"\"],[[1790757164,311514564],165495,\"kitty\",1,\"\"],[[1790757168,339077018],165711,\"steam\",1,\"\"],[[1790757171,792082267],166019,\"steamwebhelper\",1,\"\"],[[1790757173,265114826],165988,\"steamwebhelper\",1,\"\"],[[1790757220,414176590],168280,\"C:\\\\windows\\\\system32\\\\winedevice.exe\",1,\"\"],[[1790757230,77370351],168783,\"C:\\\\windows\\\\system32\\\\explorer.exe\",1,\"\"],[[1790757235,110461302],169087,\"xalia.exe\",1,\"\"],[[1790757255,944598302],169992,\"kitty\",1,\"\"],[[1790757365,266842517],172051,\"kitty\",1,\"\"],[[1790757365,266921358],171873,\"kitty\",1,\"\"],[[1790757365,267196486],171897,\"kitty\",1,\"\"],[[1790757383,287813513],172722,\"kitty\",1,\"\"],[[1790757400,212769394],173063,\"quickshell\",1,\"\"],[[1790757408,495390694],173391,\"quickshell\",1,\"\"],[[1790757411,628263618],173605,\"Code\",1,\"\"],[[1790757434,699652507],174906,\"C:\\\\windows\\\\system32\\\\winedevice.exe\",1,\"\"],[[1790757460,921080180],175796,\"C:\\\\windows\\\\system32\\\\winedevice.exe\",1,\"\"],[[1790757463,301213067],175819,\"C:\\\\windows\\\\system32\\\\explorer.exe\",1,\"\"],[[1790757463,886508277],175895,\"xalia.exe\",1,\"\"],[[1790757472,741210031],176363,\"kitty\",1,\"\"],[[1790757498,432650672],177867,\"quickshell\",1,\"\"],[[1790757509,195242575],178318,\"quickshell\",1,\"\"],[[1790757575,568504194],180020,\"quickshell\",1,\"\"],[[1790757651,593188541],182045,\"kitty\",1,\"\"],[[1790757655,382389045],182315,\"quickshell\",1,\"\"],[[1790757679,255907416],183103,\"quickshell\",1,\"\"],[[1790757727,759374783],184301,\"quickshell\",1,\"\"],[[1790757740,166824499],184647,\"quickshell\",1,\"\"],[[1790757864,970155937],188262,\"quickshell\",1,\"\"],[[1790757963,363013484],190749,\"kitty\",1,\"\"],[[1790757992,569560028],191642,\"quickshell\",1,\"\"],[[1790758109,909934983],194559,\"quickshell\",1,\"\"],[[1790758241,865344779],197861,\"quickshell\",1,\"\"],[[1790758319,312692611],199652,\"quickshell\",1,\"\"],[[1790758385,715643909],202065,\"quickshell\",1,\"\"],[[1790758395,356532561],182439,\"claude\",1,\"\"],[[1790758406,288189610],202854,\"quickshell\",1,\"\"],[[1790758422,652484823],203699,\"quickshell\",1,\"\"],[[1790758433,322472662],204128,\"quickshell\",1,\"\"],[[1790758453,689461169],204823,\"quickshell\",1,\"\"],[[1790758458,384258351],204951,\"quickshell\",1,\"\"],[[1790758465,249300077],205294,\"quickshell\",1,\"\"],[[1790758470,369376256],205536,\"quickshell\",1,\"\"],[[1790758498,119140226],206808,\"quickshell\",1,\"\"],[[1790758576,146252675],209761,\"quickshell\",1,\"\"],[[1790758670,970054519],212997,\"quickshell\",1,\"\"],[[1790758681,473210381],213316,\"quickshell\",1,\"\"],[[1790758748,3248414],215284,\"quickshell\",1,\"\"],[[1790758827,708895467],217346,\"quickshell\",1,\"\"],[[1790758851,598556741],217959,\"quickshell\",1,\"\"],[[1790758900,82259734],219202,\"quickshell\",1,\"\"],[[1790758912,728823466],219559,\"quickshell\",1,\"\"],[[1790759030,185893314],222728,\"quickshell\",1,\"\"],[[1790759064,608804209],223793,\"quickshell\",1,\"\"],[[1790759068,828476984],223991,\"quickshell\",1,\"\"],[[1790759074,800066834],224299,\"quickshell\",1,\"\"],[[1790759079,668825069],224515,\"quickshell\",1,\"\"],[[1790759091,965376972],224805,\"quickshell\",1,\"\"],[[1790759104,541696208],225100,\"quickshell\",1,\"\"],[[1790759111,328634166],225303,\"quickshell\",1,\"\"],[[1790759117,365617868],225516,\"quickshell\",1,\"\"],[[1790759122,533250678],225675,\"quickshell\",1,\"\"],[[1790759127,668296466],225826,\"quickshell\",1,\"\"],[[1790759132,761327544],225967,\"quickshell\",1,\"\"],[[1790759137,889849562],226124,\"quickshell\",1,\"\"],[[1790759143,89055535],226255,\"quickshell\",1,\"\"],[[1790759148,522400840],226406,\"quickshell\",1,\"\"],[[1790759153,926238610],226578,\"quickshell\",1,\"\"],[[1790759158,756198313],226707,\"quickshell\",1,\"\"],[[1790759163,508715814],226868,\"quickshell\",1,\"\"],[[1790759169,19053850],227050,\"quickshell\",1,\"\"],[[1790759174,465251500],227223,\"quickshell\",1,\"\"],[[1790759180,505845439],227440,\"quickshell\",1,\"\"],[[1790759186,588944268],227603,\"quickshell\",1,\"\"],[[1790759193,48464910],227764,\"quickshell\",1,\"\"],[[1790759199,482764619],227923,\"quickshell\",1,\"\"],[[1790759204,643053003],228096,\"quickshell\",1,\"\"],[[1790759210,10157474],228243,\"quickshell\",1,\"\"],[[1790759214,435574591],228374,\"quickshell\",1,\"\"],[[1790759218,820204388],228523,\"quickshell\",1,\"\"],[[1790759222,528990552],228639,\"quickshell\",1,\"\"],[[1790759226,382879996],228777,\"quickshell\",1,\"\"],[[1790759232,642747404],228946,\"quickshell\",1,\"\"],[[1790759238,916212945],229096,\"quickshell\",1,\"\"],[[1790759243,156130855],229259,\"quickshell\",1,\"\"],[[1790759247,332704758],229406,\"quickshell\",1,\"\"],[[1790759253,25364259],229547,\"quickshell\",1,\"\"],[[1790759258,692918949],229698,\"quickshell\",1,\"\"],[[1790759262,937301419],229838,\"quickshell\",1,\"\"],[[1790759267,525310068],229985,\"quickshell\",1,\"\"],[[1790759272,951854544],230175,\"quickshell\",1,\"\"],[[1790759278,322354561],230325,\"quickshell\",1,\"\"],[[1790759283,499378882],230471,\"quickshell\",1,\"\"],[[1790759288,662988610],230624,\"quickshell\",1,\"\"],[[1790759293,549125568],230759,\"quickshell\",1,\"\"],[[1790759298,645981570],230907,\"quickshell\",1,\"\"],[[1790759302,650261809],231048,\"quickshell\",1,\"\"],[[1790759306,588911825],231179,\"quickshell\",1,\"\"],[[1790759311,635206890],231337,\"quickshell\",1,\"\"],[[1790759316,501871109],231493,\"quickshell\",1,\"\"],[[1790759323,681769679],231694,\"quickshell\",1,\"\"],[[1790759343,658728871],233317,\"quickshell\",1,\"\"],[[1790759350,715293476],233548,\"quickshell\",1,\"\"],[[1790759355,389058369],233751,\"kitty\",1,\"\"],[[1790759359,78777971],234115,\"quickshell\",1,\"\"]]]}",
+   "err": "",
+   "json": {
+    "type": "a((tu)usus)",
+    "data": [
+     [
+      [
+       [
+        1790662705,
+        72825124
+       ],
+       786,
+       "systemd-logind",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662705,
+        193828825
+       ],
+       1102,
+       "Xorg",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662706,
+        309280106
+       ],
+       1167,
+       "systemd",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662707,
+        161828173
+       ],
+       1216,
+       "Hyprland",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662709,
+        476964517
+       ],
+       1302,
+       "Xwayland",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662709,
+        477026415
+       ],
+       1256,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662710,
+        84437185
+       ],
+       1405,
+       "wireplumber",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662710,
+        281941876
+       ],
+       1548,
+       "xdg-desktop-portal-hyprland",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662728,
+        721468701
+       ],
+       915,
+       "asusd",
+       1,
+       ""
+      ],
+      [
+       [
+        1790662730,
+        180495125
+       ],
+       2725,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790663120,
+        139070202
+       ],
+       11334,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790663580,
+        676831407
+       ],
+       17102,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790666353,
+        770668224
+       ],
+       45004,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790667352,
+        515396996
+       ],
+       51855,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790667749,
+        35803099
+       ],
+       55677,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790667930,
+        63100138
+       ],
+       57382,
+       "zen-bin",
+       1,
+       ""
+      ],
+      [
+       [
+        1790669422,
+        492643915
+       ],
+       75952,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790672417,
+        359801808
+       ],
+       77183,
+       "zen-bin",
+       1,
+       ""
+      ],
+      [
+       [
+        1790672781,
+        232940686
+       ],
+       83011,
+       "hyprlock",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753013,
+        352995046
+       ],
+       84186,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753437,
+        488919356
+       ],
+       91334,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753637,
+        200173746
+       ],
+       94505,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753702,
+        837321047
+       ],
+       95934,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753717,
+        486091840
+       ],
+       96535,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753719,
+        517046585
+       ],
+       96546,
+       "btop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753805,
+        161907066
+       ],
+       100339,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753930,
+        747606508
+       ],
+       107593,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753957,
+        86362259
+       ],
+       108107,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753982,
+        451186421
+       ],
+       108545,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753988,
+        708091858
+       ],
+       108777,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790753994,
+        991730992
+       ],
+       108983,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754001,
+        590564552
+       ],
+       109186,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754015,
+        510499733
+       ],
+       109533,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754019,
+        693288086
+       ],
+       109750,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754024,
+        14875898
+       ],
+       109971,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754027,
+        704998549
+       ],
+       110191,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754031,
+        517823391
+       ],
+       110410,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754035,
+        132397505
+       ],
+       110623,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754038,
+        890708991
+       ],
+       110876,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754043,
+        200469062
+       ],
+       111090,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754047,
+        579623566
+       ],
+       111344,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754051,
+        312212034
+       ],
+       111541,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754055,
+        123809002
+       ],
+       111761,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754069,
+        397181049
+       ],
+       112102,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754078,
+        243261835
+       ],
+       112398,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754081,
+        894973264
+       ],
+       112593,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754085,
+        654522904
+       ],
+       112812,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754089,
+        337443297
+       ],
+       113037,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754093,
+        123593429
+       ],
+       113255,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754096,
+        800516235
+       ],
+       113466,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754100,
+        593435938
+       ],
+       113684,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754104,
+        874689858
+       ],
+       113906,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754109,
+        268197344
+       ],
+       114122,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754113,
+        11841640
+       ],
+       114337,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754116,
+        875156147
+       ],
+       114557,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754131,
+        238214655
+       ],
+       114900,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754139,
+        797917109
+       ],
+       115155,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754176,
+        480554942
+       ],
+       115967,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754331,
+        146599711
+       ],
+       121044,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754433,
+        414468227
+       ],
+       124908,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754485,
+        171342678
+       ],
+       125878,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754497,
+        578834221
+       ],
+       126154,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754509,
+        969436983
+       ],
+       126398,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754522,
+        336296399
+       ],
+       126646,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754534,
+        733230053
+       ],
+       126910,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754547,
+        174648610
+       ],
+       127157,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790754628,
+        479751742
+       ],
+       128669,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757100,
+        549113463
+       ],
+       163217,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757116,
+        744101840
+       ],
+       163586,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757117,
+        78188051
+       ],
+       163729,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757119,
+        726373657
+       ],
+       163986,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757127,
+        323719131
+       ],
+       164177,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757137,
+        86267284
+       ],
+       164491,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757137,
+        284280536
+       ],
+       164638,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757139,
+        144208267
+       ],
+       164861,
+       "vesktop",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757147,
+        764309056
+       ],
+       165175,
+       "steam",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757164,
+        311514564
+       ],
+       165495,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757168,
+        339077018
+       ],
+       165711,
+       "steam",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757171,
+        792082267
+       ],
+       166019,
+       "steamwebhelper",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757173,
+        265114826
+       ],
+       165988,
+       "steamwebhelper",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757220,
+        414176590
+       ],
+       168280,
+       "C:\\windows\\system32\\winedevice.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757230,
+        77370351
+       ],
+       168783,
+       "C:\\windows\\system32\\explorer.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757235,
+        110461302
+       ],
+       169087,
+       "xalia.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757255,
+        944598302
+       ],
+       169992,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757365,
+        266842517
+       ],
+       172051,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757365,
+        266921358
+       ],
+       171873,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757365,
+        267196486
+       ],
+       171897,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757383,
+        287813513
+       ],
+       172722,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757400,
+        212769394
+       ],
+       173063,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757408,
+        495390694
+       ],
+       173391,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757411,
+        628263618
+       ],
+       173605,
+       "Code",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757434,
+        699652507
+       ],
+       174906,
+       "C:\\windows\\system32\\winedevice.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757460,
+        921080180
+       ],
+       175796,
+       "C:\\windows\\system32\\winedevice.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757463,
+        301213067
+       ],
+       175819,
+       "C:\\windows\\system32\\explorer.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757463,
+        886508277
+       ],
+       175895,
+       "xalia.exe",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757472,
+        741210031
+       ],
+       176363,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757498,
+        432650672
+       ],
+       177867,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757509,
+        195242575
+       ],
+       178318,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757575,
+        568504194
+       ],
+       180020,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757651,
+        593188541
+       ],
+       182045,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757655,
+        382389045
+       ],
+       182315,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757679,
+        255907416
+       ],
+       183103,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757727,
+        759374783
+       ],
+       184301,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757740,
+        166824499
+       ],
+       184647,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757864,
+        970155937
+       ],
+       188262,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757963,
+        363013484
+       ],
+       190749,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790757992,
+        569560028
+       ],
+       191642,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758109,
+        909934983
+       ],
+       194559,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758241,
+        865344779
+       ],
+       197861,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758319,
+        312692611
+       ],
+       199652,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758385,
+        715643909
+       ],
+       202065,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758395,
+        356532561
+       ],
+       182439,
+       "claude",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758406,
+        288189610
+       ],
+       202854,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758422,
+        652484823
+       ],
+       203699,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758433,
+        322472662
+       ],
+       204128,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758453,
+        689461169
+       ],
+       204823,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758458,
+        384258351
+       ],
+       204951,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758465,
+        249300077
+       ],
+       205294,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758470,
+        369376256
+       ],
+       205536,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758498,
+        119140226
+       ],
+       206808,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758576,
+        146252675
+       ],
+       209761,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758670,
+        970054519
+       ],
+       212997,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758681,
+        473210381
+       ],
+       213316,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758748,
+        3248414
+       ],
+       215284,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758827,
+        708895467
+       ],
+       217346,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758851,
+        598556741
+       ],
+       217959,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758900,
+        82259734
+       ],
+       219202,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790758912,
+        728823466
+       ],
+       219559,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759030,
+        185893314
+       ],
+       222728,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759064,
+        608804209
+       ],
+       223793,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759068,
+        828476984
+       ],
+       223991,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759074,
+        800066834
+       ],
+       224299,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759079,
+        668825069
+       ],
+       224515,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759091,
+        965376972
+       ],
+       224805,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759104,
+        541696208
+       ],
+       225100,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759111,
+        328634166
+       ],
+       225303,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759117,
+        365617868
+       ],
+       225516,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759122,
+        533250678
+       ],
+       225675,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759127,
+        668296466
+       ],
+       225826,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759132,
+        761327544
+       ],
+       225967,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759137,
+        889849562
+       ],
+       226124,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759143,
+        89055535
+       ],
+       226255,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759148,
+        522400840
+       ],
+       226406,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759153,
+        926238610
+       ],
+       226578,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759158,
+        756198313
+       ],
+       226707,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759163,
+        508715814
+       ],
+       226868,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759169,
+        19053850
+       ],
+       227050,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759174,
+        465251500
+       ],
+       227223,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759180,
+        505845439
+       ],
+       227440,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759186,
+        588944268
+       ],
+       227603,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759193,
+        48464910
+       ],
+       227764,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759199,
+        482764619
+       ],
+       227923,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759204,
+        643053003
+       ],
+       228096,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759210,
+        10157474
+       ],
+       228243,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759214,
+        435574591
+       ],
+       228374,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759218,
+        820204388
+       ],
+       228523,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759222,
+        528990552
+       ],
+       228639,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759226,
+        382879996
+       ],
+       228777,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759232,
+        642747404
+       ],
+       228946,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759238,
+        916212945
+       ],
+       229096,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759243,
+        156130855
+       ],
+       229259,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759247,
+        332704758
+       ],
+       229406,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759253,
+        25364259
+       ],
+       229547,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759258,
+        692918949
+       ],
+       229698,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759262,
+        937301419
+       ],
+       229838,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759267,
+        525310068
+       ],
+       229985,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759272,
+        951854544
+       ],
+       230175,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759278,
+        322354561
+       ],
+       230325,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759283,
+        499378882
+       ],
+       230471,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759288,
+        662988610
+       ],
+       230624,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759293,
+        549125568
+       ],
+       230759,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759298,
+        645981570
+       ],
+       230907,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759302,
+        650261809
+       ],
+       231048,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759306,
+        588911825
+       ],
+       231179,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759311,
+        635206890
+       ],
+       231337,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759316,
+        501871109
+       ],
+       231493,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759323,
+        681769679
+       ],
+       231694,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759343,
+        658728871
+       ],
+       233317,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759350,
+        715293476
+       ],
+       233548,
+       "quickshell",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759355,
+        389058369
+       ],
+       233751,
+       "kitty",
+       1,
+       ""
+      ],
+      [
+       [
+        1790759359,
+        78777971
+       ],
+       234115,
+       "quickshell",
+       1,
+       ""
+      ]
+     ]
+    ]
+   }
+  },
+  "Config": {
+   "AutoApplyGpuState": {
+    "rc": 0,
+    "out": "{\"type\":\"b\",\"data\":true}",
+    "err": "",
+    "json": {
+     "type": "b",
+     "data": true
+    }
+   },
+   "BatteryAutoSwitch": {
+    "rc": 0,
+    "out": "{\"type\":\"b\",\"data\":false}",
+    "err": "",
+    "json": {
+     "type": "b",
+     "data": false
+    }
+   },
+   "BatteryAutoSwitchMode": {
+    "rc": 0,
+    "out": "{\"type\":\"u\",\"data\":1}",
+    "err": "",
+    "json": {
+     "type": "u",
+     "data": 1
+    }
+   },
+   "ExperimentalNvidiaBlock": {
+    "rc": 0,
+    "out": "{\"type\":\"b\",\"data\":false}",
+    "err": "",
+    "json": {
+     "type": "b",
+     "data": false
+    }
+   },
+   "ExternalDisplayAutoSwitch": {
+    "rc": 0,
+    "out": "{\"type\":\"b\",\"data\":false}",
+    "err": "",
+    "json": {
+     "type": "b",
+     "data": false
+    }
+   }
+  },
+  "Gpu": {
+   "0": {
+    "GetDevice": {
+     "rc": 0,
+     "out": "{\"type\":\"ssuubbbbssbs\",\"data\":[\"Intel\",\"0000:00:02.0\",128,1,true,false,false,true,\"Intel\",\"i915\",false,\"none\"]}",
+     "err": "",
+     "json": {
+      "type": "ssuubbbbssbs",
+      "data": [
+       "Intel",
+       "0000:00:02.0",
+       128,
+       1,
+       true,
+       false,
+       false,
+       true,
+       "Intel",
+       "i915",
+       false,
+       "none"
+      ]
+     }
+    },
+    "PowerState": {
+     "rc": 0,
+     "out": "{\"type\":\"s\",\"data\":[\"D0\\n\"]}",
+     "err": "",
+     "json": {
+      "type": "s",
+      "data": [
+       "D0\n"
+      ]
+     }
+    },
+    "Lsof": {
+     "rc": 0,
+     "out": "{\"type\":\"a{sas}\",\"data\":[{\"/dev/dri/card1\":[\"systemd\",\"systemd-logind\",\"Xorg\",\"Hyprland\",\"Xwayland\"],\"/dev/dri/renderD128\":[\"Hyprland\",\"Xwayland\",\"xdg-desktop-por\",\"zen-bin\",\"kitty\",\"code\",\"kitty\",\"kdeconnect-app\",\"kitty\"]}]}",
+     "err": "",
+     "json": {
+      "type": "a{sas}",
+      "data": [
+       {
+        "/dev/dri/card1": [
+         "systemd",
+         "systemd-logind",
+         "Xorg",
+         "Hyprland",
+         "Xwayland"
+        ],
+        "/dev/dri/renderD128": [
+         "Hyprland",
+         "Xwayland",
+         "xdg-desktop-por",
+         "zen-bin",
+         "kitty",
+         "code",
+         "kitty",
+         "kdeconnect-app",
+         "kitty"
+        ]
+       }
+      ]
+     }
+    },
+    "Block": {
+     "rc": 0,
+     "out": "{\"type\":\"b\",\"data\":false}",
+     "err": "",
+     "json": {
+      "type": "b",
+      "data": false
+     }
+    },
+    "Launchable": {
+     "rc": 0,
+     "out": "{\"type\":\"b\",\"data\":true}",
+     "err": "",
+     "json": {
+      "type": "b",
+      "data": true
+     }
+    },
+    "Env": {
+     "rc": 0,
+     "out": "{\"type\":\"as\",\"data\":[\"CARDWIRE_ALLOW\",\"0\"]}",
+     "err": "",
+     "json": {
+      "type": "as",
+      "data": [
+       "CARDWIRE_ALLOW",
+       "0"
+      ]
+     }
+    }
+   },
+   "1": {
+    "GetDevice": {
+     "rc": 0,
+     "out": "{\"type\":\"ssuubbbbssbs\",\"data\":[\"NVIDIA GeForce RTX 4060 Laptop GPU\",\"0000:01:00.0\",129,0,false,true,false,true,\"Nvidia\",\"nvidia\",true,\"0\"]}",
+     "err": "",
+     "json": {
+      "type": "ssuubbbbssbs",
+      "data": [
+       "NVIDIA GeForce RTX 4060 Laptop GPU",
+       "0000:01:00.0",
+       129,
+       0,
+       false,
+       true,
+       false,
+       true,
+       "Nvidia",
+       "nvidia",
+       true,
+       "0"
+      ]
+     }
+    },
+    "PowerState": {
+     "rc": 0,
+     "out": "{\"type\":\"s\",\"data\":[\"D3cold\\n\"]}",
+     "err": "",
+     "json": {
+      "type": "s",
+      "data": [
+       "D3cold\n"
+      ]
+     }
+    },
+    "Lsof": {
+     "rc": 0,
+     "out": "{\"type\":\"a{sas}\",\"data\":[{\"/dev/nvidiactl\":[\"cardwired\",\"nvidia-persiste\",\"Hyprland\",\"code\"],\"/dev/nvidia0\":[\"cardwired\",\"nvidia-persiste\"],\"/dev/dri/card0\":[],\"/dev/dri/renderD129\":[\"cardwired\"]}]}",
+     "err": "",
+     "json": {
+      "type": "a{sas}",
+      "data": [
+       {
+        "/dev/nvidiactl": [
+         "cardwired",
+         "nvidia-persiste",
+         "Hyprland",
+         "code"
+        ],
+        "/dev/nvidia0": [
+         "cardwired",
+         "nvidia-persiste"
+        ],
+        "/dev/dri/card0": [],
+        "/dev/dri/renderD129": [
+         "cardwired"
+        ]
+       }
+      ]
+     }
+    },
+    "Block": {
+     "rc": 0,
+     "out": "{\"type\":\"b\",\"data\":false}",
+     "err": "",
+     "json": {
+      "type": "b",
+      "data": false
+     }
+    },
+    "Launchable": {
+     "rc": 0,
+     "out": "{\"type\":\"b\",\"data\":true}",
+     "err": "",
+     "json": {
+      "type": "b",
+      "data": true
+     }
+    },
+    "Env": {
+     "rc": 0,
+     "out": "{\"type\":\"as\",\"data\":[\"CARDWIRE_FORCE_DGPU\",\"1\",\"__NV_PRIME_RENDER_OFFLOAD\",\"1\",\"__GLX_VENDOR_LIBRARY_NAME\",\"nvidia\",\"__VK_LAYER_NV_optimus\",\"NVIDIA_only\",\"VK_LOADER_DRIVERS_SELECT\",\"*nvidia*,*nouveau*\"]}",
+     "err": "",
+     "json": {
+      "type": "as",
+      "data": [
+       "CARDWIRE_FORCE_DGPU",
+       "1",
+       "__NV_PRIME_RENDER_OFFLOAD",
+       "1",
+       "__GLX_VENDOR_LIBRARY_NAME",
+       "nvidia",
+       "__VK_LAYER_NV_optimus",
+       "NVIDIA_only",
+       "VK_LOADER_DRIVERS_SELECT",
+       "*nvidia*,*nouveau*"
+      ]
+     }
+    }
+   }
+  }
+ },
+ "shell_processes": [
+  {
+   "pid": "846269",
+   "args": "/usr/bin/quickshell",
+   "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/kitty-84186-0.scope",
+   "session_id_env": "1"
+  },
+  {
+   "pid": "1904769",
+   "args": "/usr/bin/quickshell",
+   "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/kitty-84186-0.scope",
+   "session_id_env": "1"
+  },
+  {
+   "pid": "3142060",
+   "args": "/usr/bin/quickshell",
+   "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/kitty-84186-0.scope",
+   "session_id_env": "1"
+  }
+ ],
+ "this_terminal": {
+  "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/kitty-239347-0.scope",
+  "XDG_SESSION_ID": "1"
+ },
+ "loginctl_sessions": "1 1000 user seat0 1161 user    tty1 no -\n2 1000 user -     1167 manager -    no -",
+ "pkcheck": {
+  "org.freedesktop.login1.suspend": {
+   "terminal": {
+    "rc": 0,
+    "out": "rc=0",
+    "err": ""
+   },
+   "user_service": {
+    "rc": 0,
+    "out": "rc=0",
+    "err": "",
+    "rerun": "2026-10-02 23:40, --expand-environment=no"
+   }
+  },
+  "org.freedesktop.login1.reboot": {
+   "terminal": {
+    "rc": 0,
+    "out": "rc=0",
+    "err": ""
+   },
+   "user_service": {
+    "rc": 0,
+    "out": "rc=0",
+    "err": "",
+    "rerun": "2026-10-02 23:40, --expand-environment=no"
+   }
+  }
+ },
+ "power_supplies": {
+  "AC0": {
+   "type": "Mains",
+   "online": "1",
+   "usb_type": "ERR:No such file or directory"
+  },
+  "BAT0": {
+   "type": "Battery",
+   "online": "ERR:No such file or directory",
+   "usb_type": "ERR:No such file or directory"
+  }
+ },
+ "typec_ports": [],
+ "ucsi_kernel_lines": [
+  "ACPI: SSDT 0x0000000065AB1000 005E42 (v02 _ASUS_ TbtTypeC 00000000 INTL 20210930)",
+  "ucsi_acpi USBC000:00: error -ETIMEDOUT: PPM init failed"
+ ]
+}

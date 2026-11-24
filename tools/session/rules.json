@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "about": "Seed rules of session restore (docs/session.md). A terminal's running program is RUN again by itself only when its real argv passes a `run` rule; everything else, known or not, is only TYPED at the prompt. `type` holds the reason shown for the known risky ones. The user's config/session.jsonc adds to both (`run`, `type`) and wins.",
+
+  "terminals": ["kitty"],
+  "skipClasses": ["org.quickshell", "xdg-desktop-portal-gtk", "xdg-desktop-portal-hyprland", "hyprland-share-picker", "polkit-gnome-authentication-agent-1"],
+
+  "run": {
+    "lazygit": {}, "tig": {}, "gitui": {}, "lazydocker": {}, "k9s": {},
+    "nvim": { "deny": ["-c", "--cmd", "-S", "-s", "-l", "-e", "-E", "--headless", "--remote", "--server", "--listen"], "denyPlus": true },
+    "vim": { "deny": ["-c", "--cmd", "-S", "-s", "-e", "-E"], "denyPlus": true },
+    "vi": { "deny": ["-c", "--cmd", "-S", "-s", "-e", "-E"], "denyPlus": true },
+    "nano": {}, "micro": {}, "hx": {}, "helix": {},
+    "yazi": {}, "ranger": {}, "lf": {}, "nnn": {},
+    "btop": {}, "htop": {}, "top": {}, "nvtop": {}, "glances": {}, "iotop": {}, "powertop": {},
+    "less": {}, "more": {}, "most": {}, "man": {}, "bat": {}, "info": {},
+    "ncdu": {}, "duf": {}, "fastfetch": {}, "cava": {}, "ncmpcpp": {}, "cmatrix": {}, "tty-clock": {}, "gurk": {},
+    "tail": { "need": ["-f", "-F", "--follow"] },
+    "journalctl": { "need": ["-f", "--follow"], "deny": ["--vacuum-size", "--vacuum-time", "--vacuum-files", "--rotate", "--flush", "--sync", "--relinquish-var", "--setup-keys", "--update-catalog"] },
+    "dmesg": { "need": ["-w", "-W", "--follow", "--follow-new"], "deny": ["-C", "-c", "--clear", "--read-clear", "-D", "-E", "-n"] },
+    "watch": { "wrap": true },
+    "git": { "sub": ["log", "diff", "show", "blame", "reflog", "shortlog", "status"] },
+    "python": { "bare": true }, "python3": { "bare": true }, "ipython": { "bare": true }, "node": { "bare": true },
+    "lua": { "bare": true }, "bc": { "bare": true }, "sqlite3": { "bare": true },
+    "claude": { "only": ["-r", "--resume", "-c", "--continue"], "values": ["-r", "--resume"] }
+  },
+
+  "readonly": ["ls", "df", "free", "date", "uptime", "sensors", "nvidia-smi", "acpi", "lsblk", "who", "w", "cat", "duf", "mpc"],
+
+  "wrappers": ["sudo", "su", "doas", "pkexec", "run0", "sudoedit"],
+  "interpreters": ["python", "python3", "node", "deno", "bun", "bash", "sh", "zsh", "fish", "dash", "perl", "ruby", "lua", "php", "Rscript"],
+
+  "type": {
+    "pacman": "a package manager: a transaction may be half done",
+    "yay": "a package manager: a transaction may be half done",
+    "paru": "a package manager: a transaction may be half done",
+    "makepkg": "a package build",
+    "pamac": "a package manager",
+    "flatpak": "a package manager",
+    "hyprpm": "a plugin manager",
+    "pip": "installs packages", "pip3": "installs packages", "pipx": "installs packages", "uv": "installs packages",
+    "npm": "installs packages or runs a project script", "pnpm": "installs packages or runs a project script",
+    "yarn": "installs packages or runs a project script", "npx": "downloads and runs a package",
+    "cargo": "a build", "rustup": "installs toolchains", "go": "a build", "gem": "installs packages",
+    "make": "a build", "cmake": "a build", "ninja": "a build", "meson": "a build",
+    "docker": "starts or changes containers", "docker-compose": "starts or changes containers", "podman": "starts or changes containers",
+    "kubectl": "changes a cluster", "terraform": "changes infrastructure", "ansible-playbook": "changes machines",
+    "rm": "deletes files", "mv": "moves files", "cp": "copies files", "dd": "writes raw data", "shred": "destroys files",
+    "truncate": "cuts files", "chmod": "changes permissions", "chown": "changes owners", "ln": "makes links",
+    "rsync": "copies or deletes files", "tar": "packs or unpacks files", "unzip": "unpacks files", "zip": "packs files", "7z": "packs or unpacks files",
+    "mkfs": "formats a disk", "parted": "changes partitions", "fdisk": "changes partitions", "cryptsetup": "changes an encrypted disk",
+    "curl": "a transfer", "wget": "a download", "aria2c": "a download", "yt-dlp": "a download", "scp": "a transfer",
+    "sftp": "a transfer", "rclone": "a transfer",
+    "ssh": "opens a connection and signs in",
+    "systemctl": "changes services or power", "shutdown": "powers off", "reboot": "restarts the machine", "poweroff": "powers off",
+    "mount": "mounts a filesystem", "umount": "unmounts a filesystem", "nmcli": "changes the network",
+    "kill": "ends processes", "pkill": "ends processes", "killall": "ends processes",
+    "hyprctl": "drives the compositor", "lares": "drives the shell", "themectl": "changes the theme",
+    "ollama": "loads or downloads a model", "ffmpeg": "an encode", "sdl-freerdp3": "a remote desktop sign-in"
+  },
+
+  "apps": {
+    "zen": { "selfRestore": true, "launch": ["zen-browser"] },
+    "firefox": { "selfRestore": true, "launch": ["firefox"] },
+    "com.microsoft.VSCode": { "selfRestore": true, "launch": ["code"], "folders": { "config": "Code", "appName": "Visual Studio Code" } },
+    "code": { "selfRestore": true, "launch": ["code"], "folders": { "config": "Code", "appName": "Visual Studio Code" } },
+    "code-oss": { "selfRestore": true, "launch": ["code-oss"], "folders": { "config": "Code - OSS", "appName": "Code - OSS" } },
+    "vesktop": { "selfRestore": true },
+    "Postman": { "selfRestore": true },
+    "com.freerdp.client.sdl3": { "slow": true, "why": "the Windows VM's viewer: its launcher (the .desktop entry) connects at once to a VM that runs and boots one that does not, so the window may come minutes later" }
+  }
+}

@@ -1,0 +1,3 @@
+singleton AppIcons 1.0 AppIcons.qml
+AppIcon 1.0 AppIcon.qml
+IconColours 1.0 IconColours.qml

@@ -1,0 +1,237 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "title": "player.jsonc",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "open": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "view": {
+     "enum": [
+      "player",
+      "mini"
+     ],
+     "default": "player",
+     "x-wants": "\"player\" or \"mini\"",
+     "description": "\"player\" (the record on its platter) | \"mini\".\n\nTakes \"player\" or \"mini\". Default: \"player\"."
+    },
+    "sidebar": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "The sidebar out, and which of its panels: \"queue\" | \"library\" | \"data\".\n\nTakes true or false. Default: false."
+    },
+    "panel": {
+     "enum": [
+      "queue",
+      "library",
+      "data"
+     ],
+     "default": "queue",
+     "x-wants": "\"queue\", \"library\" or \"data\"",
+     "description": "Takes \"queue\", \"library\" or \"data\". Default: \"queue\"."
+    },
+    "remember": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "true: the first open of a session is the three above, and after that the popup comes back as you left it. false: every open is\nthe three above.\n\nTakes true or false. Default: true."
+    }
+   },
+   "description": "How the popup opens."
+  },
+  "library": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "grouping": {
+     "enum": [
+      "albums",
+      "artists",
+      "genres",
+      "playlists",
+      "recent"
+     ],
+     "default": "albums",
+     "x-wants": "\"albums\", \"artists\", \"genres\", \"playlists\" or \"recent\"",
+     "description": "\"albums\" | \"artists\" | \"genres\" | \"playlists\" | \"recent\".\n\nTakes \"albums\", \"artists\", \"genres\", \"playlists\" or \"recent\". Default: \"albums\"."
+    },
+    "sort": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "albums": {
+       "enum": [
+        "artist",
+        "title",
+        "year",
+        "length",
+        "songs"
+       ],
+       "default": "artist",
+       "x-wants": "\"artist\", \"title\", \"year\", \"length\" or \"songs\"",
+       "description": "Takes \"artist\", \"title\", \"year\", \"length\" or \"songs\". Default: \"artist\"."
+      },
+      "artists": {
+       "enum": [
+        "name",
+        "albums",
+        "songs",
+        "length"
+       ],
+       "default": "name",
+       "x-wants": "\"name\", \"albums\", \"songs\" or \"length\"",
+       "description": "Takes \"name\", \"albums\", \"songs\" or \"length\". Default: \"name\"."
+      },
+      "genres": {
+       "enum": [
+        "name",
+        "albums",
+        "songs",
+        "length"
+       ],
+       "default": "name",
+       "x-wants": "\"name\", \"albums\", \"songs\" or \"length\"",
+       "description": "Takes \"name\", \"albums\", \"songs\" or \"length\". Default: \"name\"."
+      },
+      "playlists": {
+       "enum": [
+        "order",
+        "name",
+        "songs"
+       ],
+       "default": "order",
+       "x-wants": "\"order\", \"name\" or \"songs\"",
+       "description": "Takes \"order\", \"name\" or \"songs\". Default: \"order\"."
+      }
+     },
+     "description": "How each grouping is sorted: albums by \"artist\" | \"title\" | \"year\" | \"length\" | \"songs\"; artists and genres by \"name\" | \"albums\" |\n\"songs\" | \"length\"; playlists by \"order\" | \"name\" | \"songs\"."
+    },
+    "ascending": {
+     "type": "boolean",
+     "default": true,
+     "x-wants": "true or false",
+     "description": "false: every sort from its far end (the newest year first).\n\nTakes true or false. Default: true."
+    },
+    "looseArtists": {
+     "type": "boolean",
+     "default": false,
+     "x-wants": "true or false",
+     "description": "Artists who have loose songs only are listed too.\n\nTakes true or false. Default: false."
+    }
+   },
+   "description": "The library as the popup opens it."
+  },
+  "autoplay": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "Something put in an empty queue starts to play by itself.\n\nTakes true or false. Default: true."
+  },
+  "holdForRecord": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "A play waits until the record has come down on the platter.\n\nTakes true or false. Default: true."
+  },
+  "prevRestartSec": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 60,
+   "default": 3,
+   "x-wants": "a number 0 .. 60",
+   "description": "\"Previous\" this many seconds into a song goes back to its start instead of to the song before. 0: always the song before. 0 .. 60.\n\nTakes a number 0 .. 60. Default: 3."
+  },
+  "musicSparks": {
+   "type": "boolean",
+   "default": true,
+   "x-wants": "true or false",
+   "description": "The viewfinder's sparks follow the music (one process and about 25 MB while the popup is open and a song plays).\n\nTakes true or false. Default: true."
+  },
+  "shuffle": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "artistGap": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 20,
+     "default": 3,
+     "x-wants": "a whole number 0 .. 20",
+     "description": "Takes a whole number 0 .. 20. Default: 3."
+    },
+    "albumGap": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 20,
+     "default": 2,
+     "x-wants": "a whole number 0 .. 20",
+     "description": "Takes a whole number 0 .. 20. Default: 2."
+    }
+   },
+   "description": "Shuffle: the least songs between two of one artist, and between two of one album. 0 .. 20."
+  },
+  "paths": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "music": {
+     "type": "string",
+     "default": "~/Music",
+     "x-wants": "a path",
+     "description": "mpd's music directory.\n\nTakes a path. Default: \"~/Music\". Read as the shell starts."
+    },
+    "albums": {
+     "type": "string",
+     "default": "Albums",
+     "x-wants": "a text",
+     "description": "Its folders: albums (artist / album), loose songs, playlists, and the playlist that is the favourites.\n\nTakes a text. Default: \"Albums\". Read as the shell starts."
+    },
+    "tracks": {
+     "type": "string",
+     "default": "Tracks",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"Tracks\". Read as the shell starts."
+    },
+    "playlists": {
+     "type": "string",
+     "default": "Playlists",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"Playlists\". Read as the shell starts."
+    },
+    "favorites": {
+     "type": "string",
+     "default": "Favorites",
+     "x-wants": "a text",
+     "description": "Takes a text. Default: \"Favorites\". Read as the shell starts."
+    },
+    "covers": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "x-wants": "a text"
+     },
+     "default": [
+      "cover.jpg",
+      "cover.png",
+      "cover.webp"
+     ],
+     "x-wants": "a list of texts",
+     "description": "The cover's file names, the first that is there.\n\nTakes a list of texts. Default: [\"cover.jpg\",\"cover.png\",\"cover.webp\"]. Read as the shell starts."
+    },
+    "socket": {
+     "type": "string",
+     "default": "",
+     "x-wants": "a path",
+     "description": "mpd's socket (a local one: no host and port). \"\": $XDG_RUNTIME_DIR/mpd/socket.\n\nTakes a path. Default: \"\". Read as the shell starts."
+    }
+   },
+   "description": "Where the music is. Read as the shell starts."
+  }
+ }
+}

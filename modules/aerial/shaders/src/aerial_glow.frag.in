@@ -1,0 +1,201 @@
+#version 440
+
+// =============================================================================
+// aerial_glow.frag -- the board's LIVE light, over the still board: the LEDs (the beacon, the jack's green and amber, the five test pads' LEDs) and the halo each throws on
+// the board, the beacon's shrinking ring, the lit segments of the two displays, the BT SCAN button's ring while it searches, the globe lens. One sample a pixel
+// (everything here is soft); the cast says WHICH face the pixel sees -- the same boxes and move groups as the board, so a light follows its part. Premultiplied, a TINT over
+// the board (an additive glow blows a light ground out to white). A light is never part of the cached board layer: it changes with the readings and the clock.
+// =============================================================================
+
+// QSB-NO-100ES: no GLSL ES 1.00 variant (tools/dev/bake_shaders.sh reads this line): like the board this effect has a vertex shader of its own (aerial_glow.vert), so on
+// an OpenGL ES context the pair links at GLSL ES 3.00.
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    vec4 view;      // as aerial_board.frag: x, y item px; z px per mm; w family
+    vec4 frame;     // x, y scene px of the board origin; z unused; w dark
+    vec4 motion;    // x the card's tilt rad; y the screw's lift mm; z the button's press mm; w the plug in
+    vec4 parts;     // x Wi-Fi lever; y Bluetooth lever; z unused; w unused
+    vec4 light;     // xyz toward the light; w unused
+    vec4 quad;      // x, y this item's offset in the scene px; z unused; w render scale
+    vec4 ledI0;     // each LED's intensity 0..1: the beacon, the jack's green, its amber, the LINK pad's LED
+    vec4 ledI1;     //   ADDR, GATEWAY, DNS, NET, then two free
+    vec4 ledK0;     // each LED's colour: 0 off, 1 ok, 2 warn, 3 error, 4 accent (blue)
+    vec4 ledK1;
+    vec4 colOk;     // the lit colours (the theme's): ok, warn, error, accent
+    vec4 colWarn;
+    vec4 colErr;
+    vec4 colAccent;
+    vec4 colSeg;    // the displays' lit segments
+    vec4 figA;      // the displays' figures: four cell codes each (seg7.glsl says what a code is), in AerialGeometry.SEG7's order: rates, usage
+    vec4 figB;
+    vec4 beacon;    // x: the ring's radius fraction (time left in the visible window, 0 = none), y: the ring's strength
+    vec4 live;      // x: BT SCAN lit (searching) 0..1; y: the globe lens lit 0..1; z: power-on 0..1 (the entrance); w: time s
+    vec4 palI;      // the board's second palette (the glow reads nothing of it but the glass)
+    vec4 palJ;
+    vec4 palK;
+    vec4 palL;
+    vec4 palM;
+    vec4 palN;
+    vec4 palO;
+    vec4 palP;
+    vec4 r3s2A;     // the smoked glass over the displays' window
+    vec4 glowA;     // the glow's tunables (x: halo strength, y: the traces' steady light, z: the pulse trains' spacing mm, w: their width mm)
+    vec4 glowB;     // y: the trains' speed mm/s, z: their amplitude 0..1 (the idle ladder: 0 = still)
+};
+
+const vec3 CAM_R = vec3(0.70710678, 0.0, -0.70710678);
+const vec3 CAM_U = vec3(-0.40824829, 0.81649658, -0.40824829);
+const vec3 CAM_C = vec3(0.57735027, 0.57735027, 0.57735027);
+const float EDGE_ACROSS = 0.70710678;
+
+// @@GEOM
+// @@INCLUDE seg7.glsl
+
+float ledIntensity(int i) {
+    if (i == 0) return ledI0.x;
+    if (i == 1) return ledI0.y;
+    if (i == 2) return ledI0.z;
+    if (i == 3) return ledI0.w;
+    if (i == 4) return ledI1.x;
+    if (i == 5) return ledI1.y;
+    if (i == 6) return ledI1.z;
+    if (i == 7) return ledI1.w;
+    return 0.0;
+}
+vec3 ledColour(int i) {
+    float k = 0.0;
+    if (i == 0) k = ledK0.x;
+    else if (i == 1) k = ledK0.y;
+    else if (i == 2) k = ledK0.z;
+    else if (i == 3) k = ledK0.w;
+    else if (i == 4) k = ledK1.x;
+    else if (i == 5) k = ledK1.y;
+    else if (i == 6) k = ledK1.z;
+    else if (i == 7) k = ledK1.w;
+    if (k > 3.5) return colAccent.rgb;
+    if (k > 2.5) return colErr.rgb;
+    if (k > 1.5) return colWarn.rgb;
+    return colOk.rgb;
+}
+// A pulse train along a route: 0..1, a Gaussian pulse every `spacing` mm of the route's coordinate, `phase` mm along (a signal leaving the slot).
+float pulseTrain(float s, float phase) {
+    float spacing = max(glowA.z, 1.0);
+    float width = max(glowA.w, 0.2);
+    float x = fract((s - phase) / spacing) * spacing - spacing * 0.5;
+    return exp(-x * x / (width * width));
+}
+// a lit thing: a tint over the board (a premultiplied colour with the share of the board it covers as alpha)
+vec4 lit(vec3 c, float a) {
+    float e = live.z;                    // the entrance: lights come up as the card powers on
+    return vec4(c * a * e, a * e);
+}
+
+void main() {
+    gCardTilt = motion.x;
+    gScrewLift = motion.y;
+    gBtnDown = motion.z;
+    gPlugOut = (1.0 - motion.w) * PLUG_TRAVEL;
+    gDipW = parts.x * DIP_TRAVEL;
+    gDipB = parts.y * DIP_TRAVEL;
+    gFlags = 0.0;
+
+    vec2 px = quad.xy + qt_TexCoord0 * view.xy;
+    float s = view.z;
+    float sx = (px.x - frame.x) / s;
+    float sy = (frame.y - px.y) / s;
+    vec3 ro = sx * CAM_R + sy * CAM_U + CAM_C * 600.0;
+    vec3 rd = -CAM_C;
+    if (!slabHit(ro, 1.0 / rd, SCENE_MIN - vec3(1.0), SCENE_MAX + vec3(1.0))) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    scenePrimary(ro, rd);
+    if (hPart < 0) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    vec3 o; vec3 d;
+    groupRay(hGroup, ro, rd, o, d);
+    vec3 pl = o + d * hT;
+    vec3 p = ro + rd * hT;
+    vec4 outc = vec4(0.0);
+    float aa = 0.6 / (s * max(quad.w, 1.0));
+    int led = ledIndexOf(hPart);
+    if (led >= 0) {
+        // an LED's own body: lit through its case; its centre brighter
+        float I = ledIntensity(led);
+        vec3 c = ledColour(led);
+        vec3 a = abs(hN);
+        vec3 m = min(pl - hMin, hMax - pl) + a * 1e6;
+        float edge = min(min(m.x, m.y), m.z);
+        float core = 0.75 + 0.25 * smoothstep(0.0, 0.6, edge);
+        outc = lit(mix(c, vec3(1.0), 0.25 * core), I * (hN.y > 0.5 ? 0.92 : 0.78));
+    } else if (hPart == PART_BTN) {
+        float k = live.x * (hN.y > 0.5 ? 1.0 : 0.6);
+        vec2 dv = pl.xz - BTN_C.xy;
+        float ring = 1.0 - smoothstep(0.0, 0.5, abs(length(dv) - BTN_C.z * 0.62));
+        outc = lit(colAccent.rgb, k * (0.45 + 0.4 * ring));
+    } else if (hPart == PART_LENSCAP || hPart == PART_LENSRING) {
+        outc = lit(colAccent.rgb, live.y * (hPart == PART_LENSCAP ? 0.85 : 0.35));
+    } else if (hN.y > 0.5 && segIndexOf(hPart) >= 0) {
+        int di = segIndexOf(hPart);
+        vec4 fig = di == 0 ? figA : figB;
+        float v = segFieldSd(di, pl.xz, fig, false);
+        float cov = smoothstep(-aa, aa, v);
+        vec3 c = glassLit(colSeg.rgb, pl.xz);
+        float halo = exp(-max(-v, 0.0) * 2.5) * 0.12 * smoothstep(-0.5, 0.0, v);
+        outc = lit(c, clamp(cov + halo, 0.0, 1.0));
+    } else if (hPart == PART_BOARD && hN.y > 0.5) {
+        // THE CARD COVERS WHAT LIES BEHIND IT (round 3: the pulses showed over the lifted card): this shader's cast leaves the card's parts out (they are the board's own,
+        // `bake`), so the board's light is masked by the card's box in the card's own frame -- one slab test
+        if (slabHit(tiltBy(ro, -gCardTilt), 1.0 / tiltDirBy(rd, -gCardTilt), CARD_BOX_MIN, CARD_BOX_MAX)) {
+            fragColor = vec4(0.0);
+            return;
+        }
+        // the LEDs' light on the board round them, and the beacon's ring (a groove of light that shrinks with the time left)
+        vec3 acc = vec3(0.0);
+        float wa = 0.0;
+        for (int i = 0; i < LED_COUNT; i++) {
+            vec3 lb = ledBoard(i);
+            if (lb.z <= 0.0)
+                continue;
+            float I = ledIntensity(i);
+            float dd = length(pl.xz - lb.xy) / lb.z;
+            float h = (1.0 - smoothstep(0.0, 1.0, dd));
+            h *= h;
+            float w = h * I * 0.32 * glowA.x;
+            acc += ledColour(i) * w;
+            wa += w;
+        }
+        float rr = length(pl.xz - BEACON_C.xy);
+        float rad = BEACON_C.z * beacon.x;
+        float ringM = beacon.y * (1.0 - smoothstep(0.0, 0.32, abs(rr - rad))) * step(0.001, beacon.x);
+        acc += colAccent.rgb * ringM * 0.9;
+        wa += ringM * 0.9;
+        outc = lit(acc / max(wa, 1e-4), clamp(wa, 0.0, 0.85));
+        // the dimmed pulse trains: light running outward along the copper from the slot, inside the groove (Material) / over the drawn line (Blueprint)
+        sceneTraces(pl.xz);
+        if (tId >= 0 && tD < 1.2) {
+            float dir = traceDir(tId);
+            float amp = glowB.z * abs(dir);
+            float lvl = glowA.y + amp * pulseTrain(tF.x, live.w * glowB.y);
+            float op;
+            if (view.w < 0.5) {
+                float depthIn = max(-tD, 0.0);
+                float hw = max(tHalf, 0.2);
+                float cc = 1.0 - smoothstep(0.0, hw, max(hw - depthIn, 0.0));
+                op = (1.0 - smoothstep(-0.17, 0.17, tD)) * (0.45 + 0.50 * cc);
+            } else {
+                op = (1.0 - smoothstep(0.35, 0.7, tCl)) * 0.8;
+            }
+            vec4 tr = lit(colAccent.rgb, clamp(op * lvl, 0.0, 1.0));
+            outc = tr + outc * (1.0 - tr.a);
+        }
+    }
+    fragColor = outc * qt_Opacity;
+}

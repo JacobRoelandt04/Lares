@@ -1,0 +1,13 @@
+[Unit]
+Description=Weather forecast accuracy logger: log the forecasts made now, then the last 48 h of observations
+Documentation=file://%h/.config/quickshell/tools/weather_accuracy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.config/quickshell/tools/weather_accuracy/collect.py
+ExecStart=/usr/bin/python3 %h/.config/quickshell/tools/weather_accuracy/observe.py
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=5min

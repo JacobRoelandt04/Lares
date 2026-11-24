@@ -1,0 +1,3688 @@
+#!/usr/bin/env python3
+"""themectl -- the desktop's theme generator.
+
+One theme file (themes/<name>.json: a light/dark pair of colour tokens, shared by the shell, the lock, the mockups and
+this tool) in, the files and settings of the desktop's programs out. It replaces ~/.config/HyprV/waybar/scripts/
+theme-switch.py, whose real fault was not any one target but `stdout=DEVNULL, stderr=DEVNULL`: two of its targets were
+dead for months and nothing said so. Here EVERY target prints `ok` or `FAIL <reason>` and the exit status is the number
+of FAILs.
+
+    themectl apply                  make the desktop match ~/.config/theme/state.json
+    themectl set <theme> [mode]     choose a theme (and mode), then apply
+    themectl toggle                 light <-> dark, then apply
+    themectl next                   the next theme (alphabetical); with one theme it says so and does nothing
+    themectl diff [theme [mode]]    what apply would change; writes nothing
+    themectl list [--json]          themes, the current state, the targets (--json: one object, for a program)
+    themectl doctor                 is the machine ready: programs, include lines, assets, templates, and per pair which preferred theme
+                                    package is missing and what it falls back to (writes nothing)
+    themectl packages               the install list for the preferred theme packages that are missing (installs nothing)
+    themectl install [--dry-run]    copy the repo's themes to ~/.config/theme/themes, and its btop themes and fastfetch logos to their
+                                    apps' directories (never over a newer file); carry a pair the repo renamed over (RENAMES: no ghost of the
+                                    old name); set yazi up for the wallpapers once (the plugin, init.lua, yazi.toml: tools/theme/yazi/)
+    themectl migrate [--dry-run]    make the one-time edits of the apps' own configs that `doctor` asks for (originals kept; see MIGRATE)
+    themectl restore [target ...]   put back the originals themectl kept (~/.config/theme/backup); `restore migrate` is the edits above
+    themectl wallpaper set <image>  ADD a picture to the CURRENT theme and mode's list (shell.jsonc theme.wallpapers.<theme>.<mode>, by an edit of
+                                    its text: comments and layout stay) and show it now; a notification with a Revert button says so (yazi's
+                                    "Set as wallpaper" entry runs this); exactly one image, else refused
+    themectl wallpaper remove <img> take a picture out of that list (the one on screen: the next is drawn; the last one: refused) -- yazi's
+                                    "Remove from wallpapers", offered on the listed pictures only
+    themectl wallpaper list [t [m]] a slot's pictures, its current pick and what is still to come in this round
+    themectl resolve [...]          the resolved tokens of a theme as JSON (tools/dev/themectl_resolver_parity.sh)
+
+Options for apply / set / toggle / next / diff:  --only a,b  --skip a,b  (target names; see `list`). The `lares` target (`quickshell` is its old name and still works) is what
+writes state.json: `set eva dark --only btop` renders btop's dark theme and records nothing.
+
+THE FILES.
+  ~/.config/theme/state.json         {"theme": "eva", "mode": "light"} -- the only file a toggle writes; Theme.qml watches it
+  ~/.config/theme/themes/<n>.json    the themes (L1); falls back to <shell>/themes/<n>.json until `install`
+  ~/.config/quickshell/config/shell.jsonc   read for ONE thing: "theme": { "wallpapers": { "<theme>": { "light": "<path>" | ["<path>", ...], "dark": ... } },
+                                     "wallpaperFit": "cover" } -- the wallpaper target (hyprpaper). Nothing else of it is read.
+  ~/.local/state/theme/              wallpaper-bag.json (each slot's shuffle bag and current pick), wallpapers-active.txt (the current slot's
+                                     pictures, for yazi's plugin)
+  ~/.config/windows/compose.yaml     read for ONE thing, the volume mounted at /shared: the windows-vm target (windows/INSTALL.md). Nothing starts or talks to the VM.
+  tools/theme/targets.json           per target: a template, an output file, a reload command   (~/.config/theme/targets.json
+  tools/theme/templates/*            overrides it, ~/.config/theme/templates/ the templates)
+  tools/theme/btop/*, fastfetch/*    what a link target ships (`shipped`): btop's custom themes, the logos; copied next to the link
+  ~/.config/theme/backup/            the first time themectl owns a file, the original goes here (manifest.json)
+
+THE THEME FILE (the grammar the shell's Theme.qml reads too -- modules/common/theme/ThemeResolve.js is the other copy of
+the resolver, and tools/dev/themectl_resolver_parity.sh holds them to the same answers token by token):
+  {"name": "eva", "common": {...}, "light": {...}, "dark": {...}, "assets": {"light": {...}, "dark": {...}}}
+  An asset that names an installed theme (gtkTheme, iconTheme, vscodeTheme) may be a list, best first: the first one that is installed
+  is used, and with none installed the LAST is used as it always was. tools/theme/packages.json says what installs each name.
+  A key of the mode block wins over `common`, which wins over L0 (the defaults in Theme.qml's `defaults`). Every key is
+  optional. A value is "#RGB" | "#RRGGBB" | "#AARRGGBB" | "@name" (an alias) | "@name lighten|darken|alpha n"
+  (lighten/darken: HSL lightness +/- n, alpha: set the alpha to n; n in 0..1) | anything else (a number, a font name:
+  passed through). Cycles, unknown names and bad recipes are errors; the key then falls back to L0.
+  Ten tokens exist for the programs alone and a theme may leave them out: FALLBACKS (below) says what each one then is.
+  tools/theme/pairgen.py made the pairs after eva and everbox from their source palettes (its header says how).
+
+NEVER AGAINST THE REAL DESKTOP IN A TEST: tools/dev/themectl_sandbox.py gives every test run a HOME of its own, a PATH of
+stubs and the keyfile gsettings backend.
+
+Exit status: the number of FAILs (0..99); 100 = refused before any target ran (unknown theme, bad state, ...).
+"""
+import argparse
+import contextlib
+import datetime
+import difflib
+import fcntl
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+MODES = ("light", "dark")
+REFUSED = 100
+OPS = ("lighten", "darken", "alpha")
+
+# =========================================================================================================== paths
+
+
+class Paths:
+    """Where things are. Everything derives from HOME and the XDG variables, so a test's sandbox HOME moves all of it."""
+
+    def __init__(self):
+        self.home = os.path.expanduser("~")
+        self.config = os.environ.get("XDG_CONFIG_HOME") or self.home + "/.config"
+        self.cache = os.environ.get("XDG_CACHE_HOME") or self.home + "/.cache"
+        self.state = os.environ.get("XDG_STATE_HOME") or self.home + "/.local/state"
+        self.data = os.environ.get("XDG_DATA_HOME") or self.home + "/.local/share"
+        self.theme_dir = self.config + "/theme"
+        self.state_file = self.theme_dir + "/state.json"
+        self.backup_dir = self.theme_dir + "/backup"
+        self.lock_file = self.theme_dir + "/.lock"
+        self.tools = os.path.dirname(os.path.realpath(__file__))
+        self.repo = os.path.dirname(os.path.dirname(self.tools))
+        self.theme_qml = self.repo + "/modules/common/theme/Theme.qml"
+        self.shell_config = self.config + "/quickshell/config/shell.jsonc"  # its older places after it (tools/lib/jsonc.py's rule)
+
+    def expand(self, s):
+        """${HOME} ${XDG_*} and a leading ~ in a path of targets.json."""
+        m = {"HOME": self.home, "XDG_CONFIG_HOME": self.config, "XDG_CACHE_HOME": self.cache,
+             "XDG_STATE_HOME": self.state, "XDG_DATA_HOME": self.data}
+        s = re.sub(r"\$\{([A-Z_]+)\}", lambda x: m.get(x.group(1), x.group(0)), s)
+        if s == "~" or s.startswith("~/"):
+            s = self.home + s[1:]
+        return s
+
+
+class Refused(Exception):
+    """A request themectl will not carry out (before any target runs)."""
+
+
+# ==================================================================================== the colour model + resolver
+# THE OTHER COPY: modules/common/theme/ThemeResolve.js. The same operations in the same order on IEEE doubles, the same
+# rounding (floor(x + 0.5), never Python's round(), which rounds half to even): tools/dev/themectl_resolver_parity.sh.
+
+
+def parse_colour(s):
+    """'#RGB' | '#RRGGBB' | '#AARRGGBB' -> [r, g, b, a] (0..255), else None. (8 digits are QML's #AARRGGBB.)"""
+    if not isinstance(s, str):
+        return None
+    h = s.strip()
+    if not h.startswith("#"):
+        return None
+    h = h[1:]
+    if len(h) == 3:
+        h = h[0] * 2 + h[1] * 2 + h[2] * 2
+    if len(h) == 6:
+        h = "ff" + h
+    if len(h) != 8 or not re.fullmatch(r"[0-9a-fA-F]{8}", h):
+        return None
+    return [int(h[2:4], 16), int(h[4:6], 16), int(h[6:8], 16), int(h[0:2], 16)]
+
+
+def _rnd(x):
+    return int(math.floor(x + 0.5))
+
+
+def _hsl(r, g, b):
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    l = (mx + mn) / 2
+    if mx == mn:
+        return 0.0, 0.0, l
+    d = mx - mn
+    s = d / (2 - mx - mn) if l > 0.5 else d / (mx + mn)
+    if mx == r:
+        h = (g - b) / d + (6 if g < b else 0)
+    elif mx == g:
+        h = (b - r) / d + 2
+    else:
+        h = (r - g) / d + 4
+    return h / 6, s, l
+
+
+def _hue(p, q, t):
+    if t < 0:
+        t += 1
+    if t > 1:
+        t -= 1
+    if t < 1 / 6:
+        return p + (q - p) * 6 * t
+    if t < 1 / 2:
+        return q
+    if t < 2 / 3:
+        return p + (q - p) * (2 / 3 - t) * 6
+    return p
+
+
+def _rgb(h, s, l):
+    if s == 0:
+        return l, l, l
+    q = l * (1 + s) if l < 0.5 else l + s - l * s
+    p = 2 * l - q
+    return _hue(p, q, h + 1 / 3), _hue(p, q, h), _hue(p, q, h - 1 / 3)
+
+
+def recipe(c, op, n):
+    """Apply one recipe op to [r, g, b, a]."""
+    if op == "alpha":
+        return [c[0], c[1], c[2], _rnd(n * 255)]
+    h, s, l = _hsl(c[0] / 255, c[1] / 255, c[2] / 255)
+    l = l + n if op == "lighten" else l - n
+    l = min(1, max(0, l))
+    r, g, b = _rgb(h, s, l)
+    return [_rnd(r * 255), _rnd(g * 255), _rnd(b * 255), c[3]]
+
+
+_NUM = re.compile(r"^([0-9]+(\.[0-9]*)?|\.[0-9]+)$")      # [0-9], not \d: JS's \d is ASCII only, Python's is every Unicode digit
+
+
+def _res(key, raw, seen, errs):
+    """One key -> ('c', [r, g, b, a]) | ('v', value) | None (an error was written to errs[0])."""
+    if key in seen:
+        errs[0] = '"%s" aliases in a circle' % key
+        return None
+    seen = seen | {key}
+    if key not in raw:
+        errs[0] = '"%s" is not defined' % key
+        return None
+    v = raw[key]
+    if isinstance(v, str) and v[:1] == "@":
+        parts = v[1:].split()
+        if not parts:
+            errs[0] = '"%s" is an empty alias' % key
+            return None
+        base = _res(parts[0], raw, seen, errs)
+        if base is None:
+            return None
+        if len(parts) == 1:
+            return base
+        if len(parts) != 3 or parts[1] not in OPS or not _NUM.match(parts[2]):
+            errs[0] = '"%s" is "%s": expected "@name" or "@name lighten|darken|alpha n"' % (key, v)
+            return None
+        n = float(parts[2])
+        if n > 1:
+            errs[0] = '"%s": the amount %s is outside 0..1' % (key, parts[2])
+            return None
+        if base[0] != "c":
+            errs[0] = '"%s": "%s" is not a colour, %s cannot apply' % (key, parts[0], parts[1])
+            return None
+        return ("c", recipe(base[1], parts[1], n))
+    c = parse_colour(v)
+    if c is not None:
+        return ("c", c)
+    return ("v", v)
+
+
+def merged(l0, common, block):
+    """L0 < common < the mode's block."""
+    raw = dict(l0)
+    for src in (common, block):
+        if isinstance(src, dict):
+            for k, v in src.items():
+                raw[k] = v
+    return raw
+
+
+def resolve_all(l0, common, block):
+    """-> (values, errors). values: key -> [r, g, b, a] (a colour) or the raw value; a key that failed takes its L0 value
+    (resolved through L0 alone) or is left out when L0 has none. errors: key -> sentence. A key that has an L0 default
+    is a COLOUR token: a theme value for it that is not a colour is an error too."""
+    raw = merged(l0, common, block)
+    values, errors = {}, {}
+    for key in sorted(raw):
+        errs = [""]
+        r = _res(key, raw, frozenset(), errs)
+        if r is not None and key in l0 and r[0] != "c":
+            errs[0] = '"%s" is "%s", not a colour' % (key, r[1])
+            r = None
+        if r is None:
+            errors[key] = errs[0]
+            if key in l0:
+                e2 = [""]
+                r = _res(key, l0, frozenset(), e2)
+                if r is not None and r[0] != "c":
+                    r = None
+        if r is not None:
+            values[key] = r[1]
+    return values, errors
+
+
+def wcag_contrast(a, b):
+    """WCAG 2 contrast ratio of two [r, g, b, a] colours (alpha ignored): 1 .. 21."""
+    def lum(c):
+        def lin(v):
+            v /= 255.0
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def fmt_colour(c, fmt=""):
+    r, g, b, a = c
+    if fmt == "":
+        return "#%02X%02X%02X" % (r, g, b) if a == 255 else "#%02X%02X%02X%02X" % (r, g, b, a)
+    if fmt == "hex":
+        return "%02X%02X%02X" % (r, g, b)
+    if fmt == "hexa":
+        return "%02X%02X%02X%02X" % (r, g, b, a)
+    if fmt == "rgb":
+        return "%d, %d, %d" % (r, g, b)
+    raise ValueError('unknown colour format "%s"' % fmt)
+
+
+# ====================================================================================== CIEDE2000 and GNOME's accents
+# libadwaita draws every accent-coloured part from ONE of nine named colours (org.gnome.desktop.interface accent-color), so the
+# accent target of a pair is the NAMED colour nearest to the pair's `accent` token, judged by CIEDE2000 (a perceptual distance:
+# an RGB distance calls a teal blue). The nine are libadwaita 1.6+'s own standalone accent colours (AdwAccentColor, the light
+# style's values -- the dark style lightens them a little, which is the same hue).
+GNOME_ACCENTS = {"blue": "#3584E4", "teal": "#2190A4", "green": "#3A944A", "yellow": "#C88800", "orange": "#ED5B00",
+                 "red": "#E62D42", "pink": "#D56199", "purple": "#9141AC", "slate": "#6F8396"}
+
+
+def _lab(c):
+    def lin(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = lin(c[0]), lin(c[1]), lin(c[2])
+    x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047
+    y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883
+
+    def f(v):
+        return v ** (1 / 3.0) if v > 216 / 24389.0 else (24389 / 27.0 * v + 16) / 116
+    fx, fy, fz = f(x), f(y), f(z)
+    return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+
+
+def ciede2000(c1, c2, same_lightness=False):
+    """The CIEDE2000 distance of two [r, g, b, ...] colours. same_lightness: the second colour is taken at the first one's lightness,
+    so the distance is of hue and chroma alone."""
+    lab1, lab2 = _lab(c1), _lab(c2)
+    if same_lightness:
+        lab2 = (lab1[0], lab2[1], lab2[2])
+    return de2000_lab(lab1, lab2)
+
+
+def de2000_lab(lab1, lab2):
+    """CIEDE2000 of two (L, a, b) triples (Sharma, Wu, Dalal 2005; kL = kC = kH = 1)."""
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+    C1, C2 = math.hypot(a1, b1), math.hypot(a2, b2)
+    G = 0.5 * (1 - math.sqrt(((C1 + C2) / 2) ** 7 / (((C1 + C2) / 2) ** 7 + 25 ** 7)))
+    a1p, a2p = (1 + G) * a1, (1 + G) * a2
+    C1p, C2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360 if C1p else 0.0
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360 if C2p else 0.0
+    dL, dC = L2 - L1, C2p - C1p
+    if C1p * C2p == 0:
+        dh = 0.0
+    else:
+        dh = h2p - h1p
+        dh -= 360 if dh > 180 else (-360 if dh < -180 else 0)
+    dH = 2 * math.sqrt(C1p * C2p) * math.sin(math.radians(dh / 2))
+    Lm, Cm = (L1 + L2) / 2, (C1p + C2p) / 2
+    if C1p * C2p == 0:
+        hm = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hm = (h1p + h2p) / 2
+    else:
+        hm = (h1p + h2p + 360) / 2 if h1p + h2p < 360 else (h1p + h2p - 360) / 2
+    T = (1 - 0.17 * math.cos(math.radians(hm - 30)) + 0.24 * math.cos(math.radians(2 * hm))
+         + 0.32 * math.cos(math.radians(3 * hm + 6)) - 0.20 * math.cos(math.radians(4 * hm - 63)))
+    dTheta = 30 * math.exp(-(((hm - 275) / 25) ** 2))
+    Rc = 2 * math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7))
+    Sl = 1 + 0.015 * (Lm - 50) ** 2 / math.sqrt(20 + (Lm - 50) ** 2)
+    Sc, Sh = 1 + 0.045 * Cm, 1 + 0.015 * Cm * T
+    Rt = -math.sin(math.radians(2 * dTheta)) * Rc
+    return math.sqrt((dL / Sl) ** 2 + (dC / Sc) ** 2 + (dH / Sh) ** 2 + Rt * (dC / Sc) * (dH / Sh))
+
+
+def nearest_gnome_accent(colour):
+    """-> (name, distance) of the named GNOME accent nearest to COLOUR ('#RRGGBB'), by CIEDE2000 with the lightness taken out: a dark
+    theme's accent is a pastel (catppuccin's mauve #C6A0F6) and libadwaita draws its nine at one lightness, so a full-colour distance
+    called that mauve `slate` (the grey is lighter) where its hue is plainly `purple`. Ties go to the name that sorts first."""
+    c = parse_colour(colour)
+    if c is None:
+        raise ValueError("%r is not a colour" % (colour,))
+    return min(((n, ciede2000(c, parse_colour(h), same_lightness=True)) for n, h in sorted(GNOME_ACCENTS.items())), key=lambda x: x[1])
+
+
+# ================================================================================================== themes and state
+
+
+def load_json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def theme_files(P):
+    """name -> path; the user's ~/.config/theme/themes wins over the repo's themes/."""
+    out = {}
+    for d in (P.theme_dir + "/themes", P.repo + "/themes"):
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for n in names:
+            if n.endswith(".json") and len(n) > 5 and n[:-5] not in out:
+                out[n[:-5]] = d + "/" + n
+    return out
+
+
+def l0_defaults(P):
+    """The shipped defaults: the `defaults` object of Theme.qml (L0 lives in code and is never copied into a file)."""
+    try:
+        with open(P.theme_qml, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return {}
+    m = re.search(r"readonly property var defaults:\s*\(\{(.*?)\n    \}\)", text, re.S)
+    if not m:
+        return {}
+    return dict(re.findall(r'"([A-Za-z0-9_]+)"\s*:\s*"([^"]*)"', m.group(1)))
+
+
+class Theme:
+    def __init__(self, name, path, doc, l0):
+        self.name, self.path, self.doc, self.l0 = name, path, doc, l0
+
+    def mode_values(self, mode):
+        block = self.doc.get(mode)
+        return resolve_all(self.l0, self.doc.get("common"), block if isinstance(block, dict) else {})
+
+    def assets(self, mode):
+        a = self.doc.get("assets")
+        a = a.get(mode) if isinstance(a, dict) else None
+        return a if isinstance(a, dict) else {}
+
+
+def load_theme(P, name, path=None):
+    files = theme_files(P)
+    if path is None:
+        if name not in files:
+            raise Refused('no theme named "%s" (have: %s)' % (name, ", ".join(sorted(files)) or "none"))
+        path = files[name]
+    try:
+        doc = load_json(path)
+    except (OSError, ValueError) as e:
+        raise Refused("theme %s: %s: %s" % (name, path, e))
+    if not isinstance(doc, dict):
+        raise Refused("theme %s: %s is not a JSON object" % (name, path))
+    return Theme(name, path, doc, l0_defaults(P))
+
+
+def state_text(theme, mode):
+    # byte for byte what Theme.qml writes: JSON.stringify({theme, mode}, null, 2) + "\n"
+    return json.dumps({"theme": theme, "mode": mode}, indent=2) + "\n"
+
+
+def read_state(P):
+    """-> {"theme": str, "mode": str, "present": bool}"""
+    names = sorted(theme_files(P))
+    st = {"theme": names[0] if names else "", "mode": "light", "present": False}
+    try:
+        obj = load_json(P.state_file)
+    except OSError:
+        return st
+    except ValueError as e:
+        raise Refused("%s is not valid JSON (%s)" % (P.state_file, e))
+    if isinstance(obj, dict):
+        st["present"] = True
+        if isinstance(obj.get("theme"), str) and obj["theme"]:
+            st["theme"] = obj["theme"]
+        if obj.get("mode") in MODES:
+            st["mode"] = obj["mode"]
+    return st
+
+
+def shown_name(name):
+    """A theme's name as a person reads it: its dashes as spaces ("night-owl" -> "night owl"). Keys, files and the command line keep the
+    dashes; what is shown to a person drops them: the shell's popup label, its OSD and the mockups' theme bar (the same one-line rule in
+    each), and themectl's notifications."""
+    return str(name).replace("-", " ")
+
+
+# PAIRS RENAMED IN THE REPO. `install` copies the repo's themes and never deletes one, so a renamed pair's old copy in ~/.config/theme/themes
+# would stay a ghost beside the new one (both in the popup, both in `next`). For each entry, `install` carries the home over (install_renames):
+# the old copy goes into the backup -- unless it is not one of the versions the repo shipped (`shipped`: their sha256), which makes it the
+# user's own edit (a mockup's Save writes colours into the copy in force): then it becomes the new name's copy, renamed inside --; the
+# manifest forgets it (a `restore` must not bring the ghost back); state.json's theme, shell.jsonc's theme.wallpapers key (a text edit,
+# comments kept) and the wallpaper bag's slots follow; the files the btop and fastfetch targets shipped under the old names (`files`, per
+# target) go into the backup, and a link that named one names the new file.
+RENAMES = [
+    {"from": "monokai-pro", "to": "monokai", "on": "2026-11-08",
+     "shipped": ["66b126898087f7a6ec6fb07f04606fc5e02fc634dcc1cfc2d872e8578b4dc200", "4aeaa0dc4ab2109830ebebfcc0139506856670a9ba30203adc68c09ff2d877a4"],
+     "files": {"btop": {"monokai-pro-light.theme": "monokai-light.theme", "monokai-pro.theme": "monokai-dark.theme"},
+               "fastfetch": {"archlogo_monokai-pro_light.png": "archlogo_monokai_light.png", "archlogo_monokai-pro_dark.png": "archlogo_monokai_dark.png"}}},
+]
+
+
+# ================================================================================================= the wallpaper bag
+# A SHUFFLE BAG per slot (theme + mode), the lock's veil bag ported: modules/lockscreen/lock/VeilBag.js is the other copy, and
+# tools/dev/themectl_bag_parity.py holds the two to ONE case table (the same rnd in, the same picks and states out). A ROUND is a fresh
+# Fisher-Yates permutation of the slot's pictures; a draw takes the next one off the front. Inside a round every picture comes once; a new
+# round never starts with the picture the last one ended on, so any 2N-1 draws in a row show all N; a list that changed under a bag in
+# use RECONCILES it (a picture taken out leaves the round at once, one put in joins it at a random place among those still to come).
+# State: {"round": [...], "remaining": [...], "last": "the picture shown last"} -- `last` is the slot's current pick. `rnd` returns [0, 1).
+
+def _bag_uniq(lst):
+    out = []
+    if isinstance(lst, str):                          # as VeilBag.js reads an array-like: a string is its characters (no file holds one)
+        lst = list(lst)
+    if not isinstance(lst, (list, tuple)):
+        return out
+    for n in lst:
+        if isinstance(n, str) and n != "" and n not in out:
+            out.append(n)
+    return out
+
+
+def _bag_int(rnd, n):
+    return min(n - 1, int(math.floor(rnd() * n)))
+
+
+def bag_empty():
+    return {"round": [], "remaining": [], "last": ""}
+
+
+def bag_state(obj):
+    """A kept state (an object read from JSON) -> a state; anything unreadable is an empty bag."""
+    if not isinstance(obj, dict):
+        return bag_empty()
+    last = obj.get("last")
+    return {"round": _bag_uniq(obj.get("round")), "remaining": _bag_uniq(obj.get("remaining")), "last": last if isinstance(last, str) else ""}
+
+
+def bag_parse(text):
+    """VeilBag.parse: a state file's text -> a state."""
+    try:
+        return bag_state(json.loads(str(text)))
+    except ValueError:
+        return bag_empty()
+
+
+def _bag_not_first(bag, last, rnd):
+    if len(bag) > 1 and bag[0] == last:
+        k = 1 + _bag_int(rnd, len(bag) - 1)
+        bag[0], bag[k] = bag[k], bag[0]
+
+
+def _bag_new_round(names, last, rnd):
+    bag = list(names)
+    for i in range(len(bag) - 1, 0, -1):
+        j = _bag_int(rnd, i + 1)
+        bag[i], bag[j] = bag[j], bag[i]
+    _bag_not_first(bag, last, rnd)
+    return bag
+
+
+def _bag_reconcile(state, want, rnd):
+    s = state or bag_empty()
+    round_ = [n for n in _bag_uniq(s.get("round")) if n in want]
+    remaining = [n for n in _bag_uniq(s.get("remaining")) if n in round_]
+    for n in want:                                   # a picture put into the list since: it joins this round, among those still to come
+        if n not in round_:
+            round_.append(n)
+            remaining.insert(_bag_int(rnd, len(remaining) + 1), n)
+    return round_, remaining
+
+
+def bag_draw(state, names, rnd):
+    """VeilBag.draw: the next picture -> (name, state); name is "" when NAMES holds none."""
+    want = _bag_uniq(names)
+    s = state or bag_empty()
+    if not want:
+        return "", {"round": [], "remaining": [], "last": s.get("last") or ""}
+    last = s.get("last") if isinstance(s.get("last"), str) else ""
+    round_, remaining = _bag_reconcile(s, want, rnd)
+    if not remaining:
+        round_ = list(want)
+        remaining = _bag_new_round(want, last, rnd)
+    else:
+        _bag_not_first(remaining, last, rnd)
+    name = remaining.pop(0)
+    return name, {"round": round_, "remaining": remaining, "last": name}
+
+
+def bag_take(state, names, name, rnd):
+    """themectl's own: NAME is shown now by hand (`wallpaper set`): reconciled with NAMES like a draw, then NAME counts as drawn -- it leaves
+    the round's remaining pictures and is `last`, so the next draw is another one. -> state."""
+    want = _bag_uniq(names)
+    round_, remaining = _bag_reconcile(state, want, rnd)
+    return {"round": round_, "remaining": [n for n in remaining if n != name], "last": name}
+
+
+def bag_file(P):
+    return P.state + "/theme/wallpaper-bag.json"
+
+
+def load_bags(P):
+    """The kept bags: {"version": 1, "shown": [theme, mode], "instance": "<HYPRLAND_INSTANCE_SIGNATURE>", "slots": {"<theme>.<mode>": state}}.
+    `shown` and `instance` are what the wallpaper target last showed and in which Hyprland: a draw happens when either differs."""
+    try:
+        doc = load_json(bag_file(P))
+    except (OSError, ValueError):
+        doc = {}
+    if not isinstance(doc, dict):
+        doc = {}
+    slots = doc.get("slots") if isinstance(doc.get("slots"), dict) else {}
+    shown = doc.get("shown")
+    return {"version": 1, "shown": list(shown) if isinstance(shown, list) and len(shown) == 2 else None,
+            "instance": doc.get("instance") if isinstance(doc.get("instance"), str) else None,
+            "slots": {k: bag_state(v) for k, v in slots.items() if isinstance(k, str)}}
+
+
+def save_bags(P, doc):
+    """Written only when it changed: an apply that shows what was shown writes nothing."""
+    text = json.dumps(doc, indent=2, sort_keys=True) + "\n"
+    if _read_text(bag_file(P)) != text:
+        write_atomic(bag_file(P), text)
+
+
+def slot_key(theme, mode):
+    return "%s.%s" % (theme, mode)
+
+
+# ============================================================================================ files, backups, locks
+
+
+def write_atomic(path, data, mode=None):
+    """Temp file in the same directory, then rename: a reader never sees half a file."""
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".themectl-", dir=d)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data if isinstance(data, bytes) else data.encode("utf-8"))
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode if mode is not None else 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def _read_text(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+# ---------------------------------------------------------------------------------------------- JSON with comments
+
+def jsonc_tokens(text):
+    """The tokens of a JSON-with-comments text, as (kind, start, end): kind is one of  { } [ ] , :  or "s" (a string) or "w" (a
+    bare word: a number, true, false, null). Whitespace, // and /* */ comments are skipped. ValueError on an unterminated string or
+    comment. Trailing commas are tokens like any other: this reads settings.json the way VS Code does, and judges nothing."""
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in " \t\r\n\ufeff":
+            i += 1
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j + 1
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                raise ValueError("an unterminated /* comment")
+            i = j + 2
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            if j >= n:
+                raise ValueError("an unterminated string")
+            yield "s", i, j + 1
+            i = j + 1
+        elif c in "{}[],:":
+            yield c, i, i + 1
+            i += 1
+        else:
+            j = i
+            while j < n and text[j] not in " \t\r\n{}[],:\"/":
+                j += 1
+            if j == i:                              # a lone "/" or another stray character
+                raise ValueError("unexpected %r at offset %d" % (c, i))
+            yield "w", i, j
+            i = j
+
+
+def jsonc_find(text, key):
+    """-> ("found", start, end) of the VALUE of top-level `key` (its token), ("absent", pos, has_members) with pos just after the
+    top-level object's `{`, or raises ValueError (not an object, unreadable, a malformed member)."""
+    toks = list(jsonc_tokens(text))
+    if not toks or toks[0][0] != "{":
+        raise ValueError("the file is not a JSON object")
+    depth, i = 0, 0
+    while i < len(toks):
+        k, s, e = toks[i]
+        if k in "{[":
+            depth += 1
+        elif k in "}]":
+            depth -= 1
+        elif k == "s" and depth == 1 and toks[i - 1][0] in "{,":
+            if i + 2 >= len(toks) or toks[i + 1][0] != ":":
+                raise ValueError("a member without its value at offset %d" % s)
+            if json.loads(text[s:e]) == key:
+                v = toks[i + 2]
+                if v[0] in "{[":
+                    raise ValueError("%s is an object or a list, not a string" % key)
+                return "found", v[1], v[2]
+        i += 1
+    return "absent", toks[0][2], len(toks) > 1 and toks[1][0] != "}"
+
+
+def jsonc_set(text, key, value):
+    """The text with top-level `key` set to the string `value` and NOTHING else touched: the comments, the trailing commas, the
+    order and the spacing stay (a json.load / json.dump round trip would drop every comment, and the file has them). A key that is
+    not there is added as the first member. ValueError (nothing to write) when the file cannot be read as an object, or when the
+    key's present value is not a string."""
+    new = json.dumps(value, ensure_ascii=False)
+    kind, a, b = jsonc_find(text, key)
+    if kind == "found":
+        if not text[a:b].startswith('"'):
+            raise ValueError("%s is %s, not a string" % (key, text[a:b]))
+        out = text[:a] + new + text[b:]
+    else:
+        out = text[:a] + '\n  %s: %s%s' % (json.dumps(key), new, "," if b else "\n") + text[a:]
+    kind, a, b = jsonc_find(out, key)                # what is written reads back as what was asked for
+    if kind != "found" or json.loads(out[a:b]) != value:
+        raise ValueError("the edit did not read back (nothing written)")
+    return out
+
+
+@contextlib.contextmanager
+def locked(P):
+    """One themectl at a time (a double click is two toggles, one after the other)."""
+    os.makedirs(P.theme_dir, exist_ok=True)
+    fd = os.open(P.lock_file, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _manifest_path(P):
+    return P.backup_dir + "/manifest.json"
+
+
+def load_manifest(P):
+    try:
+        return load_json(_manifest_path(P))
+    except (OSError, ValueError):
+        return {}
+
+
+def own_file(P, path):
+    """The first time themectl owns PATH, keep what was there. Raises OSError if it cannot (then nothing is written)."""
+    man = load_manifest(P)
+    if path in man:
+        return False
+    entry = {"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
+    if os.path.islink(path):
+        entry.update(kind="symlink", link=os.readlink(path))
+    elif os.path.exists(path):
+        os.makedirs(P.backup_dir + "/files", exist_ok=True)
+        n = len(man)
+        rel = "files/%03d-%s" % (n, os.path.basename(path))
+        shutil.copy2(path, P.backup_dir + "/" + rel)
+        entry.update(kind="file", backup=rel, sha256=hashlib.sha256(open(path, "rb").read()).hexdigest())
+    else:
+        entry.update(kind="absent")
+    man[path] = entry
+    write_atomic(_manifest_path(P), json.dumps(man, indent=2, sort_keys=True) + "\n")
+    return True
+
+
+def guard_output(P, path):
+    """A targets.json typo must not scribble over /etc: outputs live under HOME or an XDG directory."""
+    real = os.path.realpath(os.path.dirname(path))
+    roots = [os.path.realpath(x) for x in (P.home, P.config, P.cache, P.state, P.data)]
+    if not any(real == r or real.startswith(r + "/") for r in roots):
+        raise Refused("%s is outside HOME" % path)
+
+
+# ================================================================================================ the template engine
+
+
+TOKEN_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*(?:\|\s*([A-Za-z]+)\s*)?\}\}")
+
+
+class TemplateError(Exception):
+    pass
+
+
+def render(text, ctx, values, name="template"):
+    """{{ key }} / {{ key | fmt }}: key is a context entry (theme, mode, assets.x, output, ...) or a resolved token.
+    A colour is formatted by fmt ('' -> #RRGGBB, hex -> RRGGBB, hexa -> RRGGBBAA, rgb -> r, g, b), or replaced by its ink (ink -> the one of
+    the theme's two text colours, textPrimary and textOnAccent, with the higher WCAG contrast on it, as #RRGGBB: a warning yellow in a light
+    mode reads ~2.4:1 with the light text-on-accent)."""
+    def sub(m):
+        key, fmt = m.group(1), m.group(2) or ""
+        line = text.count("\n", 0, m.start()) + 1
+        if key in ctx:
+            if fmt:
+                raise TemplateError("%s line %d: %s takes no format" % (name, line, key))
+            return str(ctx[key])
+        if key not in values:
+            raise TemplateError("%s line %d: unknown token \"%s\"" % (name, line, key))
+        v = values[key]
+        if isinstance(v, list) and fmt == "ink":
+            inks = [values.get(k) for k in ("textPrimary", "textOnAccent")]
+            if not all(isinstance(c, list) for c in inks):
+                raise TemplateError("%s line %d: %s|ink needs the colours textPrimary and textOnAccent" % (name, line, key))
+            return fmt_colour(max(inks, key=lambda c: wcag_contrast(v, c)), "")
+        if isinstance(v, list):
+            try:
+                return fmt_colour(v, fmt)
+            except ValueError as e:
+                raise TemplateError("%s line %d: %s" % (name, line, e))
+        if fmt:
+            raise TemplateError("%s line %d: \"%s\" is not a colour (%s)" % (name, line, key, fmt))
+        return str(v)
+    return TOKEN_RE.sub(sub, text)
+
+
+# ========================================================================================================== targets
+
+
+class Fail(Exception):
+    """A target failed: the reason is the message."""
+
+
+def run_cmd(argv, timeout, cwd=None, extra_env=None):
+    env = dict(os.environ)
+    env.update(extra_env or {})
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout, env=env, cwd=cwd)
+    except FileNotFoundError:
+        raise Fail("%s: command not found" % argv[0])
+    except subprocess.TimeoutExpired:
+        raise Fail("%s: timed out after %ds" % (argv[0], timeout))
+    except OSError as e:
+        raise Fail("%s: %s" % (argv[0], e))
+    return p
+
+
+def _first_line(s):
+    for l in (s or "").splitlines():
+        if l.strip():
+            return l.strip()[:200]
+    return ""
+
+
+def shell_theme_block(P):
+    """The `theme` object of the user's shell.jsonc (comments allowed; `.jsonc` first, `.json` when there is none). {} when the file is
+    absent, does not parse, or has no such object: the wallpaper target then says it has nothing to set, it never fails over a typo
+    in a file the shell reports itself (ShellConfig.lastError)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("themectl_jsonc", os.path.join(P.repo, "tools", "lib", "jsonc.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    try:
+        doc = mod.load(P.shell_config)
+    except (OSError, ValueError):
+        return {}
+    t = doc.get("theme") if isinstance(doc, dict) else None
+    return t if isinstance(t, dict) else {}
+
+
+def target_off(P, spec, only=None):
+    """Why a target does not run, "" when it does: switched off in targets.json, or by the user's shell.jsonc ("theme": { "targets":
+    { "evince": false } }). `lares`, the state the shell itself reads, has no switch; a target named by --only runs whatever shell.jsonc says."""
+    if spec.get("enabled", True) is False:
+        return "disabled in targets.json"
+    off = shell_theme_block(P).get("targets")
+    if spec["name"] != "lares" and spec["name"] not in (only or []) and isinstance(off, dict) and off.get(spec["name"]) is False:
+        return 'off in shell.jsonc ("theme" "targets")'
+    return ""
+
+
+def pair_order(P):
+    """The pairs to cycle through: shell.jsonc's "theme": { "pairs": [...] }, those of them that are there, in its order; every pair by name
+    without it (or when it names none that is there)."""
+    names = sorted(theme_files(P))
+    want = shell_theme_block(P).get("pairs")
+    listed = [n for n in want if n in names] if isinstance(want, list) else []
+    return listed or names
+
+
+FIT_MODES = ("cover", "contain", "tile", "fill")
+
+
+def wallpaper_slot(P, theme, mode):
+    """The wallpapers shell.jsonc names for THEME and MODE, or None when it names none:
+
+        "theme": { "wallpapers": { "eva": { "light": ["~/Pictures/wallpapers/dunes.jpeg", "~/Pictures/wallpapers/sky.png"],
+                                            "dark": "~/Pictures/wallpapers/flower.png" } },
+                   "wallpaperFit": "cover" }
+
+    A slot is a path or a list of paths (a string is a list of one); the wallpaper target draws one of a list from the slot's bag. A
+    path takes ~ and ${XDG_*}; a relative one is refused (the file hyprpaper reads must not depend on where it was started). There is no
+    other source (the HyprV backgrounds directory and the theme file's `assets.<mode>.wallpaper` are not read).
+    -> {"where", "entries": [(as written, absolute)] (repeats dropped), "paths": the absolute ones that exist, "missing": the others, "fit"}.
+    Fail: a slot of another shape, a relative path, a bad fit."""
+    block = shell_theme_block(P)
+    wps = block.get("wallpapers")
+    pair = wps.get(theme) if isinstance(wps, dict) else None
+    raw = pair.get(mode) if isinstance(pair, dict) else None
+    where = "shell.jsonc theme.wallpapers.%s.%s" % (theme, mode)
+    if raw is None or raw == "" or raw == []:
+        return None
+    entries = []
+    for r in (raw if isinstance(raw, list) else [raw]):
+        if not isinstance(r, str) or r == "":
+            raise Fail("%s must be a path or a list of paths, not %s" % (where, json.dumps(raw)))
+        path = P.expand(r)
+        if not os.path.isabs(path):
+            raise Fail("%s: %s is not an absolute path (use ~/... or /...)" % (where, r))
+        path = os.path.normpath(path)
+        if path not in [e[1] for e in entries]:
+            entries.append((r, path))
+    fit = block.get("wallpaperFit", "cover")
+    if fit not in FIT_MODES:
+        raise Fail("shell.jsonc theme.wallpaperFit must be one of %s, not %s" % (", ".join(FIT_MODES), json.dumps(fit)))
+    return {"where": where, "entries": entries, "paths": [p for _, p in entries if os.path.exists(p)],
+            "missing": [p for _, p in entries if not os.path.exists(p)], "fit": fit}
+
+
+# The tokens that only a program's template reads, which a theme may leave out: the token each one then is. A pair whose legacy
+# file drew these apart from its accent or its ok (everbox's starship head, hyprlock's field) says so; eva renders as it always did.
+# hyprGroupTab is the active tab hypr-group-tabs draws inside a group's border (groupbar col.active): it must stand apart from the border.
+# The prompt's ramp is a flat accent bar in a theme that names none: its four colours are slots of KITTY's file now (the prompt prints
+# slot numbers so that old prompts follow a switch: templates/starship.toml), and a theme without a ramp must not cost kitty its colours.
+FALLBACKS = {"starshipHead": "accent", "starshipOk": "ok", "starshipError": "error", "lockField": "panelSunk", "lockCaps": "ansiBrightYellow",
+             "hyprGroupTab": "warn", "starshipRamp0": "accent", "starshipRamp1": "accent", "starshipRamp2": "accent", "starshipRamp3": "accent"}
+
+
+# ASSET PREFERENCE LISTS. An asset that names an installed theme (gtkTheme, iconTheme, vscodeTheme) may be a LIST: the first entry that
+# is installed wins; none installed, the LAST entry is applied as it always was (so a list ends with today's fallback, and a user who
+# installs nothing gets the same writes as with a plain string). A string is a list of one. themes/*.json carries the lists,
+# tools/theme/packages.json says what installs each name, `doctor` and `packages` report the gap.
+LIST_ASSETS = {"gtkTheme": "gtk", "iconTheme": "icon", "vscodeTheme": "vscode"}
+
+
+def _data_dirs(P):
+    dirs = [P.data] + [d for d in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":") if d]
+    return dirs
+
+
+def vscode_theme_names(P):
+    """The theme names VS Code knows here (its built-ins and the user's extensions): a set, or None when no VS Code is installed (read only)."""
+    names, found = set(), False
+    for d in (P.home + "/.vscode/extensions", "/usr/share/code/resources/app/extensions", "/opt/visual-studio-code/resources/app/extensions"):
+        if not os.path.isdir(d):
+            continue
+        found = True
+        try:
+            entries = os.listdir(d)
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                with open(os.path.join(d, e, "package.json"), encoding="utf-8") as f:
+                    pj = json.load(f)
+            except (OSError, ValueError):
+                continue
+            for th in ((pj.get("contributes") or {}).get("themes") or []) if isinstance(pj, dict) else []:
+                if isinstance(th, dict):
+                    names.add(th.get("id") or th.get("label"))
+    return names if found else None
+
+
+def asset_installed(P, kind, name):
+    """Is the theme NAME of this kind installed? True / False; None for 'cannot tell' (no VS Code at all). GTK: a directory of that name in
+    the themes directories holding index.theme or a gtk-3.0 / gtk-4.0 folder; icons: one holding index.theme; VS Code: a theme of that name."""
+    if kind == "gtk":
+        for base in [P.home + "/.themes"] + [d + "/themes" for d in _data_dirs(P)]:
+            d = base + "/" + name
+            if os.path.isdir(d) and any(os.path.exists(d + "/" + x) for x in ("index.theme", "gtk-3.0", "gtk-4.0")):
+                return True
+        return False
+    if kind == "icon":
+        return any(os.path.isfile(base + "/" + name + "/index.theme") for base in [P.home + "/.icons"] + [d + "/icons" for d in _data_dirs(P)])
+    if kind == "vscode":
+        names = vscode_theme_names(P)
+        return None if names is None else name in names
+    return None
+
+
+def resolve_assets(P, raw):
+    """The assets of one mode with every list taken to the entry in force -> (assets, errors, picks). picks[key] = (chosen, entries,
+    states) for a LIST only: states[i] is True / False / None (cannot tell) for entries[i]; chosen is the first True, else the last."""
+    assets, errors, picks = {}, {}, {}
+    for k, v in raw.items():
+        if k in LIST_ASSETS and isinstance(v, list):
+            if not v or not all(isinstance(x, str) and x for x in v):
+                errors[k] = "assets.%s is a list that is empty or holds something that is not a theme name" % k
+                continue
+            states = [asset_installed(P, LIST_ASSETS[k], x) for x in v]
+            chosen = next((x for x, s in zip(v, states) if s), v[-1])
+            assets[k] = chosen
+            picks[k] = (chosen, list(v), states)
+        else:
+            assets[k] = v
+    return assets, errors, picks
+
+
+def load_packages(P):
+    """tools/theme/packages.json (and ~/.config/theme/packages.json over it, as targets.json): theme name -> {"repo": "extra" | "aur", "pkg": name}
+    or {"build": "a command"}; {} when there is none."""
+    out = {}
+    for f in (P.tools + "/packages.json", P.theme_dir + "/packages.json"):
+        try:
+            d = load_json(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict) and isinstance(d.get("themes"), dict):
+            out.update(d["themes"])
+    return out
+
+
+def package_hint(pk, name):
+    e = pk.get(name)
+    if not isinstance(e, dict):
+        return "no package known"
+    if e.get("vscode"):
+        return "code --install-extension %s" % e["vscode"]
+    if e.get("pkg"):
+        return "%s %s" % ("sudo pacman -S" if e.get("repo") == "extra" else "yay -S", e["pkg"])
+    return e.get("build") or "no package known"
+
+
+def package_report(P):
+    """Per theme and mode, every asset that is a list: [(theme, mode, key, chosen, entries, states)] -- for `doctor` and `packages`."""
+    rows = []
+    for name in sorted(theme_files(P)):
+        try:
+            th = load_theme(P, name)
+        except Refused:
+            continue
+        for mode in MODES:
+            _, _, picks = resolve_assets(P, th.assets(mode))
+            for k, (chosen, entries, states) in picks.items():
+                rows.append((name, mode, k, chosen, entries, states))
+    return rows
+
+
+class Ctx:
+    """What a target sees: the paths, the options, the theme + mode, its resolved tokens and its assets."""
+
+    def __init__(self, P, options, theme, mode, dry):
+        self.P, self.options, self.theme, self.mode, self.dry = P, options, theme, mode, dry
+        self.values, self.errors = theme.mode_values(mode)
+        for k, v in FALLBACKS.items():
+            if k not in self.values and v in self.values:
+                self.values[k] = self.values[v]
+        self.assets, self.asset_errors, self.asset_picks = resolve_assets(P, theme.assets(mode))
+        self.timeout = int(options.get("timeoutSec", 20))
+        self.extra = {}                              # entries a target adds for its own templates (t_wallpaper: wallpaperPath, wallpaperFit)
+
+    def base(self):
+        c = {"theme": self.theme.name, "mode": self.mode}
+        c.update(self.extra)
+        for k, v in self.assets.items():
+            c["assets." + k] = v
+        return c
+
+    def need_assets(self, names):
+        for n in names or []:
+            if n in self.asset_errors:
+                raise Fail("theme %s, %s: %s" % (self.theme.name, self.mode, self.asset_errors[n]))
+            if n not in self.assets:
+                raise Fail("theme %s has no assets.%s.%s" % (self.theme.name, self.mode, n))
+
+    def template(self, name):
+        for d in (self.P.theme_dir + "/templates", self.P.tools + "/templates"):
+            p = d + "/" + name
+            t = _read_text(p)
+            if t is not None:
+                return t, p
+        raise Fail("template %s not found (looked in %s/templates and %s/templates)" % (name, self.P.theme_dir, self.P.tools))
+
+    def render(self, text, name, extra=None):
+        c = self.base()
+        c.update(extra or {})
+        try:
+            return render(text, c, self.values, name)
+        except TemplateError as e:
+            raise Fail("template: %s" % e)
+
+
+def _udiff(old, new, path):
+    a = (old or "").splitlines(keepends=True)
+    b = new.splitlines(keepends=True)
+    return "".join(difflib.unified_diff(a, b, "now: " + path, "themectl: " + path))
+
+
+def _include_note(spec, P):
+    """' [not used yet: ...]' when the app's own config lacks the line that makes it read the file themectl owns."""
+    inc = spec.get("include")
+    if not inc:
+        return ""
+    f = P.expand(inc["file"])
+    text = _read_text(f)
+    if text is None:
+        return " [not used yet: %s is missing; it needs: %s]" % (f, inc["line"])
+    if not re.search(inc["pattern"], text, re.M):
+        return " [not used yet: add to %s: %s]" % (f, inc["line"])
+    return ""
+
+
+def _do_reload(spec, ctx, out, changed):
+    rl = spec.get("reload")
+    if not rl:
+        return ""
+    when = rl.get("when", "changed")
+    if when == "changed" and not changed:
+        return ""
+    argv = [ctx.render(a, spec["name"] + " reload", {"output": out}) for a in rl["argv"]]
+    if ctx.dry:
+        return "; would run: " + " ".join(argv)
+    p = run_cmd(argv, ctx.timeout)
+    ok_codes = rl.get("okCodes", [0])
+    text = (p.stdout or "").strip()
+    if p.returncode not in ok_codes:
+        raise Fail("%s: exit %d: %s" % (" ".join(argv[:2]), p.returncode, _first_line(p.stderr) or _first_line(p.stdout) or "no output"))
+    expect = rl.get("expect")
+    if expect and not re.search(expect, text):
+        raise Fail("%s: %s" % (" ".join(argv[:2]), _first_line(text) or _first_line(p.stderr) or "no answer"))
+    return "; " + (rl.get("label") or " ".join(argv[:2])) + (" (nothing running)" if p.returncode != 0 else "")
+
+
+def t_state(spec, ctx):
+    P = ctx.P
+    want = state_text(ctx.theme.name, ctx.mode)
+    cur = _read_text(P.state_file)
+    if cur == want:
+        return "state.json: %s %s" % (ctx.theme.name, ctx.mode), ""
+    diff = _udiff(cur, want, P.state_file)
+    if ctx.dry:
+        return "would write state.json: %s %s" % (ctx.theme.name, ctx.mode), diff
+    try:
+        write_atomic(P.state_file, want)
+    except OSError as e:
+        raise Fail("cannot write %s: %s" % (P.state_file, e))
+    return "state.json: %s %s (changed)" % (ctx.theme.name, ctx.mode), diff
+
+
+def t_file(spec, ctx):
+    P = ctx.P
+    ctx.need_assets(spec.get("needs"))
+    out = P.expand(spec["output"])
+    tpl, tpath = ctx.template(spec["template"])
+    new = ctx.render(tpl, spec["template"], {"output": out})
+    try:
+        guard_output(P, out)
+    except Refused as e:
+        raise Fail(str(e))
+    cur = _read_text(out) if not os.path.islink(out) or os.path.exists(out) else None
+    is_link = os.path.islink(out)
+    changed = cur != new or is_link
+    diff = _udiff(cur, new, out) if cur != new else ""
+    if is_link and cur == new:
+        diff = "(same text; the symlink %s -> %s becomes a file themectl owns)\n" % (out, os.readlink(out))
+    if ctx.dry:
+        msg = ("would write %s" % out) if changed else "unchanged: %s" % out
+        return msg + _do_reload(spec, ctx, out, changed) + _include_note(spec, P), diff
+    if changed:
+        try:
+            own_file(P, out)
+        except OSError as e:
+            raise Fail("cannot keep the original of %s (nothing written): %s" % (out, e))
+        try:
+            write_atomic(out, new)
+        except OSError as e:
+            raise Fail("cannot write %s: %s" % (out, e))
+    msg = ("wrote %s" % out) if changed else "unchanged: %s" % out
+    return msg + _do_reload(spec, ctx, out, changed) + _include_note(spec, P), diff
+
+
+def _install_shipped(P, src, dst):
+    """Copy a file the repo ships (tools/theme/<shipped>/) to DST in an app's directory, keeping what was there first (own_file: an absent
+    original is recorded as absent, so `restore` takes the copy away again). The repo's mtime goes with it: `install` keeps a copy that is
+    newer than the repo's (someone edited it) and refreshes an older one."""
+    guard_output(P, dst)
+    own_file(P, dst)
+    d = os.path.dirname(dst)
+    os.makedirs(d, exist_ok=True)
+    tmp = tempfile.mktemp(prefix=".themectl-", dir=d)
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def t_link(spec, ctx):
+    """output -> target (absolute, or relative to output's directory), kept in step with the mode. Like a `file` target it can name an
+    include (the app's own line that reads the link) and a reload, which runs when the link moved: btop's `current.theme` is a link
+    to the theme of the mode, and btop re-reads the file its link names on SIGUSR2.
+
+    `shipped`: a directory under tools/theme/ of files the repo ships for this target (btop's custom themes, the fastfetch logos). A
+    target that is a bare file name, absent next to the link and shipped there, is copied in first (`_install_shipped`); a copy that is
+    already there is used as it is (`themectl install` refreshes it)."""
+    P = ctx.P
+    ctx.need_assets(spec.get("needs"))
+    out = P.expand(spec["output"])
+    target = ctx.render(spec["target"], spec["name"] + " target")
+    try:
+        guard_output(P, out)
+    except Refused as e:
+        raise Fail(str(e))
+    resolved = target if os.path.isabs(target) else os.path.join(os.path.dirname(out), target)
+    installed = ""
+    if not os.path.exists(resolved) and spec.get("shipped") and "/" not in target:
+        src = os.path.join(P.tools, spec["shipped"], target)
+        if os.path.isfile(src):
+            if ctx.dry:
+                installed = "would install %s from %s; " % (resolved, src)
+            else:
+                try:
+                    _install_shipped(P, src, resolved)
+                except (OSError, Refused) as e:
+                    raise Fail("cannot install %s (nothing linked): %s" % (resolved, e))
+                installed = "installed %s; " % resolved
+        else:
+            raise Fail("%s does not exist, and %s/%s ships no %s (the link would dangle)" % (resolved, os.path.basename(P.tools), spec["shipped"], target))
+    if not installed and not os.path.exists(resolved):
+        raise Fail("%s does not exist (the link would dangle)" % resolved)
+    cur = os.readlink(out) if os.path.islink(out) else None
+    changed = cur != target
+    was = ("%s -> %s" % (out, cur)) if cur else out + (" (a file, not a link)" if os.path.lexists(out) else " (absent)")
+    diff = "" if not changed else "-%s\n+%s\n" % (was, "%s -> %s" % (out, target))
+    if ctx.dry:
+        return installed + (("would link %s -> %s" % (out, target)) if changed else "unchanged: %s -> %s" % (out, target)) + _do_reload(spec, ctx, out, changed) + _include_note(spec, P), diff
+    if changed:
+        try:
+            own_file(P, out)
+        except OSError as e:
+            raise Fail("cannot keep the original of %s (nothing written): %s" % (out, e))
+        d = os.path.dirname(out)
+        os.makedirs(d, exist_ok=True)
+        tmp = tempfile.mktemp(prefix=".themectl-", dir=d)
+        try:
+            os.symlink(target, tmp)
+            os.replace(tmp, out)
+        except OSError as e:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise Fail("cannot link %s: %s" % (out, e))
+    return installed + (("linked %s -> %s" % (out, target)) if changed else "unchanged: %s -> %s" % (out, target)) + _do_reload(spec, ctx, out, changed) + _include_note(spec, P), diff
+
+
+def _gs_quote(v):
+    return "'" + v.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def t_gsettings(spec, ctx):
+    ctx.need_assets(spec.get("needs"))
+    lines, did = [], []
+    for item in spec["keys"]:
+        want = ctx.render(item["value"], spec["name"] + " " + item["key"])
+        p = run_cmd(["gsettings", "get", item["schema"], item["key"]], ctx.timeout)
+        if p.returncode != 0:
+            raise Fail("gsettings get %s %s: %s" % (item["schema"], item["key"], _first_line(p.stderr) or "exit %d" % p.returncode))
+        cur = p.stdout.strip()
+        if cur == _gs_quote(want):
+            continue
+        lines.append("-%s %s = %s\n+%s %s = %s\n" % (item["schema"], item["key"], cur, item["schema"], item["key"], _gs_quote(want)))
+        if not ctx.dry:
+            q = run_cmd(["gsettings", "set", item["schema"], item["key"], want], ctx.timeout)
+            if q.returncode != 0:
+                raise Fail("gsettings set %s %s: %s" % (item["schema"], item["key"], _first_line(q.stderr) or "exit %d" % q.returncode))
+        did.append(item["key"])
+    if not did:
+        return "unchanged: " + ", ".join(i["key"] for i in spec["keys"]), ""
+    return ("would set " if ctx.dry else "set ") + ", ".join(did), "".join(lines)
+
+
+EVINCE_KEY = "metadata::evince::inverted-colors"
+
+
+def _evince_docs(P):
+    """file:// URIs evince has opened, newest list GTK keeps ($XDG_DATA_HOME/recently-used.xbel, bookmarks whose application runs
+    evince); [] when there is none."""
+    import xml.etree.ElementTree as ET
+    out = []
+    try:
+        root = ET.parse(P.data + "/recently-used.xbel").getroot()
+    except (OSError, ET.ParseError):
+        return out
+    for bm in root.iter("bookmark"):
+        href = bm.get("href") or ""
+        if not href.startswith("file://"):
+            continue
+        apps = [a for a in bm.iter() if a.tag.endswith("}application") or a.tag == "bookmark:application"]
+        if any("evince" in (a.get("exec") or "").lower() for a in apps):      # GTK writes 'org.gnome.Evince %u'
+            out.append(href)
+    return out
+
+
+def _evince_gio():
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+        return Gio, GLib
+    except (ImportError, ValueError):
+        return None, None
+
+
+def _evince_doc_pass(P, want, dry):
+    """(2): every document whose metadata holds a copy of the default gets WANT ("1"/"0"). -> (changed, of_with_a_copy)."""
+    Gio, _ = _evince_gio()
+    if Gio is None:
+        return 0, 0
+    changed = held = 0
+    for uri in _evince_docs(P):
+        f = Gio.File.new_for_uri(uri)
+        try:
+            cur = f.query_info(EVINCE_KEY, Gio.FileQueryInfoFlags.NONE, None).get_attribute_string(EVINCE_KEY)
+        except Exception:                                # noqa: BLE001 -- gone, unreadable, no metadata store: not ours to judge
+            continue
+        if cur is None:
+            continue
+        held += 1
+        if cur == want:
+            continue
+        if not dry:
+            try:
+                f.set_attribute_string(EVINCE_KEY, want, Gio.FileQueryInfoFlags.NONE, None)
+            except Exception:                            # noqa: BLE001
+                continue
+        changed += 1
+    return changed, held
+
+
+def _evince_window_pass(want, dry):
+    """(3): every evince process on the session bus, every window it exports: its stateful `inverted-colors` action set to WANT.
+    -> (changed, windows)."""
+    Gio, GLib = _evince_gio()
+    if Gio is None:
+        return 0, 0
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        names = bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames", None,
+                              GLib.VariantType("(as)"), Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+    except Exception:                                    # noqa: BLE001 -- no session bus: no window to tell
+        return 0, 0
+    # An evince process holds TWO connections, and the later one (the GVfs client's) never answers a call: asked, it costs the whole
+    # timeout (2 s a switch, measured). The application's is the one it made first, at its start: per process, the connections are
+    # asked oldest first and the first that lists windows is the one.
+    procs = {}
+    for name in names:
+        if not name.startswith(":"):
+            continue
+        try:
+            pid = bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetConnectionUnixProcessID",
+                                GLib.Variant("(s)", (name,)), GLib.VariantType("(u)"), Gio.DBusCallFlags.NONE, 1000, None).unpack()[0]
+            with open("/proc/%d/comm" % pid) as fh:
+                if fh.read().strip() != "evince":
+                    continue
+        except Exception:                                # noqa: BLE001 -- gone meanwhile, not ours
+            continue
+        procs.setdefault(pid, []).append(name)
+    changed = windows = 0
+    for conns in procs.values():
+        for name in sorted(conns, key=lambda n: [int(x) if x.isdigit() else 0 for x in n[1:].split(".")]):
+            try:
+                xml = bus.call_sync(name, "/org/gnome/Evince/window", "org.freedesktop.DBus.Introspectable", "Introspect", None,
+                                    GLib.VariantType("(s)"), Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+            except Exception:                            # noqa: BLE001
+                continue
+            nodes = re.findall(r'<node name="(\d+)"', xml)
+            if nodes:
+                break
+        else:
+            continue
+        for node in nodes:
+            path = "/org/gnome/Evince/window/" + node
+            try:
+                d = bus.call_sync(name, path, "org.gtk.Actions", "Describe", GLib.Variant("(s)", ("inverted-colors",)),
+                                  GLib.VariantType("((bgav))"), Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+            except Exception:                            # noqa: BLE001
+                continue
+            windows += 1
+            if d[2] and bool(d[2][0]) == want:
+                continue
+            if not dry:
+                try:
+                    bus.call_sync(name, path, "org.gtk.Actions", "SetState",
+                                  GLib.Variant("(sva{sv})", ("inverted-colors", GLib.Variant("b", want), {})),
+                                  None, Gio.DBusCallFlags.NONE, 2000, None)
+                except Exception:                        # noqa: BLE001
+                    continue
+            changed += 1
+    return changed, windows
+
+
+def t_evince(spec, ctx):
+    """Evince (48) inverts a document's colours in the modes `invertIn` names (default ["dark"]). It keeps that state in THREE places,
+    and a switch writes all three:
+    (1) the default for a document opened for the first time: gsettings `org.gnome.Evince.Default inverted-colors`;
+    (2) every document opened before: evince COPIES the default into the file's GVfs metadata (`metadata::evince::inverted-colors`,
+        "0" / "1") at its first open and reads that copy ever after, so a default alone changes nothing already seen (the user: "when I
+        open a pdf document again that was inverted in colors, it is still inverted"). The documents are the ones GTK's recent list
+        names with evince as their application and that hold the copy; one older than the list keeps its copy until Ctrl+I there;
+    (3) a window open now: its stateful window action `inverted-colors` (org.gtk.Actions, /org/gnome/Evince/window/N on each evince
+        process's bus name) inverts the page at once, and evince then writes that document's copy itself.
+    No Evince schema (not installed) is 'skipped'. (2) and (3) need GIO from python (gi) and a session bus; without them only (1) runs.
+    A real switch writes the wish and leaves the three to a detached worker (below: the curtain waits for themectl to exit); a dry run
+    (diff) counts them in place. Proven on the real evince: tools/dev/themectl_evince_env_probe.sh."""
+    want = ctx.mode in spec.get("invertIn", ["dark"])
+    schema = spec.get("schema", "org.gnome.Evince.Default")
+    if not _evince_installed(schema):
+        return "skipped: evince is not installed (no %s schema)" % schema, ""
+    state = "inverted" if want else "not inverted"
+    if ctx.dry:
+        did, lines, held, nwin = _evince_apply(spec, want, ctx.P, True, ctx.timeout)
+        if not did:
+            return "unchanged: %s (%d documents, %d windows)" % (state, held, nwin), ""
+        return "would set " + state + ": " + ", ".join(did), "".join(lines)
+    # THE BACKGROUND HALF (the user, 2026-11-12: a switch "used to feel faster"). The curtain reveals only when themectl has EXITED,
+    # and this target cost the switch its whole run (~250 ms measured on the user's data: GIO 86, the window's reply after evince has
+    # re-rendered its page 125, the copies 20; +650-950 ms in the shell's log). Nothing here has to be finished before the curtain
+    # opens -- the open window flips while the reveal runs -- so the wish is written down and a detached worker (`themectl _evince`)
+    # carries it out: one at a time (a lock), and always the LAST wish (it re-reads it before it lets go). A wish already made is not
+    # made again: an apply in the same mode writes nothing and starts nothing, like every other target.
+    wish = "1\n" if want else "0\n"
+    if _read_text(_evince_want_file(ctx.P)) == wish:
+        return "unchanged: %s" % state, ""
+    try:
+        write_atomic(_evince_want_file(ctx.P), wish)
+    except OSError as e:
+        raise Fail("cannot write %s: %s" % (_evince_want_file(ctx.P), e))
+    try:
+        subprocess.Popen([sys.executable, os.path.realpath(__file__), "_evince"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    except OSError as e:
+        raise Fail("cannot start the background half: %s" % e)
+    return "set %s: the default, the recent documents and the open windows follow in the background" % state, ""
+
+
+def _evince_installed(schema):
+    """The schema's XML is installed beside the compiled schemas (XDG_DATA_DIRS/glib-2.0/schemas): a file test, not a gsettings fork."""
+    dirs = [d for d in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":") if d]
+    base = schema.rsplit(".", 1)[0] if schema.endswith(".Default") else schema
+    return any(os.path.exists("%s/glib-2.0/schemas/%s.gschema.xml" % (d, base)) for d in dirs)
+
+
+def _evince_want_file(P):
+    return P.state + "/theme/evince-want"
+
+
+def _evince_apply(spec, want, P, dry, timeout):
+    """The three places (t_evince) set to WANT, or with DRY only counted. -> (did, diff lines, documents holding a copy, windows)."""
+    schema, key = spec.get("schema", "org.gnome.Evince.Default"), spec.get("key", "inverted-colors")
+    p = run_cmd(["gsettings", "get", schema, key], timeout)
+    if p.returncode != 0:
+        raise Fail("gsettings get %s %s: %s" % (schema, key, _first_line(p.stderr) or "exit %d" % p.returncode))
+    cur = p.stdout.strip()
+    word = "true" if want else "false"
+    did, lines = [], []
+    if cur != word:
+        lines.append("-%s %s = %s\n+%s %s = %s\n" % (schema, key, cur, schema, key, word))
+        if not dry:
+            q = run_cmd(["gsettings", "set", schema, key, word], timeout)
+            if q.returncode != 0:
+                raise Fail("gsettings set %s %s: %s" % (schema, key, _first_line(q.stderr) or "exit %d" % q.returncode))
+        did.append("the default")
+    docs, held = _evince_doc_pass(P, "1" if want else "0", dry)
+    if docs:
+        did.append("%d of %d documents" % (docs, held))
+        lines.append("~%d documents' %s -> %s\n" % (docs, EVINCE_KEY, "1" if want else "0"))
+    wins, nwin = _evince_window_pass(want, dry)
+    if wins:
+        did.append("%d open window%s" % (wins, "" if wins == 1 else "s"))
+        lines.append("~%d open windows' inverted-colors -> %s\n" % (wins, word))
+    return did, lines, held, nwin
+
+
+def cmd_evince_worker(P, args):
+    """`themectl _evince`: the evince target's background half. One worker at a time (a lock beside the wish); it applies the wish in
+    `evince-want` and, before it lets go, reads it again: a switch made meanwhile is carried out by the worker that holds the lock, the
+    one it started finds nothing left to do. Its last word is `evince-last` beside the wish (read it after a switch that did not show)."""
+    want_file = _evince_want_file(P)
+    spec = next((t for t in load_targets(P)[1] if t.get("type") == "evince"), {})
+    os.makedirs(os.path.dirname(want_file), exist_ok=True)
+    with open(want_file + ".lock", "a+") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        done = None
+        for _ in range(8):
+            want = (_read_text(want_file) or "").strip() == "1"
+            if want == done:
+                break
+            t0 = time.time()
+            try:
+                did, _lines, held, nwin = _evince_apply(spec, want, P, False, 20)
+                word = "%s %s: %s (%d documents, %d windows) in %d ms" % ("set" if did else "unchanged", "inverted" if want else "not inverted",
+                                                                          ", ".join(did) or "-", held, nwin, (time.time() - t0) * 1000)
+            except Fail as e:
+                word = "FAIL %s" % e
+            try:
+                write_atomic(want_file[:-len("-want")] + "-last", word + "\n")
+            except OSError:
+                pass
+            done = want
+    return 0
+
+
+def t_gnome_accent(spec, ctx):
+    """libadwaita's accent (`org.gnome.desktop.interface accent-color`: one of nine names) = the GNOME accent nearest, by CIEDE2000, to the
+    theme's `accent` token of this mode, for whatever reads that key. libadwaita reads it only when no settings portal answers (this
+    desktop's portal does, without the key); what reaches loupe and zenity is the `libadwaita` target's stylesheet, whose exact accent wins
+    over this one. Written through gsettings like the `gtk` target (the key exists from GNOME 47: an older schema is a FAIL that says so)."""
+    token = ctx.values.get("accent")
+    if token is None:
+        raise Fail("theme %s (%s) has no accent token" % (ctx.theme.name, ctx.mode))
+    shown = fmt_colour(token) if isinstance(token, list) else token
+    try:
+        name, dist = nearest_gnome_accent(shown)
+    except ValueError as e:
+        raise Fail("accent token: %s" % e)
+    sub = {"name": spec["name"], "keys": [{"schema": spec.get("schema", "org.gnome.desktop.interface"), "key": spec.get("key", "accent-color"), "value": name}]}
+    msg, diff = t_gsettings(sub, ctx)
+    return "%s (accent %s -> %s, dE %.1f)" % (msg, shown, name, dist), diff
+
+
+def t_setting(spec, ctx):
+    """One key of a settings file in JSON with comments, set by an edit of its TEXT (jsonc_set): VS Code's `workbench.colorTheme`,
+    which theme-switch.py rewrote for two years (the theme's `assets.<mode>.vscodeTheme`: a name VS Code has installed). The file is
+    the user's own and long-lived, so nothing about it is kept for `restore` (a put-back would bring back every setting it has had
+    since) and nothing is written unless the value changed or the key is new; it is replaced atomically, through a symlink to where
+    the link points, with its own permission bits. No file -- the app is not installed, or never ran -- is no failure."""
+    P = ctx.P
+    ctx.need_assets(spec.get("needs"))
+    out = P.expand(spec["file"])
+    key = spec["key"]
+    want = ctx.render(spec["value"], spec["name"] + " " + key)
+    try:
+        guard_output(P, out)
+    except Refused as e:
+        raise Fail(str(e))
+    if not os.path.exists(out):
+        return "skipped: %s does not exist (the app is not installed, or has never run)" % out, ""
+    cur = _read_text(out)
+    if cur is None:
+        raise Fail("cannot read %s as text" % out)
+    try:
+        new = jsonc_set(cur, key, want)
+    except ValueError as e:
+        raise Fail("%s: %s -- nothing written" % (out, e))
+    if new == cur:
+        return "unchanged: %s %s = %s" % (os.path.basename(out), key, want), ""
+    diff = _udiff(cur, new, out)
+    if ctx.dry:
+        return "would set %s %s = %s" % (os.path.basename(out), key, want), diff
+    real = os.path.realpath(out)
+    try:
+        write_atomic(real, new, mode=stat.S_IMODE(os.stat(real).st_mode))
+    except OSError as e:
+        raise Fail("cannot write %s: %s" % (real, e))
+    return "set %s %s = %s (changed)" % (os.path.basename(out), key, want), diff
+
+
+def t_command(spec, ctx):
+    ctx.need_assets(spec.get("needs"))
+    argv = [ctx.render(a, spec["name"]) for a in spec["argv"]]
+    if ctx.dry:
+        return "would run: " + " ".join(argv), ""
+    tries = int(spec.get("retries", 0)) + 1
+    last = ""
+    for i in range(tries):
+        p = run_cmd(argv, ctx.timeout)
+        if p.returncode == 0:
+            return "ran: " + " ".join(argv[:3]) + (" (try %d)" % (i + 1) if i else ""), ""
+        last = "%s: exit %d: %s" % (argv[0], p.returncode, _first_line(p.stderr) or _first_line(p.stdout) or "no output")
+        if i + 1 < tries:
+            time.sleep(float(spec.get("retryDelay", 0.5)))
+    raise Fail(last)
+
+
+def ini_set(text, section, key, value):
+    """KEY=VALUE in [SECTION] of an ini file's TEXT: the line is replaced where it is, else added at the end of the section, else the
+    section is added. Nothing else in the file moves (comments, other sections, the line endings)."""
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines(keepends=True)
+    head = re.compile(r"^\s*\[([^\]]*)\]\s*$")
+    keyrx = re.compile(r"^\s*" + re.escape(key) + r"\s*=")
+    sect = None
+    last_in = -1                                    # the last line of SECTION that is not blank
+    for i, l in enumerate(lines):
+        m = head.match(l.rstrip("\r\n"))
+        if m:
+            sect = m.group(1)
+            if sect == section:
+                last_in = i
+            continue
+        if sect == section:
+            if keyrx.match(l):
+                lines[i] = "%s=%s%s" % (key, value, nl if l.endswith("\n") else "")
+                return "".join(lines)
+            if l.strip():
+                last_in = i
+    new = "%s=%s%s" % (key, value, nl)
+    if last_in >= 0:
+        if not lines[last_in].endswith("\n"):
+            lines[last_in] += nl
+        lines.insert(last_in + 1, new)
+        return "".join(lines)
+    out = "".join(lines)
+    if out and not out.endswith("\n"):
+        out += nl
+    return out + ("%s" % nl if out else "") + "[%s]%s%s" % (section, nl, new)
+
+
+def t_ini(spec, ctx):
+    """Keys of an ini file's section (GTK's settings.ini), set by an edit of its TEXT (ini_set). gsettings is what a running GTK app and
+    the shell's icon provider follow; settings.ini is what a GTK app started without a settings daemon reads, so the two are written
+    together: one source. The file is the user's own and long-lived: nothing is kept for `restore`, nothing is
+    written unless a value changed, and a missing file is created and noted for `restore` to remove (a GTK program reads whatever is there)."""
+    P = ctx.P
+    ctx.need_assets(spec.get("needs"))
+    out = P.expand(spec["file"])
+    try:
+        guard_output(P, out)
+    except Refused as e:
+        raise Fail(str(e))
+    cur = _read_text(out) if os.path.exists(out) else ""
+    if cur is None:
+        raise Fail("cannot read %s as text" % out)
+    new, did = cur, []
+    for item in spec["keys"]:
+        want = ctx.render(item["value"], spec["name"] + " " + item["key"])
+        nxt = ini_set(new, spec["section"], item["key"], want)
+        if nxt != new:
+            did.append("%s=%s" % (item["key"], want))
+            new = nxt
+    short = os.path.relpath(out, P.config) if out.startswith(P.config + "/") else out
+    if not did:
+        return "unchanged: %s" % short, ""
+    diff = _udiff(cur, new, out)
+    if ctx.dry:
+        return "would set %s %s" % (short, ", ".join(did)), diff
+    if not os.path.lexists(out):
+        try:
+            own_file(P, out)                        # a file themectl creates is taken away again by `restore`; one that was there is not kept
+        except OSError as e:
+            raise Fail("cannot keep a note of %s (nothing written): %s" % (out, e))
+    real = os.path.realpath(out)
+    try:
+        write_atomic(real, new, mode=stat.S_IMODE(os.stat(real).st_mode) if os.path.exists(real) else None)
+    except OSError as e:
+        raise Fail("cannot write %s: %s" % (real, e))
+    return "set %s %s" % (short, ", ".join(did)), diff
+
+
+def hyprpaper_named(argv, mon):
+    """ARGV (the wallpaper target's, rendered: its last word the FALLBACK request `,<path>,<fit>`) for monitor MON by name; None when the
+    last word is not that shape (a targets.json of the user's with another command: no named pass)."""
+    if not argv or not argv[-1].startswith(","):
+        return None
+    return list(argv[:-1]) + [mon + argv[-1]]
+
+
+def hyprpaper_show(argv, path, timeout):
+    """THE NAMED MONITORS. hyprpaper 0.8.5 (measured in a nested Hyprland, tools/dev/themectl_hyprpaper_env_probe.sh): a wallpaper set for a
+    NAMED monitor wins over the fallback until the daemon restarts, and the fallback request it then ignores answers exit 0 and nothing. One
+    named set by anything -- the Revert of an inserted slot, a `hyprctl hyprpaper wallpaper MON,...` by hand -- froze every later switch while
+    this target said "ran" (2026-11-11). So after ARGV's fallback request what each monitor shows is read back (`listactive` answers the new
+    state at once); a monitor that did not take PATH is told by name (argv's last word with the monitor in front) and read back again. Only
+    the stragglers are named: a named set of our own would shadow the next fallback request of anyone else the same way. -> [] when every
+    listed monitor shows PATH, else ["MON (shows X)", ...]. A daemon that lists nothing (it is starting, a stub) is not judged."""
+    want = os.path.realpath(path)
+
+    def off():
+        return [(mon, pic) for mon, pic in _active_pictures(None) if os.path.realpath(pic) != want]
+    stray = off()
+    named = [hyprpaper_named(argv, mon) for mon, _ in stray]
+    for a in named:
+        if a is not None:
+            run_cmd(a, timeout)
+    if any(a is not None for a in named):
+        stray = off()
+    return ["%s (shows %s)" % (mon, os.path.basename(pic)) for mon, pic in stray]
+
+
+def t_wallpaper(spec, ctx):
+    """The wallpaper of this theme and mode (shell.jsonc, `wallpaper_slot`), through hyprpaper (0.8+; the shell's own crossfade does the
+    transition, so the daemon needs none).
+
+    WHICH PICTURE. A slot holding several is a shuffle bag (`bag_draw`, kept in ~/.local/state/theme/wallpaper-bag.json): a picture is DRAWN
+    when the theme or the mode differs from what this target last showed, or the Hyprland instance does (HYPRLAND_INSTANCE_SIGNATURE: the
+    autostart's `themectl apply` of a new session draws, a second apply in the same session does not); otherwise the slot's current pick is
+    shown again (unless it left the list). A missing file is left out of the draw; all missing is a FAIL. A dry run (diff, doctor) draws
+    nothing and keeps nothing.
+
+    Two steps, because a wallpaper must survive a restart of the daemon and a switch must show at once: (1) the file hyprpaper reads at
+    its start (`output`, from `template`) is written -- it is the same `file` target everything else is; (2) the running daemon is told with
+    `hyprctl hyprpaper wallpaper ',<abs path>,<fit>'` (an empty monitor is the fallback, which every monitor not named takes), then what
+    each monitor shows is read back and one that kept another picture is told BY NAME (`hyprpaper_show`: a named wallpaper beats the
+    fallback); one that still shows another is a FAIL. hyprpaper not running is no failure -- its file is read when it starts (its message: `notRunning`, a regex on hyprctl's text). No wallpaper set
+    in shell.jsonc for this theme and mode is 'skipped': the one on screen stays."""
+    P, name, mode = ctx.P, ctx.theme.name, ctx.mode
+    inst = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    slot = wallpaper_slot(P, name, mode)
+    bags = load_bags(P)
+    switched = bags["shown"] != [name, mode] or bags["instance"] != inst
+
+    def keep(state=None):
+        """What this target showed is recorded (a real run only): the slot's state, the theme and mode, the instance."""
+        if ctx.dry:
+            return
+        if state is not None:
+            bags["slots"][slot_key(name, mode)] = state
+        bags["shown"], bags["instance"] = [name, mode], inst
+        try:
+            save_bags(P, bags)
+        except OSError as e:
+            raise Fail("cannot write %s: %s" % (bag_file(P), e))
+    if slot is None:
+        keep()
+        return "skipped: no wallpaper for %s %s (shell.jsonc theme.wallpapers.%s.%s)" % (name, mode, name, mode), ""
+    if not slot["paths"]:
+        if len(slot["missing"]) == 1:
+            raise Fail("wallpaper file %s not found (%s)" % (slot["missing"][0], slot["where"]))
+        raise Fail("none of the %d wallpaper files of %s exists (%s)" % (len(slot["missing"]), slot["where"], ", ".join(slot["missing"])))
+    state = bags["slots"].get(slot_key(name, mode), bag_empty())
+    if not switched and state["last"] in slot["paths"]:
+        path, new_state, how = state["last"], state, "kept"
+    else:
+        path, new_state = bag_draw(state, slot["paths"], random.random)
+        how = "drawn"
+    n = len(slot["paths"])
+    which = "" if n == 1 and not slot["missing"] else " [%s: %s, %d of %d%s]" % (
+        "would draw" if (how == "drawn" and ctx.dry) else how, os.path.basename(path), slot["paths"].index(path) + 1, n,
+        "; %d not found: %s" % (len(slot["missing"]), ", ".join(os.path.basename(m) for m in slot["missing"])) if slot["missing"] else "")
+    ctx.extra = {"wallpaperPath": path, "wallpaperFit": slot["fit"]}
+    fspec = {k: v for k, v in spec.items() if k not in ("type", "argv", "notRunning")}
+    msg, diff = t_file(fspec, ctx)
+    argv = [ctx.render(a, spec["name"]) for a in spec["argv"]]
+    if ctx.dry:
+        return msg + "; would run: " + " ".join(argv) + which, diff
+    p = run_cmd(argv, ctx.timeout)
+    text = ((p.stdout or "") + " " + (p.stderr or "")).strip()
+    if p.returncode == 0 and not re.search(r"(?i)\berror\b", text):
+        kept = hyprpaper_show(argv, path, ctx.timeout)
+        if kept:
+            raise Fail("hyprpaper did not take %s: %s" % (os.path.basename(path), ", ".join(kept)))
+        keep(new_state)
+        return msg + "; " + " ".join(argv[:3]) + " ran" + which, diff
+    if re.search(spec.get("notRunning", r"(?!x)x"), text):
+        keep(new_state)
+        return msg + "; hyprpaper is not running (the file is read when it starts)" + which, diff
+    raise Fail("%s: exit %d: %s" % (" ".join(argv[:3]), p.returncode, _first_line(text) or "no output"))
+
+
+def toml_str(s):
+    """S as a TOML basic string (JSON's escapes are TOML's for every character a path holds)."""
+    return json.dumps(s, ensure_ascii=False)
+
+
+def yazi_glob(path):
+    """An exact-path glob for a yazi open rule (yazi's Pattern: matched against the whole path, backslash is no escape, `\\s` in front makes it
+    case-sensitive): every glob character is put in a class of its own."""
+    return "\\s" + "".join("[%s]" % c if c in "*?[]{}" else c for c in path)
+
+
+YAZI_BEGIN = "# BEGIN themectl wallpapers"
+YAZI_END = "# END themectl wallpapers"
+
+
+def yazi_rule_block(text, lines):
+    """TEXT (yazi.toml) with the lines between its BEGIN / END marks replaced by LINES (each indented as the BEGIN line is) -> new text, or
+    None when the marks are not there. ValueError: a mark twice, an END before its BEGIN."""
+    begins = [m for m in re.finditer(r"^([ \t]*)%s\b[^\n]*\n" % re.escape(YAZI_BEGIN), text, re.M)]
+    ends = [m for m in re.finditer(r"^[ \t]*%s\b[^\n]*(\n|$)" % re.escape(YAZI_END), text, re.M)]
+    if not begins and not ends:
+        return None
+    if len(begins) != 1 or len(ends) != 1 or ends[0].start() < begins[0].end():
+        raise ValueError("the %r / %r marks are not one pair in order (%d / %d)" % (YAZI_BEGIN, YAZI_END, len(begins), len(ends)))
+    ind = begins[0].group(1)
+    return text[:begins[0].end()] + "".join(ind + l + "\n" for l in lines) + text[ends[0].start():]
+
+
+def t_yazi(spec, ctx):
+    """yazi's view of the CURRENT theme and mode's wallpapers (tools/theme/yazi/CHEATSHEET.md), on every apply and every wallpaper change:
+
+    (1) `list`: the slot's pictures, one absolute path a line (and its real path when that differs), which the wallpapers.yazi plugin reads
+        live for the mark beside each listed file. Written whether or not yazi is set up (themectl's own state file).
+    (2) `config` (yazi.toml): the rules between the BEGIN / END marks `install` put at the top of [open] prepend_rules, one per picture, exact
+        path -> the `opener` ("Remove from wallpapers" and the viewer); every other image keeps the user's own image rule ("Set as wallpaper").
+        The rest of the file is never touched; no marks is 'not set up' (no failure). An open yazi reads it at its next start."""
+    P = ctx.P
+    note = ""
+    try:
+        slot = wallpaper_slot(P, ctx.theme.name, ctx.mode)
+    except Fail as e:
+        slot, note = None, " (the slot is unreadable: %s)" % e
+    paths = []
+    for _, p in (slot["entries"] if slot else []):
+        for q in (p, os.path.realpath(p)):
+            if q not in paths and "\n" not in q:
+                paths.append(q)
+    out = []
+    lst = P.expand(spec["list"])
+    head = ("# themectl: the wallpapers of %s %s (shell.jsonc theme.wallpapers.%s.%s), one path a line, for yazi's wallpapers.yazi plugin.\n"
+            "# Rewritten on every theme switch and wallpaper change; do not edit.\n") % (ctx.theme.name, ctx.mode, ctx.theme.name, ctx.mode)
+    want = head + "".join(p + "\n" for p in paths)
+    diff = ""
+    if _read_text(lst) != want:
+        diff += _udiff(_read_text(lst), want, lst)
+        if not ctx.dry:
+            try:
+                write_atomic(lst, want)
+            except OSError as e:
+                raise Fail("cannot write %s: %s" % (lst, e))
+        out.append("%s %s (%d)" % ("would write" if ctx.dry else "wrote", lst, len(slot["entries"]) if slot else 0))
+    else:
+        out.append("unchanged: %s" % lst)
+    cfg = P.expand(spec["config"])
+    text = _read_text(cfg)
+    if text is None:
+        out.append("no %s (no yazi config here)" % cfg)
+        return "; ".join(out) + note, diff
+    rules = ["{ url = %s, use = %s }," % (toml_str(yazi_glob(p)), toml_str(spec["opener"])) for p in paths if "://" not in p]
+    try:
+        new = yazi_rule_block(text, rules)
+    except ValueError as e:
+        raise Fail("%s: %s -- nothing written" % (cfg, e))
+    if new is None:
+        out.append("%s has no %s block (themectl install adds it)" % (os.path.basename(cfg), YAZI_BEGIN[2:]))
+    elif new == text:
+        out.append("unchanged: the rules in %s" % os.path.basename(cfg))
+    else:
+        try:
+            import tomllib
+            tomllib.loads(new)
+        except Exception as e:                      # noqa: BLE001 -- what yazi would refuse is never written
+            raise Fail("%s: the new rules do not parse (%s) -- nothing written" % (cfg, e))
+        diff += _udiff(text, new, cfg)
+        if not ctx.dry:
+            real = os.path.realpath(cfg)
+            try:
+                write_atomic(real, new, mode=stat.S_IMODE(os.stat(real).st_mode))
+            except OSError as e:
+                raise Fail("cannot write %s: %s" % (real, e))
+        out.append("%s the %d rule%s in %s" % ("would write" if ctx.dry else "wrote", len(rules), "" if len(rules) == 1 else "s", os.path.basename(cfg)))
+    return "; ".join(out) + note, diff
+
+
+def compose_share(P, compose, guest):
+    """The host directory COMPOSE mounts at GUEST, from a short-form volume line (`- <host>:<guest>[:opts]`), or None. Lines, not YAML: this is the one fact themectl needs of that
+    file, and PyYAML is not a dependency worth having for it. A variable other than HOME and the XDG bases cannot be known here, and that is said, not guessed past."""
+    text = _read_text(compose)
+    rx = re.compile(r"""^\s*-\s*['"]?([^'"#\s]+?):%s(?::[a-z,]+)?['"]?\s*(?:#.*)?$""" % re.escape(guest))
+    for line in (text or "").splitlines():
+        m = rx.match(line)
+        if not m:
+            continue
+        host = P.expand(re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)", r"${\1}", m.group(1)))
+        if "$" in host:
+            raise Fail("%s: cannot resolve the volume at %s: %s" % (compose, guest, m.group(1)))
+        return os.path.normpath(host if os.path.isabs(host) else os.path.join(os.path.dirname(compose), host))
+    return None
+
+
+def t_vmshare(spec, ctx):
+    """A small file in the folder a VM shares with this machine, for the agent inside it to read (windows/ThemeSync.cs). The folder is the VM's own compose file's, so there is
+    one place that says where it is, and the file is on Linux: a switch needs the VM neither running nor reachable, and a Windows that was off reads the mode when it next starts.
+
+    OPTIONAL: no compose file, no such volume, or a folder that does not exist is a machine without that VM, and is 'skipped' (the folder is never made here: docker owns that).
+    A share that cannot be written IS a FAIL. Nothing here starts, asks or signals anything: no docker, no ssh, and the compose file's `storage` is not read."""
+    P = ctx.P
+    compose = P.expand(spec["compose"])
+    if not os.path.exists(compose):
+        return "skipped: no VM here (%s)" % compose, ""
+    share = compose_share(P, compose, spec["guest"])
+    if share is None:
+        return "skipped: %s shares nothing at %s" % (compose, spec["guest"]), ""
+    if not os.path.isdir(share):
+        return "skipped: the shared folder %s does not exist" % share, ""
+    out = os.path.join(share, spec["file"])
+    try:
+        guard_output(P, out)
+    except Refused as e:
+        raise Fail(str(e))
+    new = ctx.render(spec["text"], spec["name"])
+    cur = _read_text(out)
+    changed = cur != new
+    diff = _udiff(cur, new, out) if changed else ""
+    if ctx.dry:
+        return (("would write %s" % out) if changed else "unchanged: %s" % out), diff
+    if changed:
+        try:
+            own_file(P, out)
+            write_atomic(out, new)
+        except OSError as e:
+            raise Fail("cannot write %s: %s" % (out, e))
+    return (("wrote %s" % out) if changed else "unchanged: %s" % out), diff
+
+
+def t_nwglook(spec, ctx):
+    """nwg-look (the GTK settings app here) kept in step with the gtk target, so that it can never put an old theme back on its own:
+
+    (1) `file` (~/.local/share/nwg-look/gsettings): what nwg-look applied last, `key=value` lines under its own header, which `nwg-look -a`
+        applies again. The keys the gtk target sets (`keys`: gtk-theme, icon-theme, color-scheme) take the pair's values; every other line
+        (the cursor, the font, the sounds: no target of themectl sets those) stays as nwg-look wrote it. Nothing is kept for `restore`: a
+        put-back would bring back a theme long gone.
+    (2) `config` (~/.config/nwg-look/config, nwg-look's JSON): every key in `off` is false -- `export-gtk4-symlinks`, with which nwg-look's
+        Apply deletes ~/.config/gtk-4.0/gtk.css and settings.ini and links the GTK theme's own in their place (the libadwaita target's
+        stylesheet and the gtk4-ini target's file gone). Its original is kept for `restore` the first time, as every file themectl owns.
+
+    nwg-look's window shows what gsettings said when it OPENED, and its Apply writes all of that back: one left open across a switch puts
+    the old theme back (doctor says when one is running). Neither file there -- nwg-look never ran -- is 'skipped'."""
+    P = ctx.P
+    ctx.need_assets(spec.get("needs"))
+    f, cfg = P.expand(spec["file"]), P.expand(spec["config"])
+    for x in (f, cfg):
+        try:
+            guard_output(P, x)
+        except Refused as e:
+            raise Fail(str(e))
+    out, diff = [], ""
+    have_f, have_c = os.path.exists(f), os.path.exists(cfg)
+    if not have_f and not have_c:
+        return "skipped: nwg-look has stored nothing here (%s, %s)" % (f, cfg), ""
+    if have_f:
+        cur = _read_text(f)
+        if cur is None:
+            raise Fail("cannot read %s as text" % f)
+        lines = cur.splitlines(keepends=True)
+        did = []
+        for item in spec["keys"]:
+            want = ctx.render(item["value"], spec["name"] + " " + item["key"])
+            line = "%s=%s\n" % (item["key"], want)
+            hit = [i for i, l in enumerate(lines) if l.split("=", 1)[0] == item["key"]]
+            if hit:
+                if lines[hit[0]].rstrip("\n") != line.rstrip("\n"):
+                    lines[hit[0]] = line if lines[hit[0]].endswith("\n") else line.rstrip("\n")
+                    did.append("%s=%s" % (item["key"], want))
+            else:
+                if lines and not lines[-1].endswith("\n"):
+                    lines[-1] += "\n"
+                lines.append(line)
+                did.append("%s=%s" % (item["key"], want))
+        new = "".join(lines)
+        if did:
+            diff += _udiff(cur, new, f)
+            if not ctx.dry:
+                real = os.path.realpath(f)
+                try:
+                    write_atomic(real, new, mode=stat.S_IMODE(os.stat(real).st_mode))
+                except OSError as e:
+                    raise Fail("cannot write %s: %s" % (real, e))
+            out.append("%s %s" % ("would set" if ctx.dry else "set", ", ".join(did)))
+        else:
+            out.append("unchanged: %s" % os.path.basename(f))
+    if have_c:
+        cur = _read_text(cfg)
+        try:
+            obj = json.loads(cur if cur is not None else "")
+        except ValueError as e:
+            raise Fail("%s is not JSON (%s): nothing written" % (cfg, e))
+        if not isinstance(obj, dict):
+            raise Fail("%s is not a JSON object: nothing written" % cfg)
+        flip = [k for k in spec.get("off", []) if obj.get(k) is not False]
+        if flip:
+            for k in flip:
+                obj[k] = False
+            new = json.dumps(obj, indent=1, ensure_ascii=False) + ("\n" if cur.endswith("\n") else "")   # nwg-look's own layout (Go's MarshalIndent, one space)
+            diff += _udiff(cur, new, cfg)
+            if not ctx.dry:
+                try:
+                    own_file(P, cfg)
+                except OSError as e:
+                    raise Fail("cannot keep the original of %s (nothing written): %s" % (cfg, e))
+                real = os.path.realpath(cfg)
+                try:
+                    write_atomic(real, new, mode=stat.S_IMODE(os.stat(real).st_mode))
+                except OSError as e:
+                    raise Fail("cannot write %s: %s" % (real, e))
+            out.append("%s %s off" % ("would switch" if ctx.dry else "switched", ", ".join(flip)))
+        else:
+            out.append("%s off" % ", ".join(spec.get("off", [])))
+    return "nwg-look: " + "; ".join(out), diff
+
+
+def nwglook_running():
+    """[(pid, start as HH:MM)] of the nwg-look processes on this machine (read from /proc; nothing is signalled)."""
+    found = []
+    try:
+        ticks = os.sysconf("SC_CLK_TCK")
+        boot = time.time() - float(open("/proc/uptime").read().split()[0])
+    except (OSError, ValueError):
+        return found
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            if open("/proc/%s/comm" % d).read().strip() != "nwg-look":
+                continue
+            st = open("/proc/%s/stat" % d).read()
+            start = boot + int(st.rsplit(")", 1)[1].split()[19]) / ticks
+            found.append((int(d), time.strftime("%H:%M", time.localtime(start))))
+        except (OSError, ValueError, IndexError):
+            continue
+    return found
+
+
+TYPES = {"state": t_state, "file": t_file, "link": t_link, "gsettings": t_gsettings, "ini": t_ini, "setting": t_setting, "command": t_command,
+         "wallpaper": t_wallpaper, "vmshare": t_vmshare, "gnomeAccent": t_gnome_accent, "yazi": t_yazi, "nwglook": t_nwglook, "evince": t_evince}
+
+
+def load_targets(P):
+    for p in (P.theme_dir + "/targets.json", P.tools + "/targets.json"):
+        if os.path.exists(p):
+            try:
+                doc = load_json(p)
+            except (OSError, ValueError) as e:
+                raise Refused("%s: %s" % (p, e))
+            return doc.get("options", {}), doc.get("targets", []), p
+    raise Refused("no targets.json (looked in %s and %s)" % (P.theme_dir, P.tools))
+
+
+TARGET_ALIASES = {"quickshell": "lares"}   # the shell's state target was called quickshell before the project was named Lares
+
+
+def select(targets, only, skip):
+    names = [t["name"] for t in targets]
+    only = [TARGET_ALIASES.get(n, n) for n in (only or [])] or only
+    skip = [TARGET_ALIASES.get(n, n) for n in (skip or [])] or skip
+    for n in (only or []) + (skip or []):
+        if n not in names:
+            raise Refused('no target named "%s" (have: %s)' % (n, ", ".join(names)))
+    out = []
+    for t in targets:
+        if only and t["name"] not in only:
+            continue
+        if skip and t["name"] in skip:
+            continue
+        out.append(t)
+    return out
+
+
+def run_targets(P, theme, mode, only=None, skip=None, dry=False, show_diff=False, out=sys.stdout):
+    """Run the targets in order; every one prints `ok` or `FAIL <reason>`. -> the number of FAILs."""
+    options, targets, _ = load_targets(P)
+    chosen = select(targets, only, skip)
+    ctx = Ctx(P, options, theme, mode, dry)
+    fails = 0
+    if ctx.errors:
+        for k, v in sorted(ctx.errors.items()):
+            print("note  theme %s (%s): %s" % (theme.name, mode, v), file=out)
+    # WHAT EACH TARGET COSTS (a real run): $XDG_STATE_HOME/theme/last-run.tsv, one `target<TAB>ms<TAB>ok|FAIL` line each. The shell's
+    # curtain waits for this whole run, so a switch that "feels slower" is read here, not guessed (2026-11-12: the evince target).
+    times, t_run = [], time.time()
+    for spec in chosen:
+        name = spec["name"]
+        t_spec = time.time()
+        fails_before = fails
+        off = target_off(P, spec, only)
+        if off:
+            print("%-5s %-12s skipped (%s)" % ("ok", name, off), file=out)
+            continue
+        only_themes = spec.get("themes")
+        if only_themes and theme.name not in only_themes:
+            print("%-5s %-12s skipped (only for: %s)" % ("ok", name, ", ".join(only_themes)), file=out)
+            continue
+        try:
+            fn = TYPES.get(spec.get("type"))
+            if fn is None:
+                raise Fail('unknown target type "%s"' % spec.get("type"))
+            msg, diff = fn(spec, ctx)
+            print("%-5s %-12s %s" % ("ok", name, msg), file=out)
+            if show_diff and diff:
+                print("".join("      " + l + "\n" if not l.endswith("\n") else "      " + l for l in diff.splitlines(True)).rstrip("\n"), file=out)
+        except Fail as e:
+            fails += 1
+            print("%-5s %-12s %s" % ("FAIL", name, e), file=out)
+        except Exception as e:                      # a bug in a target is a FAIL of that target, never a silent one
+            fails += 1
+            print("%-5s %-12s internal error: %s: %s" % ("FAIL", name, type(e).__name__, e), file=out)
+        times.append("%s\t%d\t%s\n" % (name, (time.time() - t_spec) * 1000, "FAIL" if fails > fails_before else "ok"))
+    if not dry and times:
+        try:
+            write_atomic(P.state + "/theme/last-run.tsv", "# %s %s, %d ms in all\n" % (theme.name, mode, (time.time() - t_run) * 1000) + "".join(times))
+        except OSError:
+            pass
+    return fails
+
+
+# ============================================================================================================ commands
+
+
+def _split(s):
+    return [x for x in (s or "").split(",") if x]
+
+
+def _apply(P, args, name, mode):
+    """Apply NAME in MODE (the lock is held, or this is a dry run). -> the exit status."""
+    if mode not in MODES:
+        raise Refused('mode must be "light" or "dark", not "%s"' % mode)
+    theme = load_theme(P, name)
+    if not isinstance(theme.doc.get(mode), dict):
+        raise Refused('theme "%s" has no "%s" block' % (name, mode))
+    fails = run_targets(P, theme, mode, _split(args.only), _split(args.skip), dry=args.dry, show_diff=args.dry)
+    print("themectl: %s %s: %s" % (name, mode, "all ok" if fails == 0 else "%d FAIL" % fails))
+    return min(fails, 99)
+
+
+def cmd_apply(P, args, theme_name=None, mode=None, toggle=False):
+    with contextlib.nullcontext() if args.dry else locked(P):
+        st = read_state(P)
+        if toggle:
+            mode = "dark" if st["mode"] == "light" else "light"
+        return _apply(P, args, theme_name or st["theme"], mode or st["mode"])
+
+
+def cmd_next(P, args):
+    with locked(P):
+        names = pair_order(P)
+        st = read_state(P)
+        if len(names) < 2:
+            print("themectl: only one theme (%s): nothing to do" % (names[0] if names else "none"))
+            return 0
+        nxt = names[(names.index(st["theme"]) + 1) % len(names)] if st["theme"] in names else names[0]
+        return _apply(P, args, nxt, st["mode"])
+
+
+# ============================================================================ `wallpaper set | remove | list`: the pictures of this theme and mode
+# yazi's "Set as wallpaper" and "Remove from wallpapers" (tools/theme/yazi/CHEATSHEET.md). `set`: ONE image is APPENDED to
+# theme.wallpapers.<theme>.<mode> of the user's shell.jsonc (a string slot becomes a list; a picture already there is not added twice) -- by an
+# edit of its TEXT (jsonc_list_add: the comments, the layout and every other key stay) -- and shown now (it counts as drawn: bag_take), through
+# the existing `wallpaper` target; a notification with a Revert action says so. The notification is waited on by a detached copy of this
+# program (`wallpaper _prompt`), so the file manager is never blocked; Revert takes the picture out of the list again and puts the old one
+# back on screen. `remove`: the picture leaves the list (jsonc_list_drop); the one on screen is replaced by the next draw; the last one of a
+# slot is refused. Both refresh yazi's view (the `yazi` target). `list`: the slot, its current pick, what is still to come in this round.
+
+
+def _jsonc_members(text, toks, i):
+    """toks[i] is a `{`: -> ([(key, key_index, value_index)], index of its `}`)."""
+    members, j = [], i + 1
+    while j < len(toks):
+        k = toks[j][0]
+        if k == "}":
+            return members, j
+        if k == ",":
+            j += 1
+            continue
+        if k != "s" or j + 2 >= len(toks) or toks[j + 1][0] != ":":
+            raise ValueError("a malformed member at offset %d" % toks[j][1])
+        members.append((json.loads(text[toks[j][1]:toks[j][2]]), j, j + 2))
+        j = _jsonc_skip(toks, j + 2)
+    raise ValueError("an object is not closed")
+
+
+def _jsonc_skip(toks, i):
+    """The index after the value that starts at toks[i]."""
+    if toks[i][0] not in "{[":
+        return i + 1
+    depth = 0
+    while i < len(toks):
+        if toks[i][0] in "{[":
+            depth += 1
+        elif toks[i][0] in "}]":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise ValueError("a value is not closed")
+
+
+def jsonc_find_path(text, path):
+    """-> ("found", start, end) of the scalar at PATH (a list of keys), or ("absent", open_index, depth_reached, toks): the deepest object
+    that exists on the way (its `{`'s token index) and how many keys of PATH lead to it. ValueError: not an object, unreadable, or a key
+    on the way (or the last one) holds a list / an object / a non-object where one is needed."""
+    toks = list(jsonc_tokens(text))
+    if not toks or toks[0][0] != "{":
+        raise ValueError("the file is not a JSON object")
+    at, depth = 0, 0
+    while True:
+        members, _ = _jsonc_members(text, toks, at)
+        hit = next((m for m in members if m[0] == path[depth]), None)
+        if hit is None:
+            return "absent", at, depth, toks
+        v = toks[hit[2]]
+        if depth == len(path) - 1:
+            if v[0] in "{[":
+                raise ValueError("%s is an object or a list, not a string" % ".".join(path))
+            return "found", v[1], v[2]
+        if v[0] != "{":
+            raise ValueError("%s is %s, not an object" % (".".join(path[:depth + 1]), text[v[1]:v[2]] if v[0] != "[" else "a list"))
+        at, depth = hit[2], depth + 1
+
+
+def _line_indent(text, pos):
+    """The whitespace that starts the line holding POS."""
+    s = text.rfind("\n", 0, pos) + 1
+    m = re.match(r"[ \t]*", text[s:])
+    return m.group(0)
+
+
+def jsonc_set_path(text, path, value):
+    """The text with the string at PATH set to VALUE and NOTHING else touched. A key that is not there is added as the LAST member of the
+    deepest object that exists, with the keys below it made (`"theme": { "wallpapers": { "x": { "dark": "..." } } }` from nothing); a
+    multi-line object gets its member on a line of its own at its members' indent (a trailing comma, a `//` note after the last member
+    and the closing brace stay where they are), a one-line object gets it inline. ValueError (nothing to write) on anything unreadable;
+    what is written is read back before it is returned."""
+    new = json.dumps(value, ensure_ascii=False)
+    found = jsonc_find_path(text, path)
+    if found[0] == "found":
+        out = text[:found[1]] + new + text[found[2]:]
+    else:
+        _, at, depth, toks = found
+        members, close = _jsonc_members(text, toks, at)
+        opener, closer = toks[at], toks[close]
+        base = _line_indent(text, opener[1])
+        root_members, _ = _jsonc_members(text, toks, 0)
+        unit = "    "
+        if root_members:
+            ind = _line_indent(text, toks[root_members[0][1]][1])
+            if ind and "\n" in text[toks[0][2]:toks[root_members[0][1]][1]]:
+                unit = ind
+        first_key = toks[members[0][1]][1] if members else closer[1]
+        multi = "\n" in text[opener[2]:first_key]
+        inner = (_line_indent(text, toks[members[0][1]][1]) if members and multi else base + unit)
+
+        def nest(keys, ind):
+            k = json.dumps(keys[0], ensure_ascii=False)
+            if len(keys) == 1:
+                return "%s: %s" % (k, new)
+            if multi:
+                return "%s: {\n%s%s\n%s}" % (k, ind + unit, nest(keys[1:], ind + unit), ind)
+            return "%s: { %s }" % (k, nest(keys[1:], ind))
+        member = nest(path[depth:], inner)
+        if not members:
+            if multi:
+                out = text[:opener[2]] + "\n" + inner + member + text[opener[2]:]
+            else:
+                out = text[:opener[2]] + " " + member + " " + text[opener[2]:closer[1]].strip() + text[closer[1]:]
+        else:
+            after = _jsonc_skip(toks, members[-1][2])
+            last_end = toks[after - 1][2]
+            has_comma = after < len(toks) and toks[after][0] == ","
+            pos = toks[after][2] if has_comma else last_end
+            if multi:
+                nl = text.find("\n", pos)
+                eol = len(text) if nl < 0 else nl
+                rest = text[pos:eol].strip()
+                if rest and not rest.startswith("//") and not (rest.startswith("/*") and rest.endswith("*/")):
+                    raise ValueError("cannot place a member after %r on its line" % rest[:20])
+                out = text[:eol] + "\n" + inner + member + text[eol:]
+                if not has_comma:
+                    out = out[:last_end] + "," + out[last_end:]
+            else:
+                out = text[:pos] + (" " if has_comma else ", ") + member + text[pos:]
+    kind, a, b = jsonc_find_path(out, path)
+    if kind != "found" or json.loads(out[a:b]) != value:
+        raise ValueError("the edit did not read back (nothing written)")
+    if _parses(text) and not _parses(out):           # a file that did not parse before (a trailing comma) is no worse for the edit
+        raise ValueError("the edit does not parse (nothing written)")
+    return out
+
+
+def _parses(text):
+    try:
+        json.loads(_jsonc_lib().strip(text))
+        return True
+    except ValueError:
+        return False
+
+
+def _jsonc_lib():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("themectl_jsonc", os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib", "jsonc.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _jsonc_locate(text, path):
+    """-> (toks, key index, value index) of the member at PATH (a list of keys), or (toks, None, None) when a key on the way is absent.
+    ValueError: not an object, unreadable, or a key on the way that holds no object."""
+    toks = list(jsonc_tokens(text))
+    if not toks or toks[0][0] != "{":
+        raise ValueError("the file is not a JSON object")
+    at = 0
+    for depth, key in enumerate(path):
+        if toks[at][0] != "{":
+            raise ValueError("%s is not an object" % ".".join(path[:depth]))
+        members, _ = _jsonc_members(text, toks, at)
+        hit = next((m for m in members if m[0] == key), None)
+        if hit is None:
+            return toks, None, None
+        if depth == len(path) - 1:
+            return toks, hit[1], hit[2]
+        at = hit[2]
+
+
+def _jsonc_elements(toks, i):
+    """toks[i] is a `[`: -> ([(first token index, index after its last token)] per element, index of its `]`)."""
+    els, j = [], i + 1
+    while j < len(toks):
+        k = toks[j][0]
+        if k == "]":
+            return els, j
+        if k == ",":
+            j += 1
+            continue
+        e = _jsonc_skip(toks, j)
+        els.append((j, e))
+        j = e
+    raise ValueError("a list is not closed")
+
+
+def _indent_unit(text, toks):
+    """One level of the file's indent (that of the root's first member, when the root is multi-line), else four spaces."""
+    root_members, _ = _jsonc_members(text, toks, 0)
+    if root_members:
+        ind = _line_indent(text, toks[root_members[0][1]][1])
+        if ind and "\n" in text[toks[0][2]:toks[root_members[0][1]][1]]:
+            return ind
+    return "    "
+
+
+def _slot_list(text, path):
+    """The slot at PATH as a list of strings ([] when absent; a string is a list of one) -- read through the shell's own reader (strip)."""
+    d = _jsonc_lib().loads(text)
+    for k in path:
+        d = d.get(k) if isinstance(d, dict) else None
+    if d is None:
+        return []
+    return [d] if isinstance(d, str) else list(d) if isinstance(d, list) else None
+
+
+def jsonc_list_add(text, path, value):
+    """The text with the string VALUE added at the end of the slot at PATH and NOTHING else touched: an absent slot becomes the string (as
+    jsonc_set_path makes it), a string becomes a list of the two (one item a line when the member has its own line), a list gets the item
+    after its last one (on a line of its own at its items' indent when it is multi-line; a `//` note after the last item stays with it).
+    ValueError (nothing to write) on anything else; what is written is read back first."""
+    new = json.dumps(value, ensure_ascii=False)
+    toks, ki, vi = _jsonc_locate(text, path)
+    if vi is None:
+        return jsonc_set_path(text, path, value)
+    want = (_slot_list(text, path) or []) + [value]
+    v = toks[vi]
+    if v[0] == "s":
+        old = text[v[1]:v[2]]
+        if text[text.rfind("\n", 0, toks[ki][1]) + 1:toks[ki][1]].strip() == "":
+            ind = _line_indent(text, toks[ki][1])
+            inner = ind + _indent_unit(text, toks)
+            arr = "[\n%s%s,\n%s%s\n%s]" % (inner, old, inner, new, ind)
+        else:
+            arr = "[%s, %s]" % (old, new)
+        out = text[:v[1]] + arr + text[v[2]:]
+    elif v[0] == "[":
+        els, close = _jsonc_elements(toks, vi)
+        if not els:
+            out = text[:v[2]] + new + text[toks[close][1]:]
+        else:
+            last_end = toks[els[-1][1] - 1][2]
+            has_comma = toks[els[-1][1]][0] == ","
+            pos = toks[els[-1][1]][2] if has_comma else last_end
+            first = toks[els[0][0]][1]
+            if "\n" in text[v[2]:first]:
+                inner = _line_indent(text, first)
+                nl = text.find("\n", pos)
+                eol = len(text) if nl < 0 else nl
+                rest = text[pos:eol].strip()
+                if rest.startswith("]"):                 # the bracket closes on the last item's line
+                    out = text[:pos] + ("" if has_comma else ",") + "\n" + inner + new + text[pos:]
+                elif rest and not rest.startswith("//") and not (rest.startswith("/*") and rest.endswith("*/")):
+                    raise ValueError("cannot place an item after %r on its line" % rest[:20])
+                else:
+                    out = text[:eol] + "\n" + inner + new + text[eol:]
+                    if not has_comma:
+                        out = out[:last_end] + "," + out[last_end:]
+            else:
+                out = text[:pos] + (" " if has_comma else ", ") + new + text[pos:]
+    else:
+        raise ValueError("%s is %s, not a path or a list of paths" % (".".join(path), text[v[1]:v[2]][:30]))
+    if _parses(text) and not _parses(out):
+        raise ValueError("the edit does not parse (nothing written)")
+    if _slot_list(out, path) != want:
+        raise ValueError("the edit did not read back (nothing written)")
+    return out
+
+
+def jsonc_list_drop(text, path, match):
+    """The text with every item of the LIST at PATH for which match(item) is true taken out -- the item, its comma, and its line when it
+    has one of its own (a `//` note on that line goes with it) -- and NOTHING else touched. ValueError: not a list, nothing matches, or the
+    list would be left empty (an emptied slot is the caller's refusal); what is written is read back first."""
+    before = _slot_list(text, path)
+    if before is None:
+        raise ValueError("%s is not a path or a list of paths" % ".".join(path))
+    want = [x for x in before if not (isinstance(x, str) and match(x))]
+    if len(want) == len(before):
+        raise ValueError("%s holds no such picture" % ".".join(path))
+    if not want:
+        raise ValueError("%s would be left empty" % ".".join(path))
+    out = text
+    while True:
+        toks, ki, vi = _jsonc_locate(out, path)
+        if vi is None or toks[vi][0] != "[":
+            raise ValueError("%s is not a list" % ".".join(path))
+        els, close = _jsonc_elements(toks, vi)
+        hit = next((n for n, (a, b) in enumerate(els) if b == a + 1 and toks[a][0] == "s" and match(json.loads(out[toks[a][1]:toks[a][2]]))), None)
+        if hit is None:
+            break
+        a, b = els[hit]
+        s, e = toks[a][1], toks[b - 1][2]
+        line_start = out.rfind("\n", 0, s) + 1
+        own_line = out[line_start:s].strip() == ""
+        if hit < len(els) - 1:                           # an item with one after it: the item and its comma
+            cut = toks[b][2]
+            nl = out.find("\n", cut)
+            rest = out[cut:nl if nl >= 0 else len(out)].strip()
+            if own_line and (rest == "" or rest.startswith("//")) and toks[els[hit + 1][0]][1] > nl >= 0:
+                out = out[:line_start] + out[nl + 1:]
+            else:
+                out = out[:s] + out[toks[els[hit + 1][0]][1]:]
+        else:                                            # the last item: it, and the comma after the one before it
+            comma = toks[els[hit - 1][1]]
+            nl = out.find("\n", e)
+            rest = out[e:nl if nl >= 0 else len(out)].strip().lstrip(",").strip()
+            if own_line and nl >= 0 and (rest == "" or rest.startswith("//")):
+                out = out[:line_start] + out[nl + 1:]
+                out = out[:comma[1]] + out[comma[2]:]
+            else:
+                out = out[:comma[1]] + out[toks[b][2] if toks[b][0] == "," else e:]
+    if _parses(text) and not _parses(out):
+        raise ValueError("the edit does not parse (nothing written)")
+    if _slot_list(out, path) != want:
+        raise ValueError("the edit did not read back (nothing written)")
+    return out
+
+
+# the formats hyprpaper (hyprgraphics) draws; read by their first bytes, so a picture named .jpg that is a PNG is still one
+def sniff_image(path):
+    """-> "jpeg" | "png" | "webp" | "jxl" | "bmp", or None when the file is none of them (or cannot be read)."""
+    try:
+        with open(path, "rb") as f:
+            h = f.read(16)
+    except OSError:
+        return None
+    if h[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if h[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if h[:4] == b"RIFF" and h[8:12] == b"WEBP":
+        return "webp"
+    if h[:2] == b"\xff\x0a" or h[:12] == b"\x00\x00\x00\x0cJXL \r\n\x87\n":
+        return "jxl"
+    if h[:2] == b"BM":
+        return "bmp"
+    return None
+
+
+def shown_path(P, path):
+    """A path as the user writes one in shell.jsonc: ~/... under the home, absolute elsewhere."""
+    return "~" + path[len(P.home):] if path == P.home or path.startswith(P.home + "/") else path
+
+
+def _notify(title, body, actions=None, wait=False):
+    """notify-send through the session's notification server. -> its stdout (the chosen action's name when ACTIONS was given), "" when
+    there is no notify-send or no server: a toast is never a reason to fail."""
+    argv = ["notify-send", "--app-name=themectl", "--expire-time=15000"]
+    for a in actions or []:
+        argv.append("--action=%s" % a)
+    argv += [title, body]
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60 if wait else 10)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def shell_config_file(P):
+    """The shell.jsonc in force (`.jsonc` first, `.json` when there is none); a first write makes the `.jsonc`."""
+    return _jsonc_lib().resolve(P.shell_config)
+
+
+def _active_pictures(P):
+    """[(monitor, path)] hyprpaper shows now (`hyprctl hyprpaper listactive`, lines `MON: /path`); [] when it does not say."""
+    try:
+        p = subprocess.run(["hyprctl", "hyprpaper", "listactive"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if p.returncode != 0:
+        return []
+    return [(m.group(1), m.group(2)) for m in (re.match(r"^\s*([^:\s][^:]*):\s*(/\S.*?)\s*$", l) for l in p.stdout.splitlines()) if m]
+
+
+def _apply_wallpaper_target(P, theme, mode):
+    """The `wallpaper` target for THEME and MODE and the `yazi` one after it (yazi's marks follow the list), as `apply --only wallpaper,yazi`
+    runs them -> (fails, their printed lines). A targets.json of the user's that has no yazi target runs the wallpaper alone."""
+    import io
+    buf = io.StringIO()
+    names = [t["name"] for t in load_targets(P)[1]]
+    fails = run_targets(P, theme, mode, only=[n for n in ("wallpaper", "yazi") if n in names], out=buf)
+    return fails, buf.getvalue().strip()
+
+
+def _one_path(P, args, what):
+    if len(args.paths) != 1:
+        raise Refused("pick exactly one image (%s given)" % ("none" if not args.paths else "%d" % len(args.paths)))
+    return os.path.normpath(os.path.abspath(P.expand(args.paths[0])))
+
+
+def _current_slot(P):
+    """Under the lock: the theme in force, its mode, the slot's path in shell.jsonc and what it holds -> (theme, mode, key path, slot or None)."""
+    st = read_state(P)
+    theme = load_theme(P, st["theme"])
+    mode = st["mode"]
+    if not isinstance(theme.doc.get(mode), dict):
+        raise Refused('theme "%s" has no "%s" block' % (theme.name, mode))
+    try:
+        slot = wallpaper_slot(P, theme.name, mode)
+    except Fail as e:
+        raise Refused("%s -- nothing written" % e)
+    return theme, mode, ["theme", "wallpapers", theme.name, mode], slot
+
+
+def _put_back(P, cfg, before, existed_file, bag_text):
+    """After a refused picture: shell.jsonc and the bag as they were."""
+    real = os.path.realpath(cfg)
+    if existed_file:
+        write_atomic(real, before, mode=stat.S_IMODE(os.stat(real).st_mode))
+    elif os.path.exists(real):
+        os.unlink(real)
+    _put_bag(P, bag_text)
+
+
+def _put_bag(P, text):
+    if text is None:
+        with contextlib.suppress(OSError):
+            os.unlink(bag_file(P))
+    else:
+        write_atomic(bag_file(P), text)
+
+
+def cmd_wallpaper_set(P, args):
+    try:
+        return _wallpaper_set(P, args)
+    except Refused as e:
+        if not args.no_notify:
+            _notify("Wallpaper not set", str(e))
+        raise
+
+
+def _wallpaper_set(P, args):
+    src = _one_path(P, args, "set")
+    if not os.path.isfile(src):
+        raise Refused("%s is not a file" % src)
+    if sniff_image(src) is None:
+        raise Refused("%s is not an image hyprpaper can draw (jpeg, png, webp, jxl, bmp)" % os.path.basename(src))
+    with locked(P):
+        theme, mode, slot_path, slot = _current_slot(P)
+        cfg = shell_config_file(P)
+        before = _read_text(cfg)
+        if before is None and os.path.exists(cfg):
+            raise Refused("cannot read %s as text" % cfg)
+        existed_file = before is not None
+        base = before if existed_file else "{\n}\n"
+        listed = slot is not None and src in [p for _, p in slot["entries"]]
+        bags = load_bags(P)
+        key = slot_key(theme.name, mode)
+        inst = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+        state = bags["slots"].get(key, bag_empty())
+        shown = shown_path(P, src)
+        label = "%s %s" % (shown_name(theme.name), mode)
+        if listed and state["last"] == src and bags["shown"] == [theme.name, mode] and bags["instance"] == inst:
+            print("ok    wallpaper    unchanged: %s is %s's wallpaper on screen already" % (shown, label))
+            return 0
+        if listed:
+            after = base
+        else:
+            try:
+                after = jsonc_list_add(base, slot_path, shown)
+            except ValueError as e:
+                raise Refused("%s: %s -- nothing written" % (cfg, e))
+        names = ([p for p in slot["paths"]] if slot else []) + ([] if listed else [src])
+        bag_before = _read_text(bag_file(P))
+        bags["slots"][key] = bag_take(state, names, src, random.random)
+        bags["shown"], bags["instance"] = [theme.name, mode], inst
+        old_pictures = _active_pictures(P)
+        conf_path = P.expand("${XDG_CONFIG_HOME}/hypr/hyprpaper.conf")
+        conf_before = _read_text(conf_path)
+        real = os.path.realpath(cfg)
+        try:
+            if after != before:
+                write_atomic(real, after, mode=stat.S_IMODE(os.stat(real).st_mode) if existed_file else 0o644)
+            save_bags(P, bags)
+        except OSError as e:
+            raise Refused("cannot write %s: %s" % (e.filename or real, e))
+        bag_after = _read_text(bag_file(P))
+        fails, said = _apply_wallpaper_target(P, theme, mode)
+        print(said)
+        if fails:                                         # hyprpaper refused the picture: nothing half-set
+            _put_back(P, cfg, before, existed_file, bag_before)
+            _apply_wallpaper_target(P, theme, mode)
+            if not args.no_notify:
+                _notify("Wallpaper not set", said.split("wallpaper", 1)[-1].strip()[:200])
+            return 1
+        count = len(names)
+        rec = {"file": real, "existed_file": existed_file, "theme": theme.name, "mode": mode, "slot": slot_path, "before": before, "after": after,
+               "appended": not listed, "had_slot": slot is not None, "picture": src, "bag_before": bag_before, "bag_after": bag_after,
+               "pictures_before": old_pictures, "conf": conf_path, "conf_before": conf_before}
+    print("themectl: wallpaper %s: %s %s (%d in the list)%s" % (label, shown, "is on screen" if listed else "added and on screen", count,
+                                                                  "" if args.no_notify else " (the notification has a Revert button)"))
+    if args.no_notify:
+        return 0
+    os.makedirs(P.state + "/theme", exist_ok=True)
+    recpath = "%s/theme/wallpaper-undo-%d.json" % (P.state, os.getpid())
+    with open(recpath, "w", encoding="utf-8") as f:
+        json.dump(rec, f)
+    subprocess.Popen([sys.executable, os.path.realpath(__file__), "wallpaper", "_prompt", recpath], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    return 0
+
+
+def cmd_wallpaper_prompt(P, args):
+    """The detached half of `wallpaper set`: post the notification, wait for its answer (a closed or expired one ends it), undo the set on
+    "Revert". The record is deleted either way."""
+    try:
+        with open(args.record, encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        return 1
+    try:
+        shown = os.path.basename(rec["picture"])
+        label = "%s %s" % (shown_name(rec["theme"]), rec["mode"])
+        body = ("%s joined the %s wallpapers and is on screen" if rec.get("appended") else "%s (one of the %s wallpapers) is on screen") % (shown, label)
+        answer = _notify("Wallpaper set", body, actions=["revert=Revert"], wait=True)
+        if answer == "revert":
+            try:
+                msg = wallpaper_revert(P, rec)
+                _notify("Wallpaper put back", msg)
+            except Refused as e:
+                _notify("Wallpaper not put back", str(e))
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(args.record)
+    return 0
+
+
+def wallpaper_revert(P, rec):
+    """Undo `wallpaper set`: the picture leaves the list again (the file's old text BYTE FOR BYTE when it is as set left it, else only that
+    item, when it is still there), the bag is as it was (when nothing drew since), and the old picture is shown. -> a sentence for the user.
+    Refused: the file moved on (a slot set made from nothing and edited since is removed by hand)."""
+    with locked(P):
+        cfg = rec["file"]
+        label = "%s %s" % (shown_name(rec["theme"]), rec["mode"])
+        if rec.get("appended"):
+            now = _read_text(cfg)
+            if now is None:
+                raise Refused("%s is gone: nothing to put back" % cfg)
+            if now == rec["after"]:
+                restored = rec["before"] if rec["existed_file"] else None
+            else:
+                if not rec["had_slot"]:
+                    raise Refused("shell.jsonc was edited since: remove the %s slot by hand" % ".".join(rec["slot"]))
+                try:
+                    restored = jsonc_list_drop(now, rec["slot"], lambda v: os.path.normpath(P.expand(v)) == rec["picture"])
+                except ValueError as e:
+                    raise Refused("shell.jsonc was edited since (%s): nothing changed" % e)
+            if restored is None:
+                os.unlink(cfg)
+            else:
+                write_atomic(cfg, restored, mode=stat.S_IMODE(os.stat(cfg).st_mode))
+        if _read_text(bag_file(P)) == rec["bag_after"]:
+            _put_bag(P, rec["bag_before"])
+        st = read_state(P)
+        if (st["theme"], st["mode"]) != (rec["theme"], rec["mode"]):
+            return "the %s list is back; %s %s is showing, so the screen did not change" % (label, shown_name(st["theme"]), st["mode"])
+        theme = load_theme(P, rec["theme"])
+        if not rec["had_slot"]:
+            # there was no slot: the wallpaper target has nothing to apply, so the old picture is told to hyprpaper as it was listed, and
+            # hyprpaper's own file is put back as it was
+            if rec["conf_before"] is not None and _read_text(rec["conf"]) is not None:
+                write_atomic(rec["conf"], rec["conf_before"])
+            fit = shell_theme_block(P).get("wallpaperFit", "cover")
+            told = 0
+            pics = sorted({pic for _, pic in rec["pictures_before"]})
+            if len(pics) == 1:
+                # one picture everywhere (themectl's own way): the fallback, then by name only a monitor that did not take it (hyprpaper_show),
+                # never a named set alone -- that one froze every later switch (2026-11-11)
+                argv = ["hyprctl", "hyprpaper", "wallpaper", ",%s,%s" % (pics[0], fit)]
+                p = run_cmd(argv, 20)
+                told = p.returncode == 0 and not hyprpaper_show(argv, pics[0], 20)
+            else:
+                # the monitors showed different pictures: each its own, by name (the next target call names any monitor that keeps one)
+                for mon, pic in rec["pictures_before"]:
+                    p = run_cmd(["hyprctl", "hyprpaper", "wallpaper", "%s,%s,%s" % (mon, pic, fit)], 20)
+                    told += p.returncode == 0
+            _apply_wallpaper_target(P, theme, rec["mode"])            # the yazi view: the slot is empty again
+            return "the slot is gone again" + ("; hyprpaper shows its old picture" if told else "; the picture on screen stays until the next apply")
+        fails, said = _apply_wallpaper_target(P, theme, rec["mode"])
+        if fails:
+            raise Refused("the list is back but the old picture was not applied: %s" % said[:160])
+        return "%s shows its old picture again" % label
+
+
+def cmd_wallpaper_remove(P, args):
+    try:
+        return _wallpaper_remove(P, args)
+    except Refused as e:
+        if not args.no_notify:
+            _notify("Wallpaper not removed", str(e))
+        raise
+
+
+def _wallpaper_remove(P, args):
+    src = _one_path(P, args, "remove")
+    with locked(P):
+        theme, mode, slot_path, slot = _current_slot(P)
+        label = "%s %s" % (shown_name(theme.name), mode)
+        if slot is None or src not in [p for _, p in slot["entries"]]:
+            raise Refused("%s is not one of the %s wallpapers" % (os.path.basename(src), label))
+        if len(slot["entries"]) == 1:
+            raise Refused("%s is the only %s wallpaper: nothing removed (set another one first)" % (os.path.basename(src), label))
+        cfg = shell_config_file(P)
+        before = _read_text(cfg)
+        try:
+            after = jsonc_list_drop(before, slot_path, lambda v: os.path.normpath(P.expand(v)) == src)
+        except ValueError as e:
+            raise Refused("%s: %s -- nothing written" % (cfg, e))
+        key = slot_key(theme.name, mode)
+        was = load_bags(P)["slots"].get(key, bag_empty())["last"]
+        bag_before = _read_text(bag_file(P))
+        real = os.path.realpath(cfg)
+        try:
+            write_atomic(real, after, mode=stat.S_IMODE(os.stat(real).st_mode))
+        except OSError as e:
+            raise Refused("cannot write %s: %s" % (real, e))
+        # the target does the rest: a pick that left the list is drawn again (one rule, in t_wallpaper), any other stays
+        fails, said = _apply_wallpaper_target(P, theme, mode)
+        now = load_bags(P)["slots"].get(key, bag_empty())["last"]
+        nxt = now if was == src and now != src else ""
+        print(said)
+        if fails:
+            _put_back(P, cfg, before, True, bag_before)
+            _apply_wallpaper_target(P, theme, mode)
+            if not args.no_notify:
+                _notify("Wallpaper not removed", said.split("wallpaper", 1)[-1].strip()[:200])
+            return 1
+    left = len(slot["entries"]) - 1
+    msg = "%s left the %s wallpapers (%d left)%s" % (os.path.basename(src), label, left, "; %s is on screen now" % os.path.basename(nxt) if nxt else "")
+    print("themectl: wallpaper " + msg)
+    if not args.no_notify:
+        _notify("Wallpaper removed", msg)
+    return 0
+
+
+def cmd_wallpaper_list(P, args):
+    """The pictures of a slot (the current theme and mode, or the ones named): `*` the current pick, `-` a file that is not there; and how
+    many are still to come in this round of the bag."""
+    st = read_state(P)
+    name = args.theme or st["theme"]
+    mode = args.mode or st["mode"]
+    if mode not in MODES:
+        raise Refused('mode must be "light" or "dark", not "%s"' % mode)
+    load_theme(P, name)
+    try:
+        slot = wallpaper_slot(P, name, mode)
+    except Fail as e:
+        raise Refused(str(e))
+    if slot is None:
+        print("themectl: no wallpapers for %s %s (shell.jsonc theme.wallpapers.%s.%s)" % (name, mode, name, mode))
+        return 0
+    state = load_bags(P)["slots"].get(slot_key(name, mode), bag_empty())
+    for raw, path in slot["entries"]:
+        mark = "*" if path == state["last"] else ("-" if path in slot["missing"] else " ")
+        print("%s %s" % (mark, raw))
+    to_come = [p for p in state["remaining"] if p in slot["paths"]]
+    print("themectl: %s %s: %d picture%s%s; %d still to come in this round (* on screen, - not found)" % (
+        name, mode, len(slot["entries"]), "" if len(slot["entries"]) == 1 else "s",
+        ", %d not found" % len(slot["missing"]) if slot["missing"] else "", len(to_come)))
+    return 0
+
+
+def list_json(P):
+    """What `list` says, as one object: the state, every theme with the modes it can be applied in (a theme that cannot be read says why
+    and has no modes), the targets. Writes nothing and takes no lock."""
+    files = theme_files(P)
+    st = read_state(P)
+    themes = []
+    for n in sorted(files):
+        t = {"name": n, "path": files[n], "modes": [], "active": n == st["theme"]}
+        try:
+            doc = load_json(files[n])
+            if not isinstance(doc, dict):
+                raise ValueError("not a JSON object")
+            t["modes"] = [m for m in MODES if isinstance(doc.get(m), dict)]
+        except (OSError, ValueError) as e:
+            t["error"] = str(e)
+        themes.append(t)
+    options, targets, tpath = load_targets(P)
+    return {"state": {"file": P.state_file, "present": bool(st["present"]), "theme": st["theme"], "mode": st["mode"]}, "themes": themes,
+            "targets": [{"name": t["name"], "type": t.get("type"), "enabled": target_off(P, t) == ""} for t in targets], "targetsFile": tpath}
+
+
+def cmd_list(P, args):
+    if args.json:
+        print(json.dumps(list_json(P), indent=2))
+        return 0
+    files = theme_files(P)
+    st = read_state(P)
+    print("state    %s (%s)  theme %s, mode %s%s" % (P.state_file, "present" if st["present"] else "absent", st["theme"], st["mode"], "" if st["present"] else " (defaults)"))
+    for n in sorted(files):
+        try:
+            doc = load_json(files[n])
+            modes = [m for m in MODES if isinstance(doc.get(m), dict)]
+            extra = "assets: " + ",".join(m for m in MODES if isinstance(doc.get("assets", {}).get(m), dict)) if isinstance(doc.get("assets"), dict) else "no assets"
+            print("theme    %-10s %s  modes: %s; %s" % (n, files[n], ",".join(modes), extra))
+        except (OSError, ValueError) as e:
+            print("theme    %-10s %s  UNREADABLE: %s" % (n, files[n], e))
+    options, targets, tpath = load_targets(P)
+    print("targets  %s" % tpath)
+    for t in targets:
+        off = target_off(P, t)
+        print("target   %-10s %-9s %s%s" % (t["name"], t.get("type"), t.get("doc", ""), "" if off == "" else "  [%s]" % off))
+    return 0
+
+
+def cmd_install(P, args):
+    src = P.repo + "/themes"
+    dst = P.theme_dir + "/themes"
+    names = sorted(n for n in os.listdir(src) if n.endswith(".json")) if os.path.isdir(src) else []
+    if not names:
+        print("themectl: no themes in %s" % src)
+        return REFUSED
+    verb = "would " if args.dry_run else ""
+    fails = install_renames(P, args)
+    for n in names:
+        s, d = src + "/" + n, dst + "/" + n
+        if not os.path.exists(d):
+            print("%-5s %-14s %scopy to %s" % ("ok", n, verb, d))
+            if not args.dry_run:
+                os.makedirs(dst, exist_ok=True)
+                shutil.copy2(s, d)
+            continue
+        if open(s, "rb").read() == open(d, "rb").read():
+            print("%-5s %-14s same as %s" % ("ok", n, d))
+            continue
+        if os.path.getmtime(d) > os.path.getmtime(s):
+            print("%-5s %-14s %skeep %s (it differs and is newer than the repo's: yours)" % ("ok", n, verb, d))
+            continue
+        print("%-5s %-14s %sreplace %s (older than the repo's; the old one is kept in the backup)" % ("ok", n, verb, d))
+        if not args.dry_run:
+            with locked(P):
+                own_file(P, d)
+            shutil.copy2(s, d)
+    fails += install_shipped(P, args)
+    fails += install_yazi(P, args)
+    return min(fails, 99)
+
+
+def _aside(P, path, stamp):
+    """Move PATH (a file or a link) into the backup's renamed/ folder -> where it went."""
+    d = P.backup_dir + "/renamed"
+    os.makedirs(d, exist_ok=True)
+    to = "%s/%s-%s" % (d, stamp, os.path.basename(path))
+    os.replace(path, to)
+    return to
+
+
+def _forget(P, paths):
+    """The manifest forgets PATHS (a renamed pair's old files: a `restore` must not bring a ghost back)."""
+    man = load_manifest(P)
+    gone = [x for x in paths if x in man]
+    for x in gone:
+        del man[x]
+    if gone:
+        write_atomic(_manifest_path(P), json.dumps(man, indent=2, sort_keys=True) + "\n")
+
+
+def install_renames(P, args):
+    """RENAMES carried over in the home (see RENAMES). Every step prints `ok` or `FAIL`; a dry run says what it would do. -> the number of FAILs."""
+    dry = args.dry_run
+    verb = "would " if dry else ""
+    _, targets, _ = load_targets(P)
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    fails = 0
+
+    def say(ok, msg):
+        nonlocal fails
+        fails += 0 if ok else 1
+        print("%-5s %-14s %s" % ("ok" if ok else "FAIL", label, msg))
+    for r in RENAMES:
+        old, new = r["from"], r["to"]
+        label = "rename %s" % old
+        oldf, newf = "%s/themes/%s.json" % (P.theme_dir, old), "%s/themes/%s.json" % (P.theme_dir, new)
+        files = {}
+        for tname, m in r["files"].items():
+            spec = next((x for x in targets if x["name"] == tname and "output" in x), None)
+            if spec:
+                files[tname] = (os.path.dirname(P.expand(spec["output"])), P.expand(spec["output"]), m)
+        with contextlib.nullcontext() if dry else locked(P):
+            # 1. the theme file: a copy the repo shipped goes; the user's own edit becomes the new name's copy
+            if os.path.exists(oldf):
+                data = open(oldf, "rb").read()
+                if hashlib.sha256(data).hexdigest() in r["shipped"]:
+                    say(True, "%smove %s into the backup (a copy the repo shipped; %s.json is the pair now)" % (verb, oldf, new))
+                elif os.path.exists(newf):
+                    say(True, "%smove %s into the backup (edited by you; %s exists already and stays: copy your colours over by hand)" % (verb, oldf, newf))
+                else:
+                    text = data.decode("utf-8", "replace")
+                    text = text.replace('"name": %s' % json.dumps(old), '"name": %s' % json.dumps(new), 1)
+                    for m in r["files"].values():
+                        for a, b in m.items():
+                            text = text.replace(json.dumps(a), json.dumps(b))
+                    try:
+                        ok = json.loads(text).get("name") == new
+                    except ValueError:
+                        ok = False
+                    if not ok:
+                        say(False, "%s: cannot rename it inside (its name is not %s): left as it is" % (oldf, json.dumps(old)))
+                        continue
+                    if not dry:
+                        write_atomic(newf, text)
+                    say(True, "%scarry your edited %s over as %s (the name and the btop / fastfetch files renamed inside)" % (verb, oldf, newf))
+                if not dry:
+                    _aside(P, oldf, stamp)
+                    _forget(P, [oldf])
+            # 2. state.json
+            st = read_state(P)
+            if st["present"] and st["theme"] == old:
+                if not dry:
+                    write_atomic(P.state_file, state_text(new, st["mode"]))
+                say(True, "%sset state.json's theme to %s" % (verb, new))
+            # 3. shell.jsonc theme.wallpapers.<old> -> <new>: the key's text alone
+            cfg = shell_config_file(P)
+            text = _read_text(cfg)
+            if text is not None:
+                try:
+                    toks, ki, _ = _jsonc_locate(text, ["theme", "wallpapers", old])
+                    if ki is not None:
+                        if _jsonc_locate(text, ["theme", "wallpapers", new])[1] is not None:
+                            say(True, "%s has wallpapers for both %s and %s: the %s ones are not read any more (merge them by hand)" % (cfg, old, new, old))
+                        else:
+                            out = text[:toks[ki][1]] + json.dumps(new) + text[toks[ki][2]:]
+                            if _parses(text) and not _parses(out):
+                                raise ValueError("the edit does not parse")
+                            if not dry:
+                                real = os.path.realpath(cfg)
+                                write_atomic(real, out, mode=stat.S_IMODE(os.stat(real).st_mode))
+                            say(True, "%srename theme.wallpapers.%s to %s in %s" % (verb, old, new, cfg))
+                except (ValueError, OSError) as e:
+                    say(False, "%s: cannot rename theme.wallpapers.%s (%s): rename it by hand" % (cfg, old, e))
+            # 4. the wallpaper bag
+            bags = load_bags(P)
+            moved = [m for m in MODES if slot_key(old, m) in bags["slots"] and slot_key(new, m) not in bags["slots"]]
+            if moved or (bags["shown"] or [None])[0] == old:
+                for m in moved:
+                    bags["slots"][slot_key(new, m)] = bags["slots"].pop(slot_key(old, m))
+                if (bags["shown"] or [None])[0] == old:
+                    bags["shown"] = [new, bags["shown"][1]]
+                if not dry:
+                    save_bags(P, bags)
+                say(True, "%scarry the wallpaper bag over to %s" % (verb, new))
+            # 5. the files the btop and fastfetch targets shipped under the old names, and the links that name them
+            for tname, (d, link, m) in sorted(files.items()):
+                for a, b in sorted(m.items()):
+                    pa = os.path.join(d, a)
+                    if os.path.lexists(pa):
+                        if not dry:
+                            _aside(P, pa, stamp)
+                            _forget(P, [pa])
+                        say(True, "%smove %s into the backup (%s ships %s now)" % (verb, pa, tname, b))
+                if os.path.islink(link):
+                    cur = os.readlink(link)
+                    if os.path.basename(cur) in m and os.path.dirname(cur) in ("", d):
+                        to = os.path.join(os.path.dirname(cur), m[os.path.basename(cur)])
+                        if not dry:
+                            tmp = tempfile.mktemp(prefix=".themectl-", dir=os.path.dirname(link))
+                            os.symlink(to, tmp)
+                            os.replace(tmp, link)
+                        say(True, "%slink %s -> %s" % (verb, link, to))
+    return min(fails, 99)
+
+
+# YAZI (tools/theme/yazi/CHEATSHEET.md): the wallpapers.yazi plugin (the mark beside a listed picture), the `wallpaper-listed` opener
+# ("Remove from wallpapers", after the user's own viewer: Enter still views) and the BEGIN / END marks at the top of [open] prepend_rules,
+# between which the `yazi` target writes one exact-path rule per listed picture. `install` sets them up ONCE, as `migrate` edits an app's
+# config: anchors found or nothing written, the original kept (own_file), every later run finds them done.
+YAZI_OPENER = "wallpaper-listed"
+YAZI_INIT = 'pcall(function() require("wallpapers"):setup() end)   -- themectl: the wallpaper mark (a broken plugin only loses the mark)'
+
+
+def _toml_inline(d):
+    """A flat dict of strings / bools as a TOML inline table."""
+    parts = []
+    for k, v in d.items():
+        parts.append("%s = %s" % (k, ("true" if v else "false") if isinstance(v, bool) else toml_str(str(v))))
+    return "{ " + ", ".join(parts) + " }"
+
+
+def yazi_themectl_cmd(P, doc):
+    """The themectl the user's yazi runs: the one their "Set as wallpaper" entry names, else the deployed snapshot's."""
+    for entries in (doc.get("opener") or {}).values():
+        for e in entries if isinstance(entries, list) else []:
+            run = e.get("run") if isinstance(e, dict) else None
+            m = re.match(r"""^\s*['"]?([^'"]*themectl)['"]?\s+wallpaper\s+set\b""", run or "")
+            if m:
+                return m.group(1)
+    return P.state + "/lares/shell/current/tools/theme/themectl"
+
+
+def yazi_toml_edit(P, text):
+    """yazi.toml's TEXT with what the wallpapers need added -> (new text, [what was added]); [] when it is all there. Fail when an anchor is
+    not where it must be (nothing is written then)."""
+    import shlex
+    import tomllib
+    try:
+        doc = tomllib.loads(text)
+    except Exception as e:                              # noqa: BLE001 -- tomllib's own error type, any of its messages
+        raise Fail("yazi.toml does not parse (%s): nothing written" % e)
+    out, added = text, []
+
+    def header(name):
+        return [m for m in re.finditer(r"^\[%s\][ \t]*(#[^\n]*)?\n?" % re.escape(name), out, re.M)]
+    if YAZI_OPENER not in (doc.get("opener") or {}):
+        view = ((doc.get("opener") or {}).get("image") or [None])[0]
+        if not (isinstance(view, dict) and isinstance(view.get("run"), str) and "wallpaper" not in view["run"]):
+            view = {"run": "xdg-open %s", "orphan": True, "desc": "Open"}
+        view = {k: v for k, v in view.items() if isinstance(v, (str, bool))}
+        rm = {"run": "%s wallpaper remove %%s" % shlex.quote(yazi_themectl_cmd(P, doc)), "block": False, "orphan": True, "desc": "Remove from wallpapers"}
+        entry = ("# themectl: a picture of the current theme and mode's wallpapers (the rules between the marks in [open] use it). Enter views it;\n"
+                 "# O offers \"Remove from wallpapers\".\n%s = [\n    %s,\n    %s,\n]\n" % (YAZI_OPENER, _toml_inline(view), _toml_inline(rm)))
+        hs = header("opener")
+        if hs:
+            out = out[:hs[0].end()] + entry + out[hs[0].end():]
+        elif "opener" in doc:
+            raise Fail("yazi.toml defines `opener` without an [opener] header: add the %s opener by hand (CHEATSHEET)" % YAZI_OPENER)
+        else:
+            out = out + ("" if out.endswith("\n") or not out else "\n") + "\n[opener]\n" + entry
+        added.append("the %s opener" % YAZI_OPENER)
+    if YAZI_BEGIN not in out:
+        marks = "%s -- themectl writes the rules between these two lines on every theme switch and wallpaper change\n%s\n"
+        hs = header("open")
+        if not hs:
+            if "open" in doc:
+                raise Fail("yazi.toml defines `open` without an [open] header: add the marks by hand (CHEATSHEET)")
+            out = out + ("" if out.endswith("\n") or not out else "\n") + "\n[open]\nprepend_rules = [\n    " + (marks % (YAZI_BEGIN, "    " + YAZI_END)) + "]\n"
+        else:
+            nxt = re.search(r"^\[", out[hs[0].end():], re.M)
+            body_end = hs[0].end() + (nxt.start() if nxt else len(out) - hs[0].end())
+            body = out[hs[0].end():body_end]
+            if "rules" in (doc.get("open") or {}):
+                raise Fail("yazi.toml's [open] sets `rules` (it replaces yazi's own): add the marks to it by hand (CHEATSHEET)")
+            m = re.search(r"^([ \t]*)prepend_rules[ \t]*=[ \t]*\[[ \t]*(#[^\n]*)?\n", body, re.M)
+            if m:
+                rest = body[m.end():]
+                ind = re.match(r"[ \t]*", rest).group(0) if rest.strip() and not rest.lstrip().startswith("]") else m.group(1) + "    "
+                at = hs[0].end() + m.end()
+                out = out[:at] + ind + (marks % (YAZI_BEGIN, ind + YAZI_END)) + out[at:]
+            elif "prepend_rules" in (doc.get("open") or {}):
+                raise Fail("yazi.toml's [open] prepend_rules is not a list that opens on its own line: break it into one rule a line (CHEATSHEET)")
+            else:
+                at = hs[0].end()
+                out = out[:at] + "prepend_rules = [\n    " + (marks % (YAZI_BEGIN, "    " + YAZI_END)) + "]\n" + out[at:]
+        added.append("the BEGIN / END marks at the top of [open] prepend_rules")
+    if added:
+        try:
+            new = tomllib.loads(out)
+        except Exception as e:                          # noqa: BLE001
+            raise Fail("yazi.toml would not parse after the edit (%s): nothing written" % e)
+        if YAZI_OPENER not in (new.get("opener") or {}) or not isinstance((new.get("open") or {}).get("prepend_rules"), list):
+            raise Fail("yazi.toml did not read back as meant after the edit: nothing written")
+    return out, added
+
+
+def install_yazi(P, args):
+    """The yazi side of the wallpapers (see YAZI_OPENER): the plugin copied (owned, the shipped-file rule), yazi.toml and init.lua edited once
+    (originals kept), then the `yazi` target fills the rules for the theme in force. No yazi.toml is a yazi not set up here: said, no failure."""
+    verb = "would " if args.dry_run else ""
+    ydir = P.config + "/yazi"
+    toml, init = ydir + "/yazi.toml", ydir + "/init.lua"
+    label = "yazi"
+    text = _read_text(toml)
+    if text is None:
+        print("%-5s %-14s skipped: no %s (yazi is not set up; tools/theme/yazi/CHEATSHEET.md has the lines)" % ("ok", label, toml))
+        return 0
+    fails = 0
+    try:
+        new, added = yazi_toml_edit(P, text)
+    except Fail as e:
+        print("%-5s %-14s %s" % ("FAIL", label, e))
+        return 1
+    src = P.tools + "/yazi/wallpapers.yazi/main.lua"
+    dst = ydir + "/plugins/wallpapers.yazi/main.lua"
+    if os.path.exists(dst) and open(src, "rb").read() == open(dst, "rb").read():
+        print("%-5s %-14s same as %s" % ("ok", label, dst))
+    elif os.path.exists(dst) and os.path.getmtime(dst) > os.path.getmtime(src):
+        print("%-5s %-14s %skeep %s (it differs and is newer than the repo's: yours)" % ("ok", label, verb, dst))
+    else:
+        print("%-5s %-14s %s%s %s" % ("ok", label, verb, "replace" if os.path.exists(dst) else "copy the plugin to", dst))
+        if not args.dry_run:
+            try:
+                with locked(P):
+                    _install_shipped(P, src, dst)
+            except (OSError, Refused) as e:
+                fails += 1
+                print("%-5s %-14s %s: %s" % ("FAIL", label, dst, e))
+    edits = [(toml, text, new, added)] if added else []
+    itext = _read_text(init)
+    if itext is None or not re.search(r"""require\(?\s*["']wallpapers["']""", itext):
+        base = itext or ""
+        edits.append((init, itext, base + ("" if not base or base.endswith("\n") else "\n") + YAZI_INIT + "\n", ["the plugin's setup line"]))
+    if not edits:
+        print("%-5s %-14s already set up: %s and %s" % ("ok", label, toml, init))
+    for path, old, newt, what in edits:
+        print("%-5s %-14s %sadd %s to %s%s" % ("ok", label, verb, " and ".join(what), path, "" if old is not None else " (a new file)"))
+        if args.dry_run:
+            print("".join("      " + l if l.endswith("\n") else "      " + l + "\n" for l in _udiff(old, newt, path).splitlines(True)).rstrip("\n"))
+            continue
+        try:
+            with locked(P):
+                own_file(P, path)
+                real = os.path.realpath(path)
+                write_atomic(real, newt, mode=stat.S_IMODE(os.stat(real).st_mode) if os.path.exists(real) else None)
+        except OSError as e:
+            fails += 1
+            print("%-5s %-14s cannot write %s: %s" % ("FAIL", label, path, e))
+    if not args.dry_run and not fails:
+        try:
+            st = read_state(P)
+            theme = load_theme(P, st["theme"])
+            import io
+            buf = io.StringIO()
+            with locked(P):
+                fails += run_targets(P, theme, st["mode"], only=["yazi"], out=buf)
+            for l in buf.getvalue().splitlines():
+                print("%-5s %-14s %s" % (l.split()[0], label, l.split(None, 2)[-1]))
+        except Refused as e:
+            print("%-5s %-14s the rules wait for the next apply (%s)" % ("ok", label, e))
+    return fails
+
+
+def install_shipped(P, args):
+    """The files the repo ships for a link target (targets.json `shipped`: btop's custom themes, the fastfetch logos), into the directory of
+    that target's link, by the rule the themes follow: a missing one is copied, a newer one is the user's and kept, an older one is
+    replaced. Unlike a theme, each one is owned (`restore` takes back what install put in an app's directory)."""
+    _, targets, _ = load_targets(P)
+    verb = "would " if args.dry_run else ""
+    fails = 0
+    for t in targets:
+        if not t.get("shipped") or "output" not in t:
+            continue
+        src_dir = os.path.join(P.tools, t["shipped"])
+        dst_dir = os.path.dirname(P.expand(t["output"]))
+        names = sorted(n for n in os.listdir(src_dir) if not n.startswith(".")) if os.path.isdir(src_dir) else []
+        for n in names:
+            s, d = os.path.join(src_dir, n), os.path.join(dst_dir, n)
+            label = "%s/%s" % (t["name"], n)
+            if os.path.exists(d) and open(s, "rb").read() == open(d, "rb").read():
+                print("%-5s %-14s same as %s" % ("ok", label, d))
+                continue
+            if os.path.exists(d) and os.path.getmtime(d) > os.path.getmtime(s):
+                print("%-5s %-14s %skeep %s (it differs and is newer than the repo's: yours)" % ("ok", label, verb, d))
+                continue
+            print("%-5s %-14s %s%s %s" % ("ok", label, verb, "replace" if os.path.exists(d) else "copy to", d))
+            if args.dry_run:
+                continue
+            try:
+                with locked(P):
+                    _install_shipped(P, s, d)
+            except (OSError, Refused) as e:
+                fails += 1
+                print("%-5s %-14s %s: %s" % ("FAIL", label, d, e))
+    return min(fails, 99)
+
+
+# ============================================================================================================ migrate
+# The one-time edits of the apps' own configs (docs/theme.md, `migrate`). `apply` never edits an app's main config; a
+# target whose output only takes effect through a line of the app's own config names that line in targets.json (`include`: the file,
+# the pattern that says it is there, the line), and `doctor` asks for it. `migrate` makes every one that is missing, and nothing else,
+# on the user's say. Each recipe finds ITS anchor where T.md says it is, or the whole run is refused before a byte is written. The
+# original of every file it edits is kept the way the files themectl owns are (own_file), so `restore` puts each one back -- a symlink
+# as the same symlink. "Done" is decided by the include's own pattern, the one `doctor` uses, so the two cannot disagree.
+
+
+def _eol(line):
+    return "\r\n" if line.endswith("\r\n") else "\n"
+
+
+def _mig_hyprland(P, path, text):
+    """pcall(require, "config/theme") on the line after require("config/appearance"): guarded, so after `restore` (the file gone) it is not a config error."""
+    rx = re.compile(r'^(\s*)require\(\s*["\']config/appearance["\']\s*\)\s*(--.*)?$')
+    lines = text.splitlines(keepends=True)
+    hits = [i for i, l in enumerate(lines) if rx.match(l.rstrip("\r\n"))]
+    if len(hits) != 1:
+        raise Fail('%s has %d require("config/appearance") lines, not 1 (the include goes right after it)' % (path, len(hits)))
+    i = hits[0]
+    eol = _eol(lines[i])
+    if not lines[i].endswith("\n"):
+        lines[i] += eol
+    lines.insert(i + 1, rx.match(lines[i].rstrip("\r\n")).group(1) + 'pcall(require, "config/theme")   -- themectl (guarded: a missing theme.lua is not an error)' + eol)
+    return "".join(lines), 'added pcall(require, "config/theme") after line %d of %s' % (i + 1, path)
+
+
+def _mig_btop(P, path, text):
+    """color_theme = "current": the name of the link (~/.config/btop/themes/current.theme) themectl moves between the themes of the modes."""
+    rx = re.compile(r'^(\s*color_theme\s*=\s*)"([^"\n]*)"([ \t\r]*)$', re.M)
+    hits = rx.findall(text)
+    if len(hits) != 1:
+        raise Fail('%s has %d color_theme = "..." lines, not 1' % (path, len(hits)))
+    return rx.sub(r'\1"current"\3', text), 'color_theme = "current" in %s (was "%s")' % (path, hits[0][1])
+
+
+def _mig_fastfetch(P, path, text):
+    """"source": the stable link archlogo_current.png, which themectl points at the logo of the mode (the old script rewrote this line each time)."""
+    rx = re.compile(r'^([ \t]*"source"\s*:\s*)"([^"\n]*archlogo_[^"\n]*\.png)"', re.M)
+    hits = rx.findall(text)
+    if len(hits) != 1:
+        raise Fail('%s has %d "source": ".../archlogo_<name>.png" lines, not 1' % (path, len(hits)))
+    return rx.sub(r'\1"~/.config/fastfetch/archlogo_current.png"', text), '"source" is ~/.config/fastfetch/archlogo_current.png in %s (was %s)' % (path, hits[0][1])
+
+
+MIG_LOCK_VARS = ("FIELD", "BORDER", "BACKGROUND", "FOREGROUND", "ACCENT", "INCORRECT", "CAPS")
+
+
+def _mig_hyprlock(P, path, text):
+    """The symlink into HyprV/hyprlock/ becomes a file: `source` of the generated colours + the body of evalight.conf without its seven colour
+    variables. The LIGHT file's body for both modes: evadark.conf carries `no_fade_in` / `no_fade_out`, which hyprlock 0.9.6 answers "config
+    option does not exist" to (on the lock screen)."""
+    hv = os.path.realpath(P.config + "/HyprV/hyprlock")
+    if not os.path.islink(path):
+        raise Fail("%s is a file that does not read hyprlock-colors.conf, not the symlink into %s that T.md describes: add `source = ~/.config/hypr/hyprlock-colors.conf` "
+                   "and delete its $%s lines by hand" % (path, hv, " $".join(MIG_LOCK_VARS)))
+    if os.path.dirname(os.path.realpath(path)) != hv:
+        raise Fail("%s links to %s, not into %s (T.md)" % (path, os.path.realpath(path), hv))
+    src = hv + "/evalight.conf"
+    body = _read_text(src)
+    if body is None:
+        raise Fail("%s is missing: it is the body of the new hyprlock.conf" % src)
+    body, n = re.subn(r"^\$(%s)\s*=.*\n" % "|".join(MIG_LOCK_VARS), "", body, flags=re.M)
+    if n != len(MIG_LOCK_VARS):
+        raise Fail("%s has %d of the %d colour variables ($%s), not all" % (src, n, len(MIG_LOCK_VARS), " $".join(MIG_LOCK_VARS)))
+    return "source = ~/.config/hypr/hyprlock-colors.conf\n\n" + body.lstrip("\n"), "source = ~/.config/hypr/hyprlock-colors.conf + the body of evalight.conf without its %d colour variables, in %s" % (n, path)
+
+
+def _mig_kitty(P, path, text):
+    """include current-theme.conf, last: what it sets wins over kitty.conf's own colours. (T.md: the user's kitty.conf has it already.)"""
+    return text + ("" if (not text or text.endswith("\n")) else "\n") + "include current-theme.conf\n", "appended include current-theme.conf to %s" % path
+
+
+MIGRATE = {"hyprland": _mig_hyprland, "btop": _mig_btop, "fastfetch": _mig_fastfetch, "hyprlock": _mig_hyprlock, "kitty": _mig_kitty}
+
+
+def migrate_plan(P):
+    """What `migrate` would do, read only: one entry per enabled target that names an `include`, in targets.json's order:
+    {name, path, state: 'done' | 'edit' | 'fail', msg, link (what the file is a symlink to now), and for an edit old / new}."""
+    _, targets, _ = load_targets(P)
+    plan = []
+    for spec in targets:
+        inc = spec.get("include")
+        if not inc or target_off(P, spec):
+            continue
+        name = spec["name"]
+        e = {"name": name, "path": P.expand(inc["file"]), "link": None}
+        if os.path.islink(e["path"]):
+            e["link"] = os.readlink(e["path"])
+        text = _read_text(e["path"])
+        if text is not None and re.search(inc["pattern"], text, re.M):
+            e.update(state="done", msg="already done: %s reads the file themectl owns" % e["path"])
+        elif name not in MIGRATE:
+            e.update(state="fail", msg="%s lacks %s, and migrate has no edit for it: add it by hand" % (e["path"], inc["line"]))
+        elif text is None:
+            e.update(state="fail", msg="%s is missing or unreadable (T.md: it needs %s)" % (e["path"], inc["line"]))
+        else:
+            try:
+                guard_output(P, e["path"])                  # a targets.json typo must not get an edit scribbled over /etc either
+                new, msg = MIGRATE[name](P, e["path"], text)
+                e.update(state="edit", old=text, new=new, msg=msg)
+            except (Fail, Refused) as ex:
+                e.update(state="fail", msg=str(ex))
+        plan.append(e)
+    return plan
+
+
+def migrate_paths(P):
+    """The files `migrate` edits (for `restore migrate`)."""
+    _, targets, _ = load_targets(P)
+    return {P.expand(t["include"]["file"]) for t in targets if t.get("include") and t["name"] in MIGRATE}
+
+
+def cmd_migrate(P, args):
+    def refuse_if_any_fails(plan):
+        bad = [e for e in plan if e["state"] == "fail"]
+        if bad:
+            for e in bad:
+                print("%-5s %-12s %s" % ("FAIL", e["name"], e["msg"]))
+            raise Refused("nothing written: %d of %d edits cannot be made where themectl doctor says they are (make them by hand, or fix the file, and run migrate again)" % (len(bad), len(plan)))
+
+    def kept(e):
+        return " (a symlink -> %s; kept in the backup)" % e["link"] if e["link"] else ""
+    plan = migrate_plan(P)
+    refuse_if_any_fails(plan)
+    todo = [e for e in plan if e["state"] == "edit"]
+    if args.dry_run or not todo:
+        for e in plan:
+            print("%-5s %-12s %s" % ("ok", e["name"], ("would: " + e["msg"] + kept(e)) if e["state"] == "edit" else e["msg"]))
+            if e["state"] == "edit":
+                diff = _udiff(e["old"], e["new"], e["path"])
+                print("".join("      " + l if l.endswith("\n") else "      " + l + "\n" for l in diff.splitlines(True)).rstrip("\n"))
+        print("themectl: migrate%s: %s" % (" --dry-run" if args.dry_run else "", "%d edit%s would be made" % (len(todo), "" if len(todo) == 1 else "s") if todo else "nothing to do: every edit is already done"))
+        return 0
+    with locked(P):
+        plan = migrate_plan(P)                      # again, under the lock: another themectl may have been first
+        refuse_if_any_fails(plan)
+        fails = made = 0
+        for e in plan:
+            if e["state"] != "edit":
+                print("%-5s %-12s %s" % ("ok", e["name"], e["msg"]))
+                continue
+            try:
+                mode = stat.S_IMODE(os.stat(e["path"]).st_mode)
+                try:
+                    own_file(P, e["path"])
+                except OSError as ex:
+                    raise Fail("cannot keep the original of %s (nothing written): %s" % (e["path"], ex))
+                try:
+                    write_atomic(e["path"], e["new"], mode)
+                except OSError as ex:
+                    raise Fail("cannot write %s: %s" % (e["path"], ex))
+            except Fail as ex:
+                fails += 1
+                print("%-5s %-12s %s" % ("FAIL", e["name"], ex))
+                continue
+            made += 1
+            print("%-5s %-12s %s" % ("ok", e["name"], e["msg"] + kept(e)))
+    print("themectl: migrate: %d edit%s made%s" % (made, "" if made == 1 else "s", "; the originals are kept in %s: `themectl restore migrate` puts them back" % P.backup_dir if made else ""))
+    return min(fails, 99)
+
+
+def cmd_restore(P, args):
+    with locked(P):
+        man = load_manifest(P)
+        names = args.targets
+        if names:
+            _, targets, _ = load_targets(P)
+            wanted = set()
+            for t in targets:
+                if t["name"] in names:
+                    for k in ("output", "config", "file"):
+                        if isinstance(t.get(k), str):
+                            wanted.add(P.expand(t[k]))
+                    if t.get("type") == "yazi":                     # what `install` set up for it
+                        wanted |= {P.config + "/yazi/init.lua", P.config + "/yazi/plugins/wallpapers.yazi/main.lua"}
+                    if t.get("shipped") and "output" in t:          # the copies its apply or `install` put next to the link
+                        d = os.path.dirname(P.expand(t["output"]))
+                        src = os.path.join(P.tools, t["shipped"])
+                        shipped = set(os.listdir(src)) if os.path.isdir(src) else set()
+                        wanted |= {path for path in man if os.path.dirname(path) == d and os.path.basename(path) in shipped}
+            for n in names:
+                if n == "migrate":                    # the one-time edits of the apps' own configs, not a target's output
+                    wanted |= migrate_paths(P)
+                elif not any(t["name"] == n for t in targets):
+                    raise Refused('no target named "%s" (or "migrate")' % n)
+        else:
+            wanted = set(man)
+        fails = 0
+        for path in sorted(wanted):
+            e = man.get(path)
+            if e is None:
+                print("%-5s %-12s nothing kept for %s (themectl never owned it)" % ("ok", "restore", path))
+                continue
+            try:
+                if not args.dry_run:
+                    if os.path.lexists(path):
+                        os.remove(path)
+                    if e["kind"] == "file":
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        shutil.copy2(P.backup_dir + "/" + e["backup"], path)
+                    elif e["kind"] == "symlink":
+                        os.makedirs(os.path.dirname(path), exist_ok=True)
+                        os.symlink(e["link"], path)
+                    del man[path]
+                    write_atomic(_manifest_path(P), json.dumps(man, indent=2, sort_keys=True) + "\n")
+                print("%-5s %-12s %s%s: %s" % ("ok", "restore", "would put back " if args.dry_run else "put back ", path, e["kind"] if e["kind"] != "symlink" else "symlink -> " + e["link"]))
+            except OSError as ex:
+                fails += 1
+                print("%-5s %-12s %s: %s" % ("FAIL", "restore", path, ex))
+        return min(fails, 99)
+
+
+def cmd_resolve(P, args):
+    l0 = l0_defaults(P) if not args.l0 else _l0_from(args.l0)
+    if args.file:
+        theme = Theme(os.path.basename(args.file)[:-5], args.file, load_json(args.file), l0)
+    else:
+        th = load_theme(P, args.theme or read_state(P)["theme"])
+        theme = Theme(th.name, th.path, th.doc, l0)
+    values, errors = theme.mode_values(args.mode)
+    json.dump({"values": values, "errors": errors, "l0": l0}, sys.stdout, sort_keys=True)
+    sys.stdout.write("\n")
+    return 0
+
+
+def _l0_from(theme_qml):
+    class _P:
+        pass
+    p = _P()
+    p.theme_qml = theme_qml
+    return l0_defaults(p)
+
+
+def cmd_doctor(P, args):
+    fails = 0
+
+    def line(ok, name, msg, tag=None):
+        nonlocal fails
+        if not ok:
+            fails += 1
+        print("%-5s %-12s %s" % (tag or ("ok" if ok else "FAIL"), name, msg))
+    line(sys.version_info >= (3, 8), "python", "%d.%d" % sys.version_info[:2])
+    l0 = l0_defaults(P)
+    line(len(l0) > 0, "l0", "%d shipped tokens from %s" % (len(l0), P.theme_qml) if l0 else "%s not found: tokens a theme leaves out cannot fall back" % P.theme_qml)
+    try:
+        st = read_state(P)
+        theme = load_theme(P, st["theme"])
+        line(True, "state", "%s (%s): theme %s, mode %s" % (P.state_file, "present" if st["present"] else "absent, defaults", st["theme"], st["mode"]))
+    except Refused as e:
+        line(False, "state", str(e))
+        return min(fails, 99)
+    mode = st["mode"]
+    values, errors = theme.mode_values(mode)
+    if errors:
+        for k, v in sorted(errors.items()):
+            line(False, "theme", "%s (%s): %s" % (theme.name, mode, v))
+    else:
+        line(True, "theme", "%s (%s) resolves: %d keys, no errors" % (theme.name, mode, len(values)))
+    options, targets, tpath = load_targets(P)
+    line(True, "targets", tpath)
+    ctx = Ctx(P, options, theme, mode, True)
+    for spec in targets:
+        name = spec["name"]
+        off = target_off(P, spec)
+        if off:
+            line(True, name, off)
+            continue
+        if spec.get("themes") and theme.name not in spec["themes"]:
+            line(True, name, "not for theme %s" % theme.name)
+            continue
+        problems, notes = [], []
+        try:
+            msg, _ = TYPES[spec["type"]](spec, ctx)
+        except Fail as e:
+            problems.append(str(e))
+            msg = ""
+        except Exception as e:
+            problems.append("%s: %s" % (type(e).__name__, e))
+            msg = ""
+        progs = []
+        if spec.get("type") in ("gsettings", "gnomeAccent"):
+            progs.append("gsettings")
+        if spec.get("type") in ("command", "wallpaper"):
+            progs.append(spec["argv"][0])
+        if spec.get("type") == "wallpaper":
+            progs.append("hyprpaper")
+        if spec.get("reload"):
+            progs.append(spec["reload"]["argv"][0])
+        for pr in progs:
+            if shutil.which(pr) is None:
+                problems.append("%s is not on the PATH" % pr)
+        if "output" in spec:
+            d = os.path.dirname(P.expand(spec["output"]))
+            probe = d
+            while probe and not os.path.exists(probe):
+                probe = os.path.dirname(probe)
+            if probe and not os.access(probe, os.W_OK):
+                problems.append("%s is not writable" % probe)
+        inc = spec.get("include")
+        if inc:
+            f = P.expand(inc["file"])
+            text = _read_text(f)
+            if text is None:
+                problems.append("%s is missing; it needs: %s%s" % (f, inc["line"], " (`themectl migrate` makes it)" if name in MIGRATE else ""))
+            elif not re.search(inc["pattern"], text, re.M):
+                problems.append("%s does not read the file themectl owns; add: %s%s" % (f, inc["line"], " (`themectl migrate` makes it)" if name in MIGRATE else ""))
+        if spec.get("name") == "hyprland" and not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+            problems.append("HYPRLAND_INSTANCE_SIGNATURE is not set (not in a Hyprland session: the live reload cannot run)")
+        if problems:
+            line(False, name, "; ".join(problems))
+        else:
+            line(True, name, msg)
+            # the libadwaita target's stylesheet carries the pair's exact accent past any portal; without that target the named accent
+            # in gsettings reaches libadwaita only when no portal answers for it
+            if spec.get("type") == "gnomeAccent" and not os.environ.get("ADW_DISABLE_PORTAL") and not any(t.get("name") == "libadwaita" for t in targets):
+                line(True, name, "libadwaita apps take the accent from the settings portal while one answers, and this desktop's (xdg-desktop-portal-gtk) has "
+                     "no accent-color: put ADW_DISABLE_PORTAL=1 in the session's environment (hl.env in ~/.config/hypr/config/environment.lua) so loupe and "
+                     "zenity read it from gsettings", tag="note")
+    # a pair renamed in the repo whose old name the home still holds (install carries it over)
+    for r in RENAMES:
+        where = []
+        if os.path.exists("%s/themes/%s.json" % (P.theme_dir, r["from"])):
+            where.append("~/.config/theme/themes/%s.json" % r["from"])
+        if st["theme"] == r["from"]:
+            where.append("state.json")
+        try:
+            if _jsonc_locate(_read_text(shell_config_file(P)) or "{}", ["theme", "wallpapers", r["from"]])[1] is not None:
+                where.append("shell.jsonc theme.wallpapers")
+        except ValueError:
+            pass
+        if where:
+            line(True, "rename", "%s is %s now, and %s still say%s %s: run `themectl install`" % (r["from"], r["to"], ", ".join(where),
+                                                                                                "s" if len(where) == 1 else "", r["from"]), tag="note")
+    # yazi's side of the wallpapers (install sets it up; the yazi target above keeps its rules)
+    ydir = P.config + "/yazi"
+    ytext = _read_text(ydir + "/yazi.toml")
+    if ytext is not None:
+        missing = []
+        if not os.path.exists(ydir + "/plugins/wallpapers.yazi/main.lua"):
+            missing.append("the wallpapers.yazi plugin")
+        if not re.search(r"""require\(?\s*["']wallpapers["']""", _read_text(ydir + "/init.lua") or ""):
+            missing.append("its init.lua line")
+        if YAZI_BEGIN not in ytext:
+            missing.append("the rule marks in yazi.toml")
+        if not re.search(r"^\s*%s\s*=" % re.escape(YAZI_OPENER), ytext, re.M):
+            missing.append("the %s opener" % YAZI_OPENER)
+        if not re.search(r"wallpaper\s+set\b", ytext):
+            missing.append('a "Set as wallpaper" opener entry (CHEATSHEET section 1)')
+        line(True, "yazi", ("wallpapers set up: the plugin, init.lua, the rule marks, the opener" if not missing else
+                            "wallpapers not set up, missing: %s (`themectl install` adds all but the Set entry; tools/theme/yazi/CHEATSHEET.md)" % ", ".join(missing)),
+             tag="ok" if not missing else "note")
+    for pid, since in nwglook_running():
+        line(True, "nwg-look", "nwg-look is open (pid %d, since %s): it shows the GTK theme as it was when it opened, and its Apply writes that back; "
+             "close it and open it again after a switch" % (pid, since), tag="note")
+    pk = load_packages(P)
+    by_pair = {}
+    for tname, tmode, key, chosen, entries, states in package_report(P):
+        by_pair.setdefault(tname, []).append((tmode, key, chosen, entries, states))
+    for tname in sorted(by_pair):
+        parts, gap = [], False
+        for tmode, key, chosen, entries, states in by_pair[tname]:
+            idx = entries.index(chosen)
+            if idx == 0 and states[0]:
+                parts.append("%s %s: %s installed" % (tmode, LIST_ASSETS[key], chosen))
+                continue
+            gap = True
+            miss = ["%s (%s)" % (e, package_hint(pk, e)) for e in entries[:idx] if len(entries) > 1] or ["%s (%s)" % (entries[0], package_hint(pk, entries[0]))]
+            parts.append("%s %s: preferred %s missing; %s %s%s" % (tmode, LIST_ASSETS[key], "; ".join(miss), "falls back to" if idx == len(entries) - 1 else "uses",
+                                                                  chosen, "" if states[idx] else " (not installed either)"))
+        line(True, "pkg " + tname, " | ".join(parts), tag="note" if gap else "ok")
+    return min(fails, 99)
+
+
+def cmd_packages(P, args):
+    """The install list: per pair, what is missing of its preferred themes, and the one command for all of it. Writes and installs nothing."""
+    pk = load_packages(P)
+    want, builds, pairs, exts = {"aur": [], "extra": []}, [], {}, []
+    for tname, tmode, key, chosen, entries, states in package_report(P):
+        for e, s in zip(entries[:-1], states[:-1]):
+            if s:
+                continue
+            ent = pk.get(e) if isinstance(pk.get(e), dict) else {}
+            pairs.setdefault(tname, [])
+            if ent.get("vscode"):
+                if ent["vscode"] not in pairs[tname]:
+                    pairs[tname].append(ent["vscode"])
+                if ent["vscode"] not in exts:
+                    exts.append(ent["vscode"])
+            elif ent.get("pkg"):
+                if ent["pkg"] not in pairs[tname]:
+                    pairs[tname].append(ent["pkg"])
+                bucket = want["extra" if ent.get("repo") == "extra" else "aur"]
+                if ent["pkg"] not in bucket:
+                    bucket.append(ent["pkg"])
+            elif ent.get("build"):
+                if ent["build"] not in builds:
+                    builds.append(ent["build"])
+                pairs[tname].append("(build: %s)" % e)
+            else:
+                pairs[tname].append("(no package known for %s)" % e)
+    if not pairs:
+        print("nothing missing: every preferred theme of every pair is installed")
+        return 0
+    for tname in sorted(pairs):
+        print("%-12s %s" % (tname, " ".join(pairs[tname])))
+    print()
+    if want["extra"]:
+        print("sudo pacman -S --needed " + " ".join(sorted(want["extra"])))
+    if want["aur"]:
+        print("yay -S --needed " + " ".join(sorted(want["aur"])))
+    for x in sorted(exts):
+        print("code --install-extension " + x)
+    for b in builds:
+        print("# " + b)
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="themectl", description="The desktop's theme generator (see the header of this file).",
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd")
+
+    def common(p, dry=False):
+        p.add_argument("--only", default="", help="comma-separated target names")
+        p.add_argument("--skip", default="", help="comma-separated target names")
+        p.set_defaults(dry=dry)
+    common(sub.add_parser("apply"))
+    s = sub.add_parser("set")
+    s.add_argument("theme")
+    s.add_argument("mode", nargs="?")
+    common(s)
+    common(sub.add_parser("toggle"))
+    common(sub.add_parser("next"))
+    d = sub.add_parser("diff")
+    d.add_argument("theme", nargs="?")
+    d.add_argument("mode", nargs="?")
+    common(d, dry=True)
+    ls = sub.add_parser("list")
+    ls.add_argument("--json", action="store_true")
+    sub.add_parser("doctor")
+    sub.add_parser("packages")
+    i = sub.add_parser("install")
+    i.add_argument("--dry-run", action="store_true")
+    mg = sub.add_parser("migrate")
+    mg.add_argument("--dry-run", action="store_true")
+    r = sub.add_parser("restore")
+    r.add_argument("targets", nargs="*")
+    r.add_argument("--dry-run", action="store_true")
+    wp = sub.add_parser("wallpaper", help="the wallpapers of the current theme and mode (yazi's \"Set as wallpaper\" / \"Remove from wallpapers\")")
+    wsub = wp.add_subparsers(dest="wcmd")
+    ws = wsub.add_parser("set", help="add ONE image to the list and show it now")
+    ws.add_argument("paths", nargs="*", help="exactly ONE image file (several are refused)")
+    ws.add_argument("--no-notify", action="store_true", help="no notification, no Revert (for scripts)")
+    wr = wsub.add_parser("remove", help="take ONE image out of the list (the last one of a slot is refused)")
+    wr.add_argument("paths", nargs="*", help="exactly ONE file")
+    wr.add_argument("--no-notify", action="store_true", help="no notification (for scripts)")
+    wl = wsub.add_parser("list", help="the pictures of a slot and its current pick")
+    wl.add_argument("theme", nargs="?")
+    wl.add_argument("mode", nargs="?")
+    wsub.add_parser("_prompt").add_argument("record")
+    sub.add_parser("_evince")                    # the evince target's background half (t_evince)
+    rs = sub.add_parser("resolve")
+    rs.add_argument("--theme")
+    rs.add_argument("--file")
+    rs.add_argument("--l0", help="path of the Theme.qml whose defaults are L0")
+    rs.add_argument("--mode", default="light", choices=MODES)
+    try:
+        args = ap.parse_args(argv)
+    except SystemExit as e:
+        return REFUSED if e.code not in (0, None) else 0
+    if not args.cmd:
+        ap.print_help()
+        return REFUSED
+    P = Paths()
+    try:
+        if args.cmd == "apply":
+            return cmd_apply(P, args)
+        if args.cmd == "set":
+            return cmd_apply(P, args, args.theme, args.mode)
+        if args.cmd == "toggle":
+            return cmd_apply(P, args, toggle=True)
+        if args.cmd == "next":
+            return cmd_next(P, args)
+        if args.cmd == "diff":
+            return cmd_apply(P, args, args.theme, args.mode)
+        if args.cmd == "list":
+            return cmd_list(P, args)
+        if args.cmd == "doctor":
+            return cmd_doctor(P, args)
+        if args.cmd == "packages":
+            return cmd_packages(P, args)
+        if args.cmd == "install":
+            return cmd_install(P, args)
+        if args.cmd == "migrate":
+            return cmd_migrate(P, args)
+        if args.cmd == "restore":
+            return cmd_restore(P, args)
+        if args.cmd == "resolve":
+            return cmd_resolve(P, args)
+        if args.cmd == "_evince":
+            return cmd_evince_worker(P, args)
+        if args.cmd == "wallpaper":
+            if args.wcmd == "set":
+                return cmd_wallpaper_set(P, args)
+            if args.wcmd == "remove":
+                return cmd_wallpaper_remove(P, args)
+            if args.wcmd == "list":
+                return cmd_wallpaper_list(P, args)
+            if args.wcmd == "_prompt":
+                return cmd_wallpaper_prompt(P, args)
+            wp.print_help()
+            return REFUSED
+    except Refused as e:
+        print("themectl: refused: %s" % e)
+        return REFUSED
+    return REFUSED
+
+
+if __name__ == "__main__":
+    sys.exit(main())

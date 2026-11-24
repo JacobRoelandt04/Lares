@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Field Codes
+GenericName=Exec Parser Fixture
+Comment=Every field code and a quoted argument
+Exec="/opt/My App/bin/my app" --title "a \\"quoted\\" word" --pct 100%% %i %c %k %f %F %u %U
+Icon=accessories-text-editor
+Path=/tmp
+Terminal=false
+Keywords=exec;parser;

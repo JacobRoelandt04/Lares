@@ -1,0 +1,6 @@
+
+Cities in Netherlands:
+City       Features
+---------  ----------
+Amsterdam  P2P
+

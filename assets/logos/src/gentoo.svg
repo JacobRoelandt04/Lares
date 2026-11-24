@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Source:  https://commons.wikimedia.org/wiki/File:Gentoo_Linux_Signet.svg
+  Author:  Gentoo Foundation and Lennart Andre Rolland (Gentoo signet; Gentoo is a trademark of the Gentoo Foundation)
+  Licence: CC BY-SA 2.5
+  Fetched: 2026-09-30 with User-Agent "quickshell-wiki/0.1 (https://github.com/JacobRoelandt04/Lares)"
+  Derived: the signet's gradients and shading layers dropped; ONE path = its outer contour (path2973, first subpath) + the top face's eye (path2977, second subpath) as an even-odd hole, in absolute coordinates; viewBox cropped to the ink.
+  Use:     rendered to an alpha mask by tools/bake_logo_relief.py only; the colours here are never shown.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="13.75 5 372.5 390">
+  <path fill-rule="evenodd" d="M13.83 315.95C13.87 299.50 27.85 276.54 47.72 255.68C61 241.74 74.48 229.50 103.87 204.44C83.54 193.29 51.92 179.83 36.05 162.20C30.18 155.68 19.54 140.90 21.61 121.16C25.81 80.93 75.48 19.86 146.07 6.96C169.56 2.66 196.52 5.76 218.72 15.74C288.35 47.04 373.50 124.81 383.98 162.78C387.66 176.15 386.95 197.46 380.60 209.33C372.72 224.05 345.44 253.94 308.12 284.78C249.57 333.17 167.51 385.14 106.24 393.88C86.44 396.71 66.22 393.76 52.02 385.75C29.81 373.22 22.44 356.49 19.85 351.47C12.96 338.14 13.81 321.25 13.83 315.95ZM212.15 81.59C239.58 94.85 267.75 129.69 211.90 149.74C196.72 155.19 148.55 136.35 150.03 110.63C152.18 72.65 178.65 65.39 212.15 81.59L212.15 81.59Z"/>
+</svg>

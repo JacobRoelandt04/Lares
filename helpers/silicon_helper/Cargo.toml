@@ -1,0 +1,21 @@
+[package]
+name = "silicon-helper"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Root helper of the silicon module: validated, read-back writes of the CPU/battery/GPU-mux power knobs (std only)"
+publish = false
+
+[[bin]]
+name = "silicon-helper"
+path = "src/main.rs"
+
+[dependencies]
+# None, on purpose: a root helper is only as auditable as what it links.
+
+[profile.release]
+opt-level = 2
+codegen-units = 1
+strip = "symbols"
+# A number that overflows must stop the program (a caught panic -> exit 1), never wrap into a wrong value.
+overflow-checks = true

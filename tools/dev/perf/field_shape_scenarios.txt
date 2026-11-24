@@ -1,0 +1,27 @@
+# field_shape_record.sh's default scenarios (one word each; the grammar is in the runner's header). Popups with and without
+# secondaries, the reel slot and its chain, toasts, the OSD, interrupted motions and a travel.
+rest:3
+open:clock
+open:weather
+open:stocks
+open:audio
+open:silicon
+open:launcher
+open:clipboard
+open:notes
+open:windowtray
+open:player
+open:notifications
+quick:clock
+quick:weather
+quick:audio
+travel:clock:weather
+travel:audio:stocks
+sec:wiki
+sec:weather
+sec:stocks
+sec:silicon
+toast:3
+osd:4
+focus:4
+title:4

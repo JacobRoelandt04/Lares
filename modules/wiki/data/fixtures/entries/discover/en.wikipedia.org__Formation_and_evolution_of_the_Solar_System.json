@@ -1,0 +1,119 @@
+{
+ "v": 1,
+ "id": "en.wikipedia.org/Formation_and_evolution_of_the_Solar_System",
+ "tab": "discover",
+ "kind": "article",
+ "source": {
+  "wiki": "wikipedia",
+  "host": "en.wikipedia.org",
+  "title": "Formation and evolution of the Solar System",
+  "url": "https://en.wikipedia.org/wiki/Formation_and_evolution_of_the_Solar_System",
+  "revid": 1370829700,
+  "license": "CC BY-SA 4.0",
+  "quality": "featured"
+ },
+ "title": "Formation and evolution of the Solar System",
+ "category": {
+  "family": "physical-sciences",
+  "topic": "space",
+  "via": "thompson",
+  "why": {
+   "p": 0.11,
+   "oneIn": 9,
+   "openRate": 0.4
+  }
+ },
+ "intro": {
+  "text": "The formation of the Solar System began about 4.6 billion years ago with the gravitational collapse of a small part of a giant molecular cloud. Most of the collapsing mass collected in the center, forming the Sun, while the rest flattened into a protoplanetary disk out of which the planets, moons, asteroids, and other small Solar System bodies formed. This model, known as the nebular hypothesis, was first developed in the 18th century by Emanuel Swedenborg, Immanuel Kant, and Pierre-Simon Laplace. Its subsequent development has interwoven a variety of scientific disciplines including astronomy, chemistry, geology, physics, and planetary science.",
+  "words": 99,
+  "provenance": "original",
+  "stripped": [],
+  "model": null,
+  "grounded": null,
+  "locator": null,
+  "links": [
+   {
+    "s": 121,
+    "e": 142,
+    "target": "Molecular cloud",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Molecular_cloud"
+   },
+   {
+    "s": 246,
+    "e": 265,
+    "target": "Protoplanetary disk",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Protoplanetary_disk"
+   },
+   {
+    "s": 379,
+    "e": 397,
+    "target": "Nebular hypothesis",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Nebular_hypothesis"
+   },
+   {
+    "s": 462,
+    "e": 475,
+    "target": "Immanuel Kant",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Immanuel_Kant"
+   },
+   {
+    "s": 481,
+    "e": 501,
+    "target": "Pierre-Simon Laplace",
+    "wiki": "wikipedia",
+    "url": "https://en.wikipedia.org/wiki/Pierre-Simon_Laplace"
+   }
+  ]
+ },
+ "images": [
+  {
+   "file": "img/en.wikipedia.org__Formation_and_evolution_of_the_Solar_System-0.jpg",
+   "thumb": "img/en.wikipedia.org__Formation_and_evolution_of_the_Solar_System-0-thumb.jpg",
+   "w": 960,
+   "h": 540,
+   "aspect": 1.33,
+   "kind": "photo",
+   "focusY": 0.5,
+   "credit": "Artist's concept of dust around a young star, NASA/JPL-Caltech",
+   "license": "PD",
+   "src": "potd",
+   "fileTitle": "File:The Mysterious Case of the Disappearing Dust.jpg"
+  },
+  {
+   "file": "img/en.wikipedia.org__Messier_87-0.jpg",
+   "thumb": "img/en.wikipedia.org__Messier_87-0-thumb.jpg",
+   "w": 960,
+   "h": 540,
+   "aspect": 1.29,
+   "kind": "photo",
+   "focusY": 0.5,
+   "credit": "R.-S. Lu (SHAO), E. Ros (MPIfR), S. Dagnello (NRAO/AUI/NSF); ESO",
+   "license": "CC BY 4.0",
+   "src": "page",
+   "fileTitle": "File:A view of the jet and shadow of M87’s black hole (eso2305a).jpg"
+  }
+ ],
+ "installed": null,
+ "popularity": {
+  "views60d": 78000,
+  "band": 0.66
+ },
+ "judge": {
+  "engage": {
+   "judge": "jev",
+   "score": 0.7,
+   "pickedRank": 1,
+   "of": 5
+  },
+  "lead": {
+   "ok": true,
+   "score": 0.9
+  }
+ },
+ "batch": "2026-09-29T20:10:00Z-discover",
+ "fetchedAt": 1790765861235
+}

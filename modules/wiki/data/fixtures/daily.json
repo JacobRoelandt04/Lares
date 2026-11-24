@@ -1,0 +1,19 @@
+{
+ "v": 1,
+ "day": "2026-09-30",
+ "otd": {
+  "year": 1791,
+  "text": "The first performance of Mozart's opera The Magic Flute takes place two months before his death.",
+  "title": "The Magic Flute",
+  "url": "https://en.wikipedia.org/wiki/The_Magic_Flute"
+ },
+ "potd": {
+  "fileTitle": "File:The Mysterious Case of the Disappearing Dust.jpg",
+  "file": "img/en.wikipedia.org__Formation_and_evolution_of_the_Solar_System-0.jpg",
+  "thumb": "img/en.wikipedia.org__Formation_and_evolution_of_the_Solar_System-0-thumb.jpg",
+  "credit": "NASA/JPL-Caltech",
+  "license": "PD",
+  "description": "An artist's concept of dust around a young star (a stand-in: the mock's picture of the day)",
+  "relatesTo": "en.wikipedia.org/Formation_and_evolution_of_the_Solar_System"
+ }
+}

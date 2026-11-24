@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Stub REAL ffmpeg n9.1: records its argv, refuses -thread_queue_size on a pipe input like the real one. Asked for `-progress <url>` it is the sender:
+it runs on and writes the real program's blocks there (byte for byte the form of n9.1 on this pipeline: N/A before the first packet, `speed= 1.5x`,
+out_time_ms in microseconds like out_time_us). World ($CAST_WORLD): ff.script = "fps drop dup speed" (frames a second; frames dropped / repeated a
+second; the stream's clock against the wall), and every block moves the group interface's tx_bytes by 1 MB a second of wall time."""
+import os, sys, time
+w, a = os.environ["CAST_WORLD"], sys.argv[1:]
+with open(w + "/ffmpeg.argv", "w") as f:
+    f.write("".join(x + "\n" for x in a))
+if "-thread_queue_size" in a:
+    print("Option thread_queue_size cannot be applied to input url pipe:0 -- you are trying to apply an input option to an output file or vice versa.", file=sys.stderr)
+    sys.exit(1)
+if a[:1] == ["-version"]:
+    print("ffmpeg version n9.1 Copyright (c) 2000-2026 the FFmpeg developers")
+    sys.exit(0)
+if "-progress" not in a:
+    time.sleep(300)
+try:
+    fps, drop, dup, speed = (float(x) for x in open(w + "/ff.script").read().split())
+except OSError:
+    fps, drop, dup, speed = 30, 2, 4, 1
+out = open(a[a.index("-progress") + 1], "w")
+out.write("frame=0\nfps=0.00\nstream_0_0_q=0.0\nbitrate=N/A\ntotal_size=0\nout_time_us=N/A\nout_time_ms=N/A\nout_time=N/A\ndup_frames=0\ndrop_frames=0\nspeed=N/A\nprogress=continue\n")
+out.flush()
+tx = w + "/net/p2p-wlan0-0/statistics/tx_bytes"
+t0 = time.monotonic()
+while True:
+    time.sleep(0.1)
+    t = time.monotonic() - t0
+    us = int(t * speed * 1e6)
+    try:
+        out.write("frame=%d\nfps=%.2f\nstream_0_0_q=26.0\nbitrate=8792.5kbits/s\ntotal_size=%d\nout_time_us=%d\nout_time_ms=%d\nout_time=00:00:%09.6f\ndup_frames=%d\ndrop_frames=%d\nspeed=%sx\nprogress=continue\n"
+                  % (t * fps, fps, t * 1e6, us, us, us / 1e6, t * dup, t * drop, "%4.3g" % speed))
+        out.flush()
+        if os.path.isdir(os.path.dirname(tx)):
+            with open(tx + ".new", "w") as f:
+                f.write("%d\n" % (500000 + t * 1e6))
+            os.replace(tx + ".new", tx)
+    except OSError:
+        sys.exit(0)

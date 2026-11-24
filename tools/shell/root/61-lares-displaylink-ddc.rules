@@ -1,0 +1,4 @@
+# Lares: brightness of a display behind a DisplayLink dock (DDC/CI over evdi's I2C adapter).
+# ddcutil's own rule gives the seat's user the I2C buses of PCI graphics cards only (ATTRS{class}=="0x03*"); evdi's adapter is a
+# platform device, so its /dev/i2c-N stays root:i2c 0660 and ddcutil answers "cannot be used for DDC/CI communication".
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTR{name}=="DisplayLink I2C Adapter", TAG+="uaccess"

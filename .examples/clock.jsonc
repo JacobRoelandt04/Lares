@@ -1,0 +1,36 @@
+// clock.jsonc -- the clock's popup: the calendar, the timers and alarms (modules/clock). The template of
+// ~/.config/quickshell/config/clock.jsonc. Every key is optional and every value below IS the default. Read hot unless a key says
+// otherwise. Comments are allowed. (The calendar feeds are calendars.jsonc, the break nudge breaks.jsonc.)
+{
+    // The tab the popup opens on. "auto": the timers when one has finished and you have not looked, or when you were there last and one is in
+    // progress; else the calendar. "last": the one you were on. A timer that finished unseen always wins.
+    // "auto" | "calendar" | "timers" | "last".
+    "open": "auto",
+    // The seconds beside the bar's time: "hover" (while the pointer is on the clock) | "always" | "never".
+    "seconds": "hover",
+
+    "timers": {
+        // What Snooze adds, in minutes. 1 .. 120.
+        "snoozeMin": 9,
+        // The sound of each: a file name of /usr/share/sounds/freedesktop/stereo, a path (~ is your home), or "none". A file that is not there is
+        // the one written here.
+        "sounds": { "countdown": "alarm-clock-elapsed.oga", "pomodoro": "complete.oga", "alarm": "alarm-clock-elapsed.oga" },
+        // How loud, 0 .. 1; -1 plays it at the level of the sound server's stream.
+        "volume": -1,
+        // A countdown or an alarm rings for this many seconds at most. 1 .. 3600.
+        "ringSec": 60,
+        // They sound while do-not-disturb is on. true | false (the card is shown either way).
+        "soundUnderDnd": true,
+        // The countdown's first time in a session, minutes. Read as the shell starts.
+        "countdownMin": 5,
+        // The pomodoro's focus, short break and long break, minutes: where they start, and what a right click on one puts back.
+        "focusMin": 25,
+        "shortMin": 5,
+        "longMin": 30,
+        // An alarm missed by more than this many hours (the machine was off) is not reported. 0 .. 168.
+        "missedHours": 12
+    },
+
+    // Where the wiki's card opens beside the popup: "end" (the right of a top bar's popup) | "start" (the left) | "far" (below it).
+    "look": { "secondarySide": "end" }
+}

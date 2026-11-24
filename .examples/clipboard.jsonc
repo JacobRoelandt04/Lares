@@ -1,0 +1,83 @@
+// clipboard.jsonc -- the clipboard history (modules/clipboard, tools/clipboard). The template of ~/.config/quickshell/config/clipboard.jsonc.
+// Every key is optional: the value written here IS the default, and a missing key (or one of the wrong type) takes it.
+// Keep only what you change; comments are allowed. tools/clipboard/clip.py reads the file at every copy; the shell follows
+// a save at once.
+{
+  // ---- the history (unpinned entries; pinned ones are never dropped) ---------------------------------
+  // At most this many entries; the oldest go first. Default 1000; a whole number, 0 and up.
+  "maxItems": 1000,
+  // An entry not copied again for this many days is dropped. Default 30; a whole number, 0 and up.
+  "maxAgeDays": 30,
+  // An image larger than this (MB) is not recorded at all. Default 25; a whole number, 0 and up.
+  // (Any other non-text copy has a fixed cap of 8 MB.)
+  "maxImageMB": 25,
+  // The bytes of all entries together stay under this (MB); the oldest go first. Default 500; a whole number, 0 and up.
+  "maxTotalMB": 500,
+  // An image's thumbnail fits in a square of this many px (never enlarged). Default 320; a whole number, 1 and up.
+  "thumbPx": 320,
+  // Only the newest this many images keep a thumbnail (pinned ones always do); 0 = no thumbnails. Default 48; 0 and up.
+  "thumbsMax": 48,
+  // Text longer than this (KB) is kept in the index cut to this length, with the full text in a file beside it.
+  // Default 16; a whole number, 1 and up.
+  "textIndexKB": 16,
+
+  // ---- secrets (a sealed copy is held in the shell's memory only, never written to disk) ---------------
+  "secrets": {
+    // Seconds a sealed copy stays available. Default 120; a number above 0.
+    "ttlS": 120,
+    // Drop every sealed copy when the screen locks. Default true.
+    "dropOnLock": true,
+    // Drop every sealed copy when the app it came from clears the clipboard. Default true.
+    "dropOnSourceClear": true,
+    // Seal single-line text that looks like a credential (a known token shape, a password-shaped string, a passphrase).
+    // false: only "sealApps" and an app's own sensitive hint seal a copy. Default true.
+    "heuristic": true,
+    // The password shape needs at least 4 x threshold + 0.5 bits of entropy per character (2.5 at 0.5); higher seals
+    // fewer strings. Default 0.5; a number, 0 and up (not clamped; about 1.5 asks for 6.5 bits, the most a
+    // string of printable ASCII reaches).
+    "threshold": 0.5
+  },
+  // Window classes whose copies are not recorded at all (matched whole, case-insensitive; "sealApps" below keeps them for a while). Default none.
+  "ignoreApps": [],
+  // Window classes whose copies are always sealed (matched whole, case-insensitive). Default the two below.
+  "sealApps": [
+    "Proton Pass",
+    "proton-pass"
+  ],
+
+  // ---- pasting -------------------------------------------------------------------------------------------
+  // The key the paste sends to the window the popup was opened over, as Hyprland writes a shortcut:
+  // "MODS,KEY" (modifiers space-separated: CTRL, SHIFT, ALT, SUPER). Default "CTRL,V".
+  "pasteKeys": {
+    "default": "CTRL,V",
+    // Per window class (exact, then case-insensitive). Classes listed here are added to the defaults below, which stay.
+    "classes": {
+      "kitty": "CTRL SHIFT,V",
+      "foot": "CTRL SHIFT,V",
+      "Alacritty": "CTRL SHIFT,V",
+      "org.wezfurlong.wezterm": "CTRL SHIFT,V",
+      "com.mitchellh.ghostty": "CTRL SHIFT,V"
+    }
+  },
+  // When the app that owned the clipboard closes and the clipboard empties, put that entry back. Default true.
+  "reofferOnClose": true,
+  // The popup's shortcut (and the picker's) also opens it while the active window is fullscreen. Default true; false: it does nothing then.
+  "openOverFullscreen": true,
+  // Milliseconds between the popup letting go of the keyboard and the paste key. Default 120; 0 and up.
+  "pasteDelayMs": 120,
+  // What Enter (and a double click on the shelf) does with the entry: "paste" | "copy".
+  "enter": "paste",
+  // What stands between several entries pasted as one. Default a line break.
+  "joiner": "\n",
+  // Closing the popup by Escape copies the entry you chose (moved to, or clicked); one the popup opened on is not chosen. Default true.
+  "copyOnClose": true,
+  // At the shell's start, when the clipboard is empty, the newest entry is put back on it. Default true.
+  "restoreAtStart": true,
+  // ---- the list ------------------------------------------------------------------------------------------
+  // Pinned entries stand first. false: every entry where its time puts it. Default true.
+  "pinnedFirst": true,
+  // The filter it opens on: "all" | "text" | "image" | "link" | "pinned".
+  "openOn": "all",
+  // How long a deletion can be undone, seconds. Default 8; 1 .. 120.
+  "undoSec": 8
+}

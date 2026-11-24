@@ -1,0 +1,78 @@
+// shell.json -- the shell's own layout (shell.qml, modules/shell). Copy to ~/.config/quickshell/shell.json.
+// Comments are allowed. Every key is optional: a missing key (or one with a bad value) takes the default written
+// here, and the file is re-read when it is saved. mockups/shell.qml's Layout tab writes the same keys.
+{
+    "scale": {
+        "global": 1.25,
+        "bar": 1.00,
+        "popup": 1.00
+    },
+
+    "shadow": {
+        "mode": "halo",
+        "spread": -20,
+        "softness": 0.6,
+        "blend": 12,
+        "aura": true
+    },
+    "border": true,
+    "geoclueAgent": true,
+    "theme": {
+        "apply": "themectl",
+        "curtain": true,
+        "curtainStyle": "louvres"  // radial, peel, louvres
+    },
+    "player": {
+        "props": true
+    },
+
+    // "islands": three 40 px islands on the top edge (left, centre, right) with the wallpaper between them.
+    // "continuous": one bar across the whole edge, the three zones laid out along it. The same modules stand in
+    // either; nothing is rebuilt by the switch.
+    "topMode": "islands",
+
+    // The face of the shell's own text (the placeholders' names, and what is handed to the modules that take one).
+    "font": "Audiowide",
+
+    // How the modules stand inside an island, in px: space at both ends, and between two modules.
+    "padding": 12,
+    "gap": 8,
+
+    // The least clear space between two islands (and between an island and a corner). Lengths that would leave
+    // less are shortened -- the workspaces' groove first, then the window title's slot.
+    "minVoid": 12,
+
+    // "centred": the centre island sits in the middle of the screen. "equal": it is placed so both voids are the same.
+    "centre": "centred",
+
+    // The two modules that take what an island's length leaves: the window title's slot and the workspaces' groove
+    // (with the clock in its split). They are what a length is computed from when the file gives none.
+    "titleSlot": 340,
+    // The groove's drawing scale (the clock's slot is 64 x 18 px at every scale: 0.6, 0.75 and 0.9 are the sheet's), the
+    // pitch of its dots (px between the two dots of one half) and its width: 0 is fitted -- 2 * pitch + 64 + 100 * scale.
+    "workspacesScale": 0.9,
+    "workspacesPitch": 30,
+    "workspacesWidth": 0,
+
+    // The modules of each island, in order (left to right). Ids: power idle theme notes llm windowtray
+    // weather clock stocks player volume network silicon update notifications. Move an id to another zone to
+    // move the module; a module left out comes back in its own zone at the end.
+    "zones": {
+        "left": ["power", "idle", "theme", "notes", "llm", "windowtray"],
+        "centre": ["weather", "clock", "stocks"],
+        "right": ["player", "volume", "network", "silicon", "update", "notifications"]
+    },
+
+    // The island lengths in px, per output (by connector name: `hyprctl monitors`); "default" for any output not
+    // named. A length left out is what the modules need (padding + their widths + the gaps + the title's slot),
+    // so the defaults fit 2880 px. Example:
+    //   "islands": { "eDP-1": { "left": 760, "centre": 640, "right": 480 }, "default": { "left": 800 } }
+    "islands": {},
+
+    // Where notes and the LLM open: a bar and where along it, from its start on the screen (0 is the top of a side
+    // bar, under the left island -- the popup rests flush in the corner).
+    "outlets": {
+        "notes": { "bar": "left", "along": 0 },
+        "llm": { "bar": "left", "along": 0 }
+    }
+}

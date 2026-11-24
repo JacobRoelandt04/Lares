@@ -1,0 +1,4 @@
+# Gates of tools/dev/shell_gates.sh that are red for a reason somebody else is fixing. `gate  reason`, one per line.
+# A listed gate that is red prints `RED (known: <reason>)` and does not fail the run; one that is green says so
+# (take it out of this file). The run's last line counts them -- they are never hidden. Add a line only with evidence.
+# (Empty: no gate of the battery is red for a reason somebody else is fixing.)

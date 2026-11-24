@@ -1,0 +1,41 @@
+#! /bin/sh
+# GRUB menu entry "Lares rescue" (grub-mkconfig runs this; installed as /etc/grub.d/45_lares_rescue by install-rescue.sh).
+# - the entry finds /boot by `search --fs-uuid`, so it keeps working when the UUID of / or /boot changes and grub-mkconfig is run again
+# - root=UUID= and lares.boot=UUID= tell the rescue where the system and the boot partition are; there is no resume= (never resume
+#   from a hibernation image in the rescue)
+# - no savedefault: a GRUB_DEFAULT=saved setting is not moved by choosing the rescue
+set -e
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+. "${pkgdatadir:-/usr/share/grub}/grub-mkconfig_lib"
+
+RESCUE_DIR=${LARES_RESCUE_BOOT:-/boot/lares}
+[ -f "$RESCUE_DIR/rescue-vmlinuz" ] && [ -f "$RESCUE_DIR/rescue.img" ] || exit 0
+
+# the file system of / and the one that holds /boot (they are the same on a machine without a boot partition)
+ROOT_UUID=$(${grub_probe} --target=fs_uuid / 2>/dev/null) || ROOT_UUID=
+BOOT_UUID=$(${grub_probe} --target=fs_uuid "$RESCUE_DIR" 2>/dev/null) || BOOT_UUID=
+[ -n "$ROOT_UUID" ] || exit 0
+[ -n "$BOOT_UUID" ] || BOOT_UUID=$ROOT_UUID
+
+KERNEL=$(make_system_path_relative_to_its_root "$RESCUE_DIR/rescue-vmlinuz")
+INITRD=$(make_system_path_relative_to_its_root "$RESCUE_DIR/rescue.img")
+FSMOD=$(${grub_probe} --target=fs "$RESCUE_DIR" 2>/dev/null) || FSMOD=
+PARTMOD=$(${grub_probe} --target=partmap "$RESCUE_DIR" 2>/dev/null) || PARTMOD=
+
+# the console is the screen ONLY: the last console= word becomes /dev/console, and a laptop without a UART would show nothing (a test machine adds
+# lares.serial=ttyS0 and a serial console to its own copy of this entry); a 32-pixel font on a high-density panel
+cat << XEOF
+menuentry 'Lares rescue' --class recovery --class os \$menuentry_id_option 'lares-rescue' {
+    insmod part_gpt
+    insmod ext2
+    insmod fat
+    search --no-floppy --fs-uuid --set=root $BOOT_UUID
+    echo 'Loading the Lares rescue ...'
+    set gfxpayload=keep
+    linux $KERNEL root=UUID=$ROOT_UUID lares.boot=UUID=$BOOT_UUID ro console=tty0 fbcon=font:TER16x32 loglevel=3
+    initrd $INITRD
+}
+XEOF

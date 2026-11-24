@@ -1,0 +1,16 @@
+{
+ "version": 1,
+ "sort": {
+  "mode": "name",
+  "ascending": true
+ },
+ "order": {},
+ "colors": {
+  "Ideas.md": "yellow",
+  "Recipes": "orange",
+  "Shopping list.md": "green"
+ },
+ "sizes": {},
+ "firstSeen": {},
+ "inodes": {}
+}
